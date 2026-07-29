@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "rootDir": "./",
+    "outDir": "./dist",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "jsx": "react-native" // Adjusted for common React testing setup if not explicitly defined elsewhere
+  },
+  "include": [
+    "src/**/*",
+    "components/**/*.tsx",
+    "client/app/**/*.{ts,tsx}"
+  ],
+  "exclude": [
+    "node_modules",
+    "__tests__" // Exclude test directory from compilation if it's already handled by jest-preset
+  ]
+}

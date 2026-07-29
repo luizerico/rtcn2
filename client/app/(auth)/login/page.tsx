@@ -1,0 +1,100 @@
+// client/app/(auth)/login/page.tsx
+"use client";
+
+import { useState } from 'react';
+import { apiPost } from '@/lib/apiUtils';
+import { useRouter } from 'next/navigation';
+
+export default function LoginPage() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  // Updated state to handle APIError structure or simple string messages
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Call the backend login endpoint
+      const response = await apiPost('/auth/login', { 
+        username, 
+        password 
+      });
+
+      // Assuming the backend returns a JWT token and user info upon successful login
+      localStorage.setItem('authToken', response.token);
+      localStorage.setItem('userUsername', response.user.username);
+
+      // Redirect to the protected dashboard route
+      window.location.href = '/dashboard'; 
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+      <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl border border-gray-200">
+        <h2 className="text-3xl font-bold text-center mb-6 text-indigo-700">
+          Login to RBAC System
+        </h2>
+        
+        {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                <span className="block sm:inline">{error}</span >
+            </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">Username</label>
+            <input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+              required
+            />
+          </div >
+
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+              required
+            />
+          </div >
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-white font-medium ${
+              isLoading 
+                ? 'bg-indigo-300 cursor-not-allowed' 
+                : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150'
+            }`}
+          >
+            {isLoading ? 'Logging In...' : 'Sign In'}
+          </button>
+        </form>
+        
+        <p className="text-center mt-6 text-sm text-gray-600">
+            Don't have an account?{' '}
+            <a href="/register" className="font-medium text-indigo-600 hover:underline">Register here</a>.
+        </p>
+
+      </div>
+    </div>
+  );
+}
