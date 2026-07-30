@@ -19,7 +19,7 @@ exports.addMemberToGroup = async (req, res) => {
         const updatedGroup = await Group.findByIdAndUpdate(
             req.params.groupId,
             { $addToSet: { members: targetUserId } },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!updatedGroup) {
@@ -48,7 +48,7 @@ exports.removeMemberFromGroup = async (req, res) => {
         const updatedGroup = await Group.findByIdAndUpdate(
             req.params.groupId,
             { $pull: { members: targetUserId } },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!updatedGroup) {

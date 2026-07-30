@@ -1,7 +1,10 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const dotenv = require('dotenv');
 const User = require('./models/User');
 const Group = require('./models/Group');
+
+dotenv.config();
 
 async function initializeAdmin() {
   const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;

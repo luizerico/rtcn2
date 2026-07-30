@@ -1,0 +1,734 @@
+openapi: 3.0.3
+info:
+  title: Projects RBAC API
+  description: |
+    REST API for authentication, groups, membership, RBAC policies, and protected objects.
+
+    Import this file into Postman (**Import → File**), Insomnia, Thunder Client, or any OpenAPI 3 tool.
+  version: 1.0.0
+  contact:
+    name: Projects API
+
+servers:
+  - url: http://localhost:5000
+    description: Local API
+  - url: http://localhost:9980
+    description: Docker Compose API
+  - url: "{baseUrl}"
+    description: Custom / cloud deployment
+    variables:
+      baseUrl:
+        default: https://api.example.com
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Groups
+  - name: Objects
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorMessage:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+          example: alice
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+        password:
+          type: string
+          format: password
+          example: Password123!
+
+    LoginRequest:
+      type: object
+      required: [password]
+      properties:
+        username:
+          type: string
+          example: alice
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+        password:
+          type: string
+          format: password
+          example: Password123!
+
+    LoginResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/UserSummary'
+
+    ResetPasswordRequest:
+      type: object
+      required: [newPassword]
+      properties:
+        newPassword:
+          type: string
+          format: password
+
+    Group:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        members:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateGroupRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: editors
+        description:
+          type: string
+          example: Can edit content
+
+    MemberRequest:
+      type: object
+      required: [targetUserId]
+      properties:
+        targetUserId:
+          type: string
+          description: MongoDB ObjectId of the user to add or remove
+
+    UpdatePermissionsRequest:
+      type: object
+      required: [scopes, target]
+      properties:
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [READ, WRITE, DELETE, ADMIN]
+          example: [READ, WRITE]
+        target:
+          type: string
+          example: User
+        resourceType:
+          type: string
+          enum: [USER, GROUP, OBJECT]
+          default: OBJECT
+
+    Permission:
+      type: object
+      properties:
+        resourceType:
+          type: string
+          enum: [USER, GROUP, OBJECT]
+        resourceId:
+          type: string
+          nullable: true
+        target:
+          type: string
+        permission:
+          type: string
+          enum: [READ, WRITE, DELETE, ADMIN]
+
+    ObjectResource:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        ownerId:
+          type: string
+        resourceType:
+          type: string
+          enum: [DOCUMENT, DASHBOARD, DATASET]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateObjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: Billing Doc
+        description:
+          type: string
+        resourceType:
+          type: string
+          enum: [DOCUMENT, DASHBOARD, DATASET]
+          default: DOCUMENT
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a user
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/UserSummary'
+        '400':
+          description: Validation or duplicate user error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and receive JWT
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Missing credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/auth/forgot-password:
+    get:
+      tags: [Auth]
+      summary: Request password reset
+      operationId: forgotPassword
+      parameters:
+        - in: query
+          name: email
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        '200':
+          description: Reset email sent (resetToken included only in non-production)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  resetToken:
+                    type: string
+        '400':
+          description: Missing email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/auth/reset-password/{token}:
+    post:
+      tags: [Auth]
+      summary: Reset password with token
+      operationId: resetPassword
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '400':
+          description: Invalid, expired, or missing password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/groups:
+    get:
+      tags: [Groups]
+      summary: List groups
+      operationId: listGroups
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Group list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Group'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+    post:
+      tags: [Groups]
+      summary: Create group
+      operationId: createGroup
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '201':
+          description: Group created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/groups/{id}:
+    get:
+      tags: [Groups]
+      summary: Get group by ID
+      operationId: getGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Group found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+    put:
+      tags: [Groups]
+      summary: Update group
+      operationId: updateGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '200':
+          description: Group updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+    delete:
+      tags: [Groups]
+      summary: Delete group
+      operationId: deleteGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Group deleted
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+
+  /api/groups/{groupId}/members:
+    post:
+      tags: [Groups]
+      summary: Add member to group
+      operationId: addGroupMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRequest'
+      responses:
+        '200':
+          description: Member added
+        '400':
+          description: Missing target user
+        '401':
+          description: Unauthorized
+        '404':
+          description: Group or user not found
+    delete:
+      tags: [Groups]
+      summary: Remove member from group
+      operationId: removeGroupMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRequest'
+      responses:
+        '200':
+          description: Member removed
+        '400':
+          description: Missing target user
+        '401':
+          description: Unauthorized
+        '404':
+          description: Group not found
+
+  /api/groups/{groupId}/permissions:
+    post:
+      tags: [Groups]
+      summary: Update group permissions
+      operationId: updateGroupPermissions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePermissionsRequest'
+      responses:
+        '200':
+          description: Permissions updated
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized
+        '404':
+          description: Group not found
+
+  /api/objects:
+    get:
+      tags: [Objects]
+      summary: List objects
+      operationId: listObjects
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Object list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ObjectResource'
+        '401':
+          description: Unauthorized
+    post:
+      tags: [Objects]
+      summary: Create object
+      operationId: createObject
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateObjectRequest'
+      responses:
+        '201':
+          description: Object created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectResource'
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized
+
+  /api/objects/{id}:
+    get:
+      tags: [Objects]
+      summary: Get object by ID
+      operationId: getObject
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObjectResource'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+    put:
+      tags: [Objects]
+      summary: Update object
+      operationId: updateObject
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateObjectRequest'
+      responses:
+        '200':
+          description: Object updated
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+    delete:
+      tags: [Objects]
+      summary: Delete object
+      operationId: deleteObject
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object deleted
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+
+  /api/objects/{objectId}/members:
+    post:
+      tags: [Objects]
+      summary: Add object member (not implemented)
+      operationId: addObjectMember
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: objectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRequest'
+      responses:
+        '501':
+          description: Not implemented yet
+        '401':
+          description: Unauthorized
+
+  /api/objects/{objectId}/permissions:
+    post:
+      tags: [Objects]
+      summary: Update object permissions (not implemented)
+      operationId: updateObjectPermissions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: objectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePermissionsRequest'
+      responses:
+        '501':
+          description: Not implemented yet
+        '401':
+          description: Unauthorized
