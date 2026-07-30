@@ -1,14 +1,25 @@
 const express = require('express');
 const router = express.Router();
+const {
+    getAllObjects,
+    createObject,
+    getObjectById,
+} = require('../controllers/objectController');
+const { protect, authorize } = require('../middleware/authMiddleware');
 
-// Placeholder for Object CRUD operations, protected by RBAC middleware
-router.get('/', (req, res) => {
-    res.send('GET /api/objects - Retrieve all objects.');
+router.use(protect);
+
+router.get('/', authorize('OBJECT:READ'), getAllObjects);
+router.post('/', authorize('OBJECT:CREATE'), createObject);
+router.get('/:id', authorize('OBJECT:READ'), getObjectById);
+
+// Object-scoped membership/policy endpoints can be expanded similarly to groups.
+router.post('/:objectId/members', authorize('OBJECT:WRITE'), (req, res) => {
+    res.status(501).json({ message: 'Object membership updates are not implemented yet.' });
 });
 
-// POST route for creating new objects
-router.post('/', (req, res) => {
-    res.status(201).json({ message: 'Object created successfully.' });
+router.post('/:objectId/permissions', authorize('OBJECT:WRITE'), (req, res) => {
+    res.status(501).json({ message: 'Object permission updates are not implemented yet.' });
 });
 
 module.exports = router;

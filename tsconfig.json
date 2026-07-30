@@ -9,15 +9,21 @@
     "strict": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "jsx": "react-native" // Adjusted for common React testing setup if not explicitly defined elsewhere
+    "jsx": "react-native",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "types": ["jest", "node", "@testing-library/jest-dom"],
   },
   "include": [
     "src/**/*",
-    "components/**/*.tsx",
-    "client/app/**/*.{ts,tsx}"
+    "client/components/**/*.tsx",
+    "client/app/**/*.{ts,tsx}",
+    "__tests__/**/*",
+    "types/**/*.d.ts"
   ],
   "exclude": [
-    "node_modules",
-    "__tests__" // Exclude test directory from compilation if it's already handled by jest-preset
+    "node_modules"
   ]
 }

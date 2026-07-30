@@ -3,19 +3,8 @@
  * @description Utility functions for making secure requests to the backend API.
  */
 
-// Base URL should match the deployment setup (e.g., localhost:5000)
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000/api';
 
-/**
- * Standardized response object for better type safety.
- * @template T The expected data structure of the successful response.
- */
-interface ApiResponse<T> {
-    data: T;
-    message?: string;
-}
-
-// Custom error class for API failures
 class ApiError extends Error {
     constructor(message: string, public status: number) {
         super(message);
@@ -23,26 +12,27 @@ class ApiError extends Error {
     }
 }
 
+function buildAuthHeaders(): HeadersInit {
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    };
+    const token = localStorage.getItem('authToken');
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+}
+
 /**
  * Handles generic GET requests to the backend.
- * @template T The expected return type of the API response data.
- * @param {string} endpoint - The API path (e.g., '/auth/login').
- * @param {Object} [body={}] - Optional body data for POST requests, although typically not used in GETs.
- * @returns {Promise<T>} The JSON response data.
  */
-export async function apiGet<T>(endpoint: string, body?: Object): Promise<T> {
+export async function apiGet<T>(endpoint: string): Promise<T> {
     const url = `${BASE_URL}${endpoint}`;
-    const token = localStorage.getItem('authToken');
-    const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-    };
 
     try {
         const res = await fetch(url, {
             method: 'GET',
-            headers: headers,
-            body: body ? JSON.stringify(body) : undefined // Only send body if provided
+            headers: buildAuthHeaders(),
         });
 
         if (res.status === 401 || res.status === 403) {
@@ -72,19 +62,14 @@ export async function apiGet<T>(endpoint: string, body?: Object): Promise<T> {
  * @param {Object} bodyData - The data payload for the request body.
  * @returns {Promise<T>} The JSON response data.
  */
-export async function apiPost<T>(endpoint: string, bodyData: Object): Promise<T> {
+export async function apiPost<T>(endpoint: string, bodyData: object): Promise<T> {
     const url = `${BASE_URL}${endpoint}`;
-    const token = localStorage.getItem('authToken');
-    const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-    };
 
     try {
         const res = await fetch(url, {
             method: 'POST',
-            headers: headers,
-            body: JSON.stringify(bodyData)
+            headers: buildAuthHeaders(),
+            body: JSON.stringify(bodyData),
         });
 
         if (res.status === 401 || res.status === 403) {

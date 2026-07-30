@@ -1,11 +1,21 @@
-/** @type {import('ts-jest').JestConfigWithTsJest} */
 module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'jsdom',
-  globals: {
-    'ts-jest': {
-      tsconfig: 'tsconfig.json', // Assuming tsconfig.json exists or needs to be created/referenced
-      isolatedModules: true, 
-    }
+  transform: {
+    '^.+\\.[tj]sx?$': [
+      'babel-jest',
+      {
+        presets: [
+          ['@babel/preset-env', { targets: { node: 'current' } }],
+          ['@babel/preset-typescript'],
+          ['@babel/preset-react', { runtime: 'automatic' }],
+        ],
+      },
+    ],
   },
+  testEnvironment: 'jsdom',
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  moduleNameMapper: {
+    '^@/components/ui/(.*)$': '<rootDir>/client/components/ui/$1',
+    '^@/(.*)$': '<rootDir>/$1',
+  },
+  testPathIgnorePatterns: ['/node_modules/', '/client/.next/'],
 };

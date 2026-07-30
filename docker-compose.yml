@@ -1,0 +1,59 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: projects_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASS:-rootpassword}
+    ports:
+      - "${MONGO_HOST_PORT:-27178}:27017"
+    volumes:
+      - projects_mongodb_data:/data/db
+    networks:
+      - projects_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: node:20-alpine
+    container_name: projects_app
+    restart: unless-stopped
+    working_dir: /app
+    ports:
+      - "${APP_HOST_PORT:-9980}:9980"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 9980
+      MONGODB_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASS:-rootpassword}@mongodb:27017/${DB_NAME:-projects}?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      JWT_EXPIRE: ${JWT_EXPIRE:-7d}
+      DB_NAME: ${DB_NAME:-projects}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set}
+    volumes:
+      - ./api:/app
+    command: >
+      sh -c "
+        npm install &&
+        node /app/database-init.js &&
+        node /app/server.js
+      "
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - projects_network
+
+networks:
+  projects_network:
+    driver: bridge
+
+volumes:
+  projects_mongodb_data:
+    name: projects-mongodb-data
+    driver: local
