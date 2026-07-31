@@ -1,0 +1,29 @@
+---
+description: Core project architecture and run conventions for the RBAC Next.js app
+alwaysApply: true
+---
+
+# Projects RBAC Platform
+
+Unified Next.js app: UI in `client/`, API under Express mounted at `/api/*`, single entry `server.js`.
+
+## Commands
+
+- `npm run dev` — UI + API on one port (default `3000`)
+- `npm run build` then `npm start` — production
+- `npm run db:init` — seed admin user/group/permissions
+- `npm test` — Jest (components + API)
+
+## Layout
+
+- `client/app/(app)/` — authenticated shell pages (Home, Admin)
+- `client/app/(auth)/` — login/register
+- `api/` — Express routes, controllers, models, RBAC
+- `docs/openapi.yaml` — API contract for Postman
+
+## Hard rules
+
+- Do not start Express and Next as two separate apps for normal work; use root `npm run dev`
+- Keep secrets in `.env`; never commit real credentials
+- Prefer same-origin API calls (`NEXT_PUBLIC_API_BASE_URL=/api`)
+- Docker Mongo needs auth in `MONGO_URI` (or `MONGO_ROOT_USER` / `MONGO_ROOT_PASS`)

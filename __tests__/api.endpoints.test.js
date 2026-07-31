@@ -7,6 +7,10 @@ process.env.NODE_ENV = 'test';
 
 const mongoose = require('mongoose');
 const request = require('supertest');
+const User = require('../api/models/User');
+const Group = require('../api/models/Group');
+const { buildFullAdminPermissions } = require('../api/constants/rbac');
+const { replaceGroupPermissions } = require('../api/services/rbacService');
 const {
   connectTestDatabase,
   disconnectTestDatabase,
@@ -45,6 +49,15 @@ describe('API endpoints', () => {
       password: 'Password123!',
     });
     secondaryUserId = secondary.body.user.id;
+
+    // Grant alice full RBAC so endpoint CRUD suites exercise authorized paths.
+    const adminGroup = await Group.create({
+      name: 'alice-admin',
+      description: 'Test full-access group',
+      members: [userId],
+    });
+    await replaceGroupPermissions(adminGroup._id, buildFullAdminPermissions(adminGroup._id));
+    await User.findByIdAndUpdate(userId, { roleId: adminGroup._id });
 
     const loginRes = await request(app).post('/api/auth/login').send({
       username: 'alice',
@@ -160,7 +173,7 @@ describe('API endpoints', () => {
         .get('/api/groups')
         .set('Authorization', `Bearer ${authToken}`);
       expect(list.status).toBe(200);
-      expect(list.body).toHaveLength(1);
+      expect(list.body.some((group) => group.name === 'editors')).toBe(true);
 
       const groupId = create.body._id;
 
@@ -219,7 +232,7 @@ describe('API endpoints', () => {
           resourceType: 'USER',
         });
       expect(updatePermissions.status).toBe(200);
-      expect(updatePermissions.body.group.permissions).toEqual(
+      expect(updatePermissions.body.permissions).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ permission: 'READ', target: 'User', resourceType: 'USER' }),
           expect.objectContaining({ permission: 'WRITE', target: 'User', resourceType: 'USER' }),
@@ -258,6 +271,32 @@ describe('API endpoints', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send({ scopes: [], target: 'User' });
       expect(badPermissions.status).toBe(400);
+    });
+  });
+
+  describe('Users', () => {
+    it('requires auth', async () => {
+      const res = await request(app).get('/api/users');
+      expect(res.status).toBe(401);
+    });
+
+    it('lists and creates users', async () => {
+      const list = await request(app)
+        .get('/api/users')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(list.status).toBe(200);
+      expect(list.body.length).toBeGreaterThanOrEqual(2);
+
+      const create = await request(app)
+        .post('/api/users')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          username: 'carol',
+          email: 'carol@example.com',
+          password: 'Password123!',
+        });
+      expect(create.status).toBe(201);
+      expect(create.body.username).toBe('carol');
     });
   });
 

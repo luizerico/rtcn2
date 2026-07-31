@@ -3,7 +3,6 @@
 
 import { useState } from 'react';
 import { apiPost } from '@/lib/apiUtils';
-import { useRouter } from 'next/navigation';
 
 export default function RegisterPage() {
   const [username, setUsername] = useState('');

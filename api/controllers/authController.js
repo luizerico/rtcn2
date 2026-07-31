@@ -169,3 +169,21 @@ exports.resetPassword = async (req, res) => {
     res.status(500).json({ message: 'Server error during password reset.' });
   }
 };
+
+/**
+ * @desc    Current authenticated user + effective RBAC permissions
+ * @route   GET /api/auth/me
+ * @access  Private
+ */
+exports.getCurrentUser = async (req, res) => {
+  res.status(200).json({
+    user: {
+      id: req.user._id,
+      username: req.user.username,
+      email: req.user.email,
+      roleId: req.user.roleId,
+      isVerified: req.user.isVerified,
+    },
+    permissions: req.permissions || [],
+  });
+};

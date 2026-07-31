@@ -1,15 +1,14 @@
-// client/app/layout.tsx (or equivalent root layout)
-import './globals.css'
+import './globals.css';
 
 export const metadata = {
   title: 'RBAC Platform',
   description: 'Role-Based Access Control Management System',
-}
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>{children}</body>
     </html>
-  )
+  );
 }

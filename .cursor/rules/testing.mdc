@@ -1,0 +1,30 @@
+---
+description: Jest testing conventions for API and UI
+globs: __tests__/**/*.{js,tsx,ts}
+alwaysApply: false
+---
+
+# Testing
+
+## Suites
+
+- Components: `__tests__/*Modal*.test.tsx` (jsdom)
+- API: `__tests__/api.*.test.js` (node + mongodb-memory-server)
+
+## Patterns
+
+- Use helpers from `__tests__/helpers/apiTestUtils.js`
+- For authorized API tests, seed full access (`seedAdminUser` or `buildFullAdminPermissions`)
+- Assert **403** for unprivileged users on protected routes
+- Keep `"@jest-environment node"` on API test files
+
+```js
+// ✅ Admin happy path + denial
+await seedAdminUser();
+// ... expect 200 on CRUD
+
+const viewer = await seedUnprivilegedUser();
+// ... expect 403
+```
+
+- Run `npm test` after API or modal changes

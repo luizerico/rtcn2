@@ -10,19 +10,18 @@ info:
     name: Projects API
 
 servers:
-  - url: http://localhost:5000
-    description: Local API
-  - url: http://localhost:9980
-    description: Docker Compose API
+  - url: http://localhost:3000
+    description: Local unified Next.js app (UI + API)
   - url: "{baseUrl}"
     description: Custom / cloud deployment
     variables:
       baseUrl:
-        default: https://api.example.com
+        default: https://app.example.com
 
 tags:
   - name: Health
   - name: Auth
+  - name: Users
   - name: Groups
   - name: Objects
 
@@ -115,10 +114,6 @@ components:
           type: array
           items:
             type: string
-        permissions:
-          type: array
-          items:
-            $ref: '#/components/schemas/Permission'
         createdAt:
           type: string
           format: date-time
@@ -166,6 +161,10 @@ components:
     Permission:
       type: object
       properties:
+        _id:
+          type: string
+        groupId:
+          type: string
         resourceType:
           type: string
           enum: [USER, GROUP, OBJECT]
@@ -176,7 +175,7 @@ components:
           type: string
         permission:
           type: string
-          enum: [READ, WRITE, DELETE, ADMIN]
+          enum: [READ, WRITE, CREATE, DELETE, ADMIN]
 
     ObjectResource:
       type: object
@@ -359,6 +358,97 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
+
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List users
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User list
+        '401':
+          description: Unauthorized
+    post:
+      tags: [Users]
+      summary: Create user
+      operationId: createUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized
+
+  /api/users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      operationId: getUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User found
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+    put:
+      tags: [Users]
+      summary: Update user
+      operationId: updateUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User updated
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+    delete:
+      tags: [Users]
+      summary: Delete user
+      operationId: deleteUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User deleted
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
 
   /api/groups:
     get:
@@ -544,6 +634,36 @@ paths:
           description: Group not found
 
   /api/groups/{groupId}/permissions:
+    get:
+      tags: [Groups]
+      summary: List permissions for a group
+      operationId: getGroupPermissions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Permission rows for the group
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groupId:
+                    type: string
+                  permissions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Permission'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Group not found
     post:
       tags: [Groups]
       summary: Update group permissions
@@ -564,7 +684,7 @@ paths:
               $ref: '#/components/schemas/UpdatePermissionsRequest'
       responses:
         '200':
-          description: Permissions updated
+          description: Permissions updated in the permissions collection
         '400':
           description: Validation error
         '401':

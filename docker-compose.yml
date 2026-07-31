@@ -24,10 +24,11 @@ services:
     restart: unless-stopped
     working_dir: /app
     ports:
-      - "${APP_HOST_PORT:-9980}:9980"
+      - "${APP_HOST_PORT:-3000}:3000"
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      PORT: 9980
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
       MONGODB_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASS:-rootpassword}@mongodb:27017/${DB_NAME:-projects}?authSource=admin
       MONGO_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASS:-rootpassword}@mongodb:27017/${DB_NAME:-projects}?authSource=admin
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
@@ -36,13 +37,17 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set}
+      NEXT_PUBLIC_API_BASE_URL: /api
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
     volumes:
       - ./:/app
     command: >
       sh -c "
         npm install &&
+        npm run client:install &&
+        npm run build &&
         node /app/api/database-init.js &&
-        node /app/api/server.js
+        npm start
       "
     depends_on:
       mongodb:

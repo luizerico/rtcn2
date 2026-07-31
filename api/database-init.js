@@ -1,23 +1,19 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 const dotenv = require('dotenv');
-const User = require('./models/User');
-const Group = require('./models/Group');
+const { ensureAdminBootstrap } = require('./services/adminBootstrap');
+const { resolveMongoUri } = require('./config/mongoUri');
 
 dotenv.config();
 
 async function initializeAdmin() {
-  const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
-  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
-  const adminPassword = process.env.ADMIN_PASSWORD;
+  const mongoUri = resolveMongoUri();
 
-  if (!mongoUri) {
+  if (!process.env.MONGODB_URI && !process.env.MONGO_URI) {
     console.error('Initialization failed: MONGODB_URI (or MONGO_URI) is required.');
     process.exit(1);
   }
 
-  if (!adminPassword) {
+  if (!process.env.ADMIN_PASSWORD) {
     console.error('Initialization failed: ADMIN_PASSWORD environment variable is required.');
     process.exit(1);
   }
@@ -26,49 +22,24 @@ async function initializeAdmin() {
     await mongoose.connect(mongoUri);
     console.log('Connected to MongoDB');
 
-    const existingUser = await User.findOne({ username: adminUsername });
-    if (existingUser) {
-      console.log('Admin user already exists. Skipping creation.');
-      await mongoose.connection.close();
-      return;
-    }
+    const { adminUser, adminGroup, permissions } = await ensureAdminBootstrap();
 
-    const hashedPassword = await bcrypt.hash(adminPassword, 12);
-
-    let adminGroup = await Group.findOne({ name: 'admin' });
-    if (!adminGroup) {
-      adminGroup = await Group.create({
-        name: 'admin',
-        description: 'Administrator Group - Full System Access',
-        members: [],
-        permissions: [
-          { resourceType: 'USER', target: '*', permission: 'ADMIN' },
-          { resourceType: 'GROUP', target: '*', permission: 'ADMIN' },
-          { resourceType: 'OBJECT', target: '*', permission: 'ADMIN' },
-        ],
-      });
-      console.log('Admin group created with full permissions');
-    }
-
-    const adminUser = await User.create({
-      username: adminUsername,
-      email: adminEmail,
-      password: hashedPassword,
-      roleId: adminGroup._id,
-      isVerified: true,
-    });
-
-    await Group.findByIdAndUpdate(adminGroup._id, {
-      $addToSet: { members: adminUser._id },
-    });
-
-    console.log('Admin user created and linked to admin group');
-    console.log(`Username: ${adminUsername}`);
-    console.log('Use the configured ADMIN_PASSWORD to sign in.');
+    console.log('Admin RBAC bootstrap complete.');
+    console.log(`Admin user: ${adminUser.username} (${adminUser.email})`);
+    console.log(`Admin group: ${adminGroup.name} with ${permissions.length} permissions`);
+    console.log('Admin has full USER/GROUP/OBJECT access (READ, WRITE, CREATE, DELETE, ADMIN).');
 
     await mongoose.connection.close();
   } catch (error) {
     console.error('Initialization failed:', error.message);
+    if (/auth/i.test(error.message)) {
+      console.error(
+        'Hint: Docker Mongo needs credentials. Set MONGO_ROOT_USER/MONGO_ROOT_PASS or use:'
+      );
+      console.error(
+        'MONGO_URI=mongodb://root:rootpassword@localhost:27178/projects?authSource=admin'
+      );
+    }
     process.exit(1);
   }
 }

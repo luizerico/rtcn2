@@ -1,0 +1,37 @@
+---
+description: Next.js App Router conventions for the client app
+globs: client/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Next.js App Router
+
+## Structure
+
+- Use App Router under `client/app/`
+- Route groups: `(app)` for shell pages, `(auth)` for public auth
+- Shared UI in `client/components/`; API helpers in `client/lib/apiUtils.ts`
+- Navigation lives in `client/components/AppNav.tsx`
+
+## Components
+
+```tsx
+// ✅ Client interactivity
+"use client";
+
+// ✅ Server Component by default when no hooks/browser APIs are needed
+export default function Page() {
+  return <h1>Home</h1>;
+}
+```
+
+- Add `"use client"` only when using hooks, events, or browser APIs
+- Use `next/link` for internal navigation
+- Fetch via `apiGet` / `apiPost` / `apiPut` / `apiDelete` from `@/lib/apiUtils`
+- Keep pages focused; extract modals/forms into `components/`
+
+## Do not
+
+- Import from outside `client/` for UI modules (except documented shared paths)
+- Hardcode `http://localhost:5000` for API calls
+- Put secrets in client code (`NEXT_PUBLIC_*` only for non-secret config)

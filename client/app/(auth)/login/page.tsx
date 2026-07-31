@@ -1,15 +1,13 @@
-// client/app/(auth)/login/page.tsx
 "use client";
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { apiPost } from '@/lib/apiUtils';
-import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  // Updated state to handle APIError structure or simple string messages
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -18,18 +16,14 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      // Call the backend login endpoint
-      const response = await apiPost('/auth/login', { 
-        username, 
-        password 
+      const response = await apiPost<{ token: string; user: { username: string } }>('/auth/login', {
+        username,
+        password,
       });
 
-      // Assuming the backend returns a JWT token and user info upon successful login
       localStorage.setItem('authToken', response.token);
       localStorage.setItem('userUsername', response.user.username);
-
-      // Redirect to the protected dashboard route
-      window.location.href = '/dashboard'; 
+      window.location.href = '/';
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
       setError(errorMessage);
@@ -39,61 +33,67 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
-      <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-xl border border-gray-200">
-        <h2 className="text-3xl font-bold text-center mb-6 text-indigo-700">
-          Login to RBAC System
-        </h2>
-        
+    <div className="flex min-h-screen items-center justify-center bg-[var(--background)] p-4">
+      <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-sm">
+        <h2 className="mb-2 text-center text-3xl font-semibold text-[var(--foreground)]">Sign in</h2>
+        <p className="mb-6 text-center text-sm text-[var(--muted)]">
+          Admin pages require the seeded <strong>admin</strong> account from{' '}
+          <code className="rounded bg-[var(--accent-soft)] px-1">npm run db:init</code>.
+        </p>
+
         {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-                <span className="block sm:inline">{error}</span >
-            </div>
+          <div className="relative mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
+            <span className="block sm:inline">{error}</span>
+          </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">Username</label>
+            <label htmlFor="username" className="mb-2 block text-sm font-medium">
+              Username
+            </label>
             <input
               id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full rounded-lg border border-[var(--border)] px-4 py-2"
               required
+              autoComplete="username"
             />
-          </div >
+          </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <label htmlFor="password" className="mb-2 block text-sm font-medium">
+              Password
+            </label>
             <input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full rounded-lg border border-[var(--border)] px-4 py-2"
               required
+              autoComplete="current-password"
             />
-          </div >
+          </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-white font-medium ${
-              isLoading 
-                ? 'bg-indigo-300 cursor-not-allowed' 
-                : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150'
-            }`}
+            className="w-full rounded-lg bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
           >
-            {isLoading ? 'Logging In...' : 'Sign In'}
+            {isLoading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-        
-        <p className="text-center mt-6 text-sm text-gray-600">
-            Don't have an account?{' '}
-            <a href="/register" className="font-medium text-indigo-600 hover:underline">Register here</a>.
-        </p>
 
+        <p className="mt-6 text-center text-sm text-[var(--muted)]">
+          No account?{' '}
+          <Link href="/register" className="font-medium text-[var(--accent)] hover:underline">
+            Register
+          </Link>
+          . Registered users start with no admin permissions.
+        </p>
       </div>
     </div>
   );

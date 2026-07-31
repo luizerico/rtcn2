@@ -2,12 +2,13 @@ const express = require('express');
 const authRoutes = require('./routes/authRoutes');
 const groupRoutes = require('./routes/groupRoutes');
 const objectRoutes = require('./routes/objectRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 /**
- * Build the Express application without connecting to MongoDB or listening.
- * Used by the HTTP server and by automated API tests.
+ * Build the Express application with API routes.
+ * Optional `fallback` handles non-API traffic (used by the unified Next.js server).
  */
-function createApp() {
+function createApp({ fallback } = {}) {
   const app = express();
 
   app.use(express.json());
@@ -17,8 +18,13 @@ function createApp() {
   });
 
   app.use('/api/auth', authRoutes);
+  app.use('/api/users', userRoutes);
   app.use('/api/groups', groupRoutes);
   app.use('/api/objects', objectRoutes);
+
+  if (typeof fallback === 'function') {
+    app.use(fallback);
+  }
 
   app.use((err, _req, res, _next) => {
     console.error('Unhandled error:', err);

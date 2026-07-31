@@ -1,0 +1,33 @@
+---
+description: API, MongoDB, and RBAC security conventions
+globs: api/**/*.{js,ts}
+alwaysApply: false
+---
+
+# API and RBAC
+
+## Routes
+
+- Mount under `/api/*` via `api/app.js`
+- Protect with `protect`, then `authorize('RESOURCE:ACTION')`
+- Valid resources: `USER`, `GROUP`, `OBJECT`
+- Valid actions: `READ`, `WRITE`, `CREATE`, `DELETE`, `ADMIN`
+
+```js
+router.get('/', authorize('USER:READ'), getAllUsers);
+router.post('/', authorize('USER:CREATE'), createUser);
+```
+
+## Security
+
+- Never log passwords or JWTs
+- Require `JWT_SECRET` (no production fallbacks)
+- Hash passwords with bcrypt; never store plaintext
+- Return `error.message` only — do not leak stack traces to clients
+- Use `resolveMongoUri()` from `api/config/mongoUri.js` for DB connections
+
+## RBAC data
+
+- Permissions belong with the RBAC models/services (`api/models`, `api/services/rbacService.js`)
+- Admin bootstrap must remain idempotent (`ensureAdminBootstrap`)
+- Keep OpenAPI (`docs/openapi.yaml`) in sync when adding endpoints

@@ -1,0 +1,24 @@
+---
+description: React and TypeScript UI patterns for this codebase
+globs: client/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# React / TypeScript UI
+
+- Functional components only
+- Prefer explicit props interfaces over `any`
+- Handle loading and error states on data pages
+- Prefer existing design tokens in `globals.css` (`--accent`, `--sidebar`, etc.)
+- Reuse `Modal`, `AddMemberModal`, `PermissionModal` before inventing new dialogs
+
+```tsx
+// ✅ Typed API usage
+const users = await apiGet<UserRecord[]>('/users');
+
+// ❌ Untyped / silent failures
+const users = await apiGet('/users');
+```
+
+- Clear `localStorage` auth keys on logout (`authToken`, `userUsername`)
+- After login, redirect to `/` (not legacy `/dashboard`)
