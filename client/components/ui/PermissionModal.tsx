@@ -3,15 +3,18 @@
 import React, { FormEvent, useEffect, useId, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 
-type PermissionLevel = 'READ' | 'WRITE' | 'DELETE';
-type ResourceType = 'group' | 'object';
+type PermissionLevel = 'READ' | 'WRITE' | 'CREATE' | 'DELETE' | 'ADMIN';
+type ResourceType = 'USER' | 'GROUP' | 'OBJECT';
 
-const PERMISSION_LEVELS: PermissionLevel[] = ['READ', 'WRITE', 'DELETE'];
+const PERMISSION_LEVELS: PermissionLevel[] = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
+const RESOURCE_TYPES: ResourceType[] = ['USER', 'GROUP', 'OBJECT'];
 
 const PERMISSION_LABELS: Record<PermissionLevel, string> = {
-  READ: 'Read Access',
-  WRITE: 'Write Access',
-  DELETE: 'Delete Access',
+  READ: 'Read',
+  WRITE: 'Write',
+  CREATE: 'Create',
+  DELETE: 'Delete',
+  ADMIN: 'Admin',
 };
 
 export interface UpdatePolicyPayload {
@@ -21,37 +24,45 @@ export interface UpdatePolicyPayload {
 }
 
 interface PermissionModalProps {
-  resourceType: ResourceType;
   isOpen: boolean;
   onClose: () => void;
   onUpdatePolicy: (data: UpdatePolicyPayload) => void;
+  initialResourceType?: ResourceType;
+  initialTarget?: string;
 }
 
 const initialPermissions: Record<PermissionLevel, boolean> = {
   READ: false,
   WRITE: false,
+  CREATE: false,
   DELETE: false,
+  ADMIN: false,
 };
 
 const PermissionModal: React.FC<PermissionModalProps> = ({
-  resourceType,
   isOpen,
   onClose,
   onUpdatePolicy,
+  initialResourceType = 'OBJECT',
+  initialTarget = '*',
 }) => {
   const [permissions, setPermissions] = useState(initialPermissions);
-  const [targetResource, setTargetResource] = useState('');
+  const [resourceType, setResourceType] = useState<ResourceType>(initialResourceType);
+  const [targetResource, setTargetResource] = useState(initialTarget);
   const [error, setError] = useState<string | null>(null);
   const targetInputId = useId();
-  const resourceLabel = resourceType.charAt(0).toUpperCase() + resourceType.slice(1);
 
   useEffect(() => {
     if (!isOpen) {
       setPermissions(initialPermissions);
-      setTargetResource('');
+      setResourceType(initialResourceType);
+      setTargetResource(initialTarget);
       setError(null);
+    } else {
+      setResourceType(initialResourceType);
+      setTargetResource(initialTarget);
     }
-  }, [isOpen]);
+  }, [isOpen, initialResourceType, initialTarget]);
 
   const handleTogglePermission = (level: PermissionLevel) => {
     setPermissions((prev) => ({ ...prev, [level]: !prev[level] }));
@@ -70,7 +81,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
     }
 
     if (!trimmedTarget) {
-      setError('Target resource type is required.');
+      setError('Target is required (use * for all).');
       return;
     }
 
@@ -83,22 +94,32 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={`${resourceLabel} Policy Management`}
-    >
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit group policy">
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor={`${targetInputId}-type`} className="mb-2 block text-sm font-medium">
+            Resource type
+          </label>
+          <select
+            id={`${targetInputId}-type`}
+            value={resourceType}
+            onChange={(e) => setResourceType(e.target.value as ResourceType)}
+            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
+          >
+            {RESOURCE_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <fieldset className="space-y-2">
-          <legend className="text-sm font-medium mb-2">Permissions</legend>
+          <legend className="mb-2 text-sm font-medium">Permissions</legend>
           {PERMISSION_LEVELS.map((level) => {
             const checkboxId = `${targetInputId}-${level.toLowerCase()}`;
             return (
-              <label
-                key={level}
-                htmlFor={checkboxId}
-                className="flex items-center space-x-2 cursor-pointer"
-              >
+              <label key={level} htmlFor={checkboxId} className="flex cursor-pointer items-center space-x-2">
                 <input
                   id={checkboxId}
                   type="checkbox"
@@ -113,27 +134,24 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
         </fieldset>
 
         <div>
-          <label htmlFor={targetInputId} className="block text-sm font-medium mb-2">
-            Target Resource Type
+          <label htmlFor={targetInputId} className="mb-2 block text-sm font-medium">
+            Target
           </label>
           <input
             id={targetInputId}
             type="text"
-            placeholder="Resource Type (e.g., User)"
+            placeholder="* or object name / id"
             value={targetResource}
             onChange={(e) => {
               setTargetResource(e.target.value);
               if (error) setError(null);
             }}
-            aria-invalid={Boolean(error)}
-            aria-describedby={error ? `${targetInputId}-error` : undefined}
-            autoComplete="off"
-            className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
           />
         </div>
 
         {error && (
-          <p id={`${targetInputId}-error`} role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-red-600">
             {error}
           </p>
         )}
@@ -142,13 +160,13 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 rounded text-sm font-medium hover:bg-gray-300"
+            className="rounded bg-gray-200 px-4 py-2 text-sm font-medium hover:bg-gray-300"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-500 text-white rounded text-sm font-medium hover:bg-blue-600"
+            className="rounded bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
           >
             Save Policy
           </button>

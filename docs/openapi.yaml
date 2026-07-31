@@ -23,6 +23,7 @@ tags:
   - name: Auth
   - name: Users
   - name: Groups
+  - name: Permissions
   - name: Objects
 
 components:
@@ -90,8 +91,73 @@ components:
           type: string
         token:
           type: string
+        sessionId:
+          type: string
+          format: uuid
+        expiresAt:
+          type: string
+          format: date-time
         user:
           $ref: '#/components/schemas/UserSummary'
+
+    AuthError:
+      type: object
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+          enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, PASSWORD_CHANGED, CONFIG]
+      required: [message, code]
+
+    SessionRecord:
+      type: object
+      properties:
+        _id:
+          type: string
+        sessionId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        username:
+          type: string
+        userAgent:
+          type: string
+        ipAddress:
+          type: string
+        clientApp:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+
+    AdminChangePasswordRequest:
+      type: object
+      required: [newPassword]
+      properties:
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
 
     ResetPasswordRequest:
       type: object
@@ -263,7 +329,11 @@ paths:
   /api/auth/login:
     post:
       tags: [Auth]
-      summary: Login and receive JWT
+      summary: Login and create a DB-backed session JWT
+      description: |
+        Creates a MongoDB session document (shared auth store) and returns a JWT whose `sid`
+        claim matches the session. Other apps can validate the same token via `/api/auth/validate`
+        or by reading the `sessions` collection.
       operationId: loginUser
       requestBody:
         required: true
@@ -286,6 +356,153 @@ paths:
                 $ref: '#/components/schemas/ErrorMessage'
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout and revoke the current session
+      operationId: logoutUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user, session, and effective permissions
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Authenticated profile
+        '401':
+          description: Session missing, expired, or revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+
+  /api/auth/validate:
+    get:
+      tags: [Auth]
+      summary: Validate bearer session for shared authentication
+      operationId: validateSession
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Session is valid
+        '401':
+          description: Session invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+
+  /api/auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change password for the authenticated user
+      description: Revokes all of the user's active sessions after a successful change.
+      operationId: changeOwnPassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password updated
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+
+  /api/auth/sessions:
+    get:
+      tags: [Auth]
+      summary: List active sessions
+      description: |
+        Users with `USER:READ` see all active sessions. Others see only their own.
+      operationId: listSessions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Active sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scope:
+                    type: string
+                    enum: [all, self]
+                  sessions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SessionRecord'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+
+  /api/auth/sessions/{sessionId}:
+    delete:
+      tags: [Auth]
+      summary: Disconnect a session
+      description: Users can disconnect their own sessions. `USER:WRITE` can disconnect any session.
+      operationId: disconnectSession
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session disconnected
+        '403':
+          description: Not allowed to disconnect this session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+        '404':
+          description: Session not found
           content:
             application/json:
               schema:
@@ -449,6 +666,38 @@ paths:
           description: Unauthorized
         '404':
           description: Not found
+
+  /api/users/{id}/password:
+    post:
+      tags: [Users]
+      summary: Admin reset of another user's password
+      description: Requires `USER:WRITE`. Revokes all of the target user's sessions.
+      operationId: adminChangeUserPassword
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminChangePasswordRequest'
+      responses:
+        '200':
+          description: Password updated
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: User not found
 
   /api/groups:
     get:
@@ -632,6 +881,32 @@ paths:
           description: Unauthorized
         '404':
           description: Group not found
+
+  /api/permissions:
+    get:
+      tags: [Permissions]
+      summary: List all permissions with group names
+      operationId: listPermissions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: All permission rows for management screens
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  allOf:
+                    - $ref: '#/components/schemas/Permission'
+                    - type: object
+                      properties:
+                        groupName:
+                          type: string
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
 
   /api/groups/{groupId}/permissions:
     get:

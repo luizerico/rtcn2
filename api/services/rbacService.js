@@ -84,6 +84,33 @@ async function listGroupPermissions(groupId) {
 }
 
 /**
+ * List every permission joined with group name for management screens.
+ */
+async function listAllPermissions() {
+  const permissions = await Permission.find({})
+    .sort({ resourceType: 1, target: 1, groupId: 1, permission: 1 })
+    .lean();
+
+  if (!permissions.length) {
+    return [];
+  }
+
+  const groupIds = [...new Set(permissions.map((row) => String(row.groupId)))];
+  const groups = await Group.find({ _id: { $in: groupIds } }).select('name').lean();
+  const groupNameById = new Map(groups.map((group) => [String(group._id), group.name]));
+
+  return permissions.map((row) => ({
+    _id: row._id,
+    groupId: row.groupId,
+    groupName: groupNameById.get(String(row.groupId)) || 'Unknown group',
+    resourceType: row.resourceType,
+    target: row.target,
+    resourceId: row.resourceId,
+    permission: row.permission,
+  }));
+}
+
+/**
  * Replace permissions for a group + resourceType + target with the given scopes.
  */
 async function replaceGroupTargetPermissions({
@@ -128,6 +155,7 @@ module.exports = {
   userHasPermission,
   listUserPermissions,
   listGroupPermissions,
+  listAllPermissions,
   replaceGroupTargetPermissions,
   replaceGroupPermissions,
 };

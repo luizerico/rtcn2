@@ -81,7 +81,25 @@ describe('RBAC admin full access', () => {
     }
   });
 
-  it('allows admin full access across users, groups, and objects', async () => {
+  it('lists all permissions for management views', async () => {
+      const res = await request(app)
+        .get('/api/permissions')
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.length).toBeGreaterThan(0);
+      expect(res.body[0]).toEqual(
+        expect.objectContaining({
+          groupName: expect.any(String),
+          resourceType: expect.any(String),
+          target: expect.any(String),
+          permission: expect.any(String),
+        })
+      );
+    });
+
+    it('allows admin full access across users, groups, and objects', async () => {
     const auth = { Authorization: `Bearer ${adminToken}` };
 
     const createUser = await request(app)

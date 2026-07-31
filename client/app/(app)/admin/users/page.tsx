@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { apiDelete, apiGet, apiPost } from '@/lib/apiUtils';
+import { useToast } from '@/components/ToastProvider';
 
 interface UserRecord {
   _id: string;
@@ -12,6 +14,7 @@ interface UserRecord {
 }
 
 export default function AdminUsersPage() {
+  const { pushToast } = useToast();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +49,7 @@ export default function AdminUsersPage() {
       setUsername('');
       setEmail('');
       setPassword('');
+      pushToast({ tone: 'success', title: 'User created', message: `${username} was added.` });
       await loadUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create user.');
@@ -58,6 +62,7 @@ export default function AdminUsersPage() {
     setError(null);
     try {
       await apiDelete(`/users/${id}`);
+      pushToast({ tone: 'info', title: 'User deleted', message: 'The account was removed.' });
       await loadUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user.');
@@ -132,7 +137,13 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3 font-medium">{user.username}</td>
                   <td className="px-4 py-3">{user.email}</td>
                   <td className="px-4 py-3">{user.isVerified ? 'Yes' : 'No'}</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="space-x-3 px-4 py-3 text-right">
+                    <Link
+                      href={`/account/password?userId=${user._id}`}
+                      className="text-[var(--accent)] hover:underline"
+                    >
+                      Password
+                    </Link>
                     <button
                       type="button"
                       onClick={() => handleDelete(user._id)}

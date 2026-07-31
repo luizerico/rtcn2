@@ -104,6 +104,103 @@ describe('API endpoints', () => {
       });
       expect(res.status).toBe(200);
       expect(res.body.token).toBeDefined();
+      expect(res.body.sessionId).toBeDefined();
+      expect(res.body.expiresAt).toBeDefined();
+    });
+
+    it('GET /api/auth/me and validate require an active DB session', async () => {
+      const me = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(me.status).toBe(200);
+      expect(me.body.user.username).toBe('alice');
+      expect(me.body.session.sessionId).toBeDefined();
+
+      const validate = await request(app)
+        .get('/api/auth/validate')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(validate.status).toBe(200);
+      expect(validate.body.valid).toBe(true);
+
+      const noToken = await request(app).get('/api/auth/me');
+      expect(noToken.status).toBe(401);
+      expect(noToken.body.code).toBe('NO_TOKEN');
+    });
+
+    it('lists sessions and disconnects them', async () => {
+      const list = await request(app)
+        .get('/api/auth/sessions')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(list.status).toBe(200);
+      expect(list.body.scope).toBe('all');
+      expect(list.body.sessions.length).toBeGreaterThanOrEqual(1);
+
+      const sessionId = list.body.sessions[0].sessionId;
+      const disconnect = await request(app)
+        .delete(`/api/auth/sessions/${sessionId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(disconnect.status).toBe(200);
+
+      const after = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(after.status).toBe(401);
+      expect(after.body.code).toBe('REVOKED');
+    });
+
+    it('change-password revokes sessions and admin can reset another user', async () => {
+      const change = await request(app)
+        .post('/api/auth/change-password')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          currentPassword: 'Password123!',
+          newPassword: 'ChangedPass123!',
+        });
+      expect(change.status).toBe(200);
+
+      const revokedMe = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(revokedMe.status).toBe(401);
+      expect(revokedMe.body.code).toBe('REVOKED');
+
+      const relogin = await request(app).post('/api/auth/login').send({
+        username: 'alice',
+        password: 'ChangedPass123!',
+      });
+      expect(relogin.status).toBe(200);
+      authToken = relogin.body.token;
+
+      const adminReset = await request(app)
+        .post(`/api/users/${secondaryUserId}/password`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ newPassword: 'BobNewPass123!' });
+      expect(adminReset.status).toBe(200);
+
+      const bobOld = await request(app).post('/api/auth/login').send({
+        username: 'bob',
+        password: 'Password123!',
+      });
+      expect(bobOld.status).toBe(401);
+
+      const bobNew = await request(app).post('/api/auth/login').send({
+        username: 'bob',
+        password: 'BobNewPass123!',
+      });
+      expect(bobNew.status).toBe(200);
+    });
+
+    it('POST /api/auth/logout revokes the current session', async () => {
+      const logout = await request(app)
+        .post('/api/auth/logout')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(logout.status).toBe(200);
+
+      const me = await request(app)
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(me.status).toBe(401);
+      expect(me.body.code).toBe('REVOKED');
     });
 
     it('GET /api/auth/forgot-password requires email', async () => {

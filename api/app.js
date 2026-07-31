@@ -21,6 +21,7 @@ function createApp({ fallback } = {}) {
   app.use('/api/users', userRoutes);
   app.use('/api/groups', groupRoutes);
   app.use('/api/objects', objectRoutes);
+  app.use('/api/permissions', require('./routes/permissionRoutes'));
 
   if (typeof fallback === 'function') {
     app.use(fallback);

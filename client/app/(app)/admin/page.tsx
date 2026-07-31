@@ -16,6 +16,11 @@ const adminSections = [
     title: 'Permission management',
     description: 'Define READ, WRITE, and DELETE scopes for each group and target.',
   },
+  {
+    href: '/admin/sessions',
+    title: 'Session management',
+    description: 'Review connected users and disconnect sessions stored in the shared auth database.',
+  },
 ];
 
 export default function AdminPage() {

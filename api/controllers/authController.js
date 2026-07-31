@@ -1,18 +1,28 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const {
+  createSession,
+  revokeSession,
+  revokeAllUserSessions,
+  listActiveSessions,
+  listUserSessions,
+} = require('../services/sessionService');
+const { userHasPermission } = require('../services/rbacService');
 
 const mockSendEmail = async (email, subject) => {
   console.log(`[MOCK EMAIL SENT] To: ${email} | Subject: ${subject}`);
   return true;
 };
 
-/**
- * @desc    Registers a new user
- * @route   POST /api/auth/register
- * @access  Public
- */
+function requestMeta(req) {
+  return {
+    userAgent: req.get('user-agent') || '',
+    ipAddress: req.ip || req.socket?.remoteAddress || '',
+    clientApp: req.get('x-client-app') || 'rbac-platform',
+  };
+}
+
 exports.registerUser = async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
@@ -44,11 +54,6 @@ exports.registerUser = async (req, res) => {
   }
 };
 
-/**
- * @desc    Authenticates user and sets up JWT
- * @route   POST /api/auth/login
- * @access  Public
- */
 exports.loginUser = async (req, res) => {
   const { username, email, password } = req.body;
   const loginId = username || email;
@@ -63,23 +68,22 @@ exports.loginUser = async (req, res) => {
     });
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
+      return res.status(401).json({
+        message: 'Invalid credentials.',
+        code: 'INVALID_CREDENTIALS',
+      });
     }
 
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      return res.status(500).json({ message: 'Server authentication is misconfigured.' });
-    }
-
-    const token = jwt.sign(
-      { id: user._id, username: user.username },
-      secret,
-      { expiresIn: process.env.JWT_EXPIRE || '1h' }
-    );
+    const { token, session } = await createSession({
+      user,
+      ...requestMeta(req),
+    });
 
     res.status(200).json({
       message: 'Login successful.',
       token,
+      sessionId: session.sessionId,
+      expiresAt: session.expiresAt,
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err) {
@@ -88,11 +92,17 @@ exports.loginUser = async (req, res) => {
   }
 };
 
-/**
- * @desc    Request password reset link/code
- * @route   GET /api/auth/forgot-password
- * @access  Public
- */
+exports.logoutUser = async (req, res) => {
+  try {
+    if (req.session?.sessionId) {
+      await revokeSession(req.session.sessionId, 'logout');
+    }
+    res.status(200).json({ message: 'Logged out successfully.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error during logout.' });
+  }
+};
+
 exports.requestPasswordReset = async (req, res) => {
   const { email } = req.query;
 
@@ -119,7 +129,6 @@ exports.requestPasswordReset = async (req, res) => {
 
     res.status(200).json({
       message: 'Password reset link sent successfully to your email.',
-      // Returned only in non-production to support local testing without email delivery.
       ...(process.env.NODE_ENV !== 'production' ? { resetToken } : {}),
     });
   } catch (err) {
@@ -128,11 +137,6 @@ exports.requestPasswordReset = async (req, res) => {
   }
 };
 
-/**
- * @desc    Resets user's password using a token
- * @route   POST /api/auth/reset-password/:token
- * @access  Public
- */
 exports.resetPassword = async (req, res) => {
   const { token } = req.params;
   const { newPassword } = req.body;
@@ -162,6 +166,7 @@ exports.resetPassword = async (req, res) => {
     user.resetToken = null;
     user.tokenExpiry = null;
     await user.save();
+    await revokeAllUserSessions(user._id, 'password_reset');
 
     res.status(200).json({ message: 'Password reset successful.' });
   } catch (err) {
@@ -170,11 +175,6 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
-/**
- * @desc    Current authenticated user + effective RBAC permissions
- * @route   GET /api/auth/me
- * @access  Private
- */
 exports.getCurrentUser = async (req, res) => {
   res.status(200).json({
     user: {
@@ -184,6 +184,148 @@ exports.getCurrentUser = async (req, res) => {
       roleId: req.user.roleId,
       isVerified: req.user.isVerified,
     },
+    session: req.session
+      ? {
+          sessionId: req.session.sessionId,
+          expiresAt: req.session.expiresAt,
+          lastSeenAt: req.session.lastSeenAt,
+          clientApp: req.session.clientApp,
+        }
+      : null,
     permissions: req.permissions || [],
+  });
+};
+
+/**
+ * Change password for the authenticated user.
+ */
+exports.changeOwnPassword = async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: 'Current password and new password are required.' });
+  }
+  if (String(newPassword).length < 8) {
+    return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+  }
+
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
+      return res.status(400).json({ message: 'Current password is incorrect.' });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+    await revokeAllUserSessions(user._id, 'password_changed');
+
+    res.status(200).json({
+      message: 'Password updated. Please sign in again with your new password.',
+      code: 'PASSWORD_CHANGED',
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error updating password.' });
+  }
+};
+
+/**
+ * Admin password update for another user.
+ */
+exports.adminChangeUserPassword = async (req, res) => {
+  const { newPassword } = req.body;
+  const { id } = req.params;
+
+  if (!newPassword || String(newPassword).length < 8) {
+    return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+  }
+
+  try {
+    const canManage = await userHasPermission(req.user, 'USER:WRITE');
+    if (!canManage) {
+      return res.status(403).json({
+        message: 'Forbidden: Insufficient permissions for USER:WRITE.',
+        code: 'FORBIDDEN',
+      });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+    await revokeAllUserSessions(user._id, 'admin_password_reset');
+
+    res.status(200).json({
+      message: `Password updated for ${user.username}. Their active sessions were disconnected.`,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error updating user password.' });
+  }
+};
+
+exports.listSessions = async (req, res) => {
+  try {
+    const canManage = await userHasPermission(req.user, 'USER:READ');
+    const sessions = canManage
+      ? await listActiveSessions()
+      : await listUserSessions(req.user._id);
+
+    res.status(200).json({
+      sessions,
+      scope: canManage ? 'all' : 'self',
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Error listing sessions.' });
+  }
+};
+
+exports.disconnectSession = async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const Session = require('../models/Session');
+    const session = await Session.findOne({ sessionId });
+
+    if (!session) {
+      return res.status(404).json({ message: 'Session not found.' });
+    }
+
+    const isOwn = String(session.userId) === String(req.user._id);
+    const canManage = await userHasPermission(req.user, 'USER:WRITE');
+
+    if (!isOwn && !canManage) {
+      return res.status(403).json({
+        message: 'Forbidden: you can only disconnect your own sessions.',
+        code: 'FORBIDDEN',
+      });
+    }
+
+    await revokeSession(sessionId, isOwn ? 'user_disconnect' : 'admin_disconnect');
+
+    res.status(200).json({
+      message: 'Session disconnected.',
+      sessionId,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Error disconnecting session.' });
+  }
+};
+
+/**
+ * Validate a bearer session for shared authentication with other apps.
+ */
+exports.validateSession = async (req, res) => {
+  res.status(200).json({
+    valid: true,
+    user: {
+      id: req.user._id,
+      username: req.user.username,
+      email: req.user.email,
+    },
+    session: {
+      sessionId: req.session.sessionId,
+      expiresAt: req.session.expiresAt,
+      clientApp: req.session.clientApp,
+    },
   });
 };
