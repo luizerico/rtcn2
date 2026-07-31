@@ -21,6 +21,11 @@ const adminSections = [
     title: 'Session management',
     description: 'Review connected users and disconnect sessions stored in the shared auth database.',
   },
+  {
+    href: '/surveys',
+    title: 'Surveys',
+    description: 'Create Survey assets with questions and visualize SurveyResponse answers.',
+  },
 ];
 
 export default function AdminPage() {

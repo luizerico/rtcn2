@@ -10,7 +10,7 @@ alwaysApply: false
 
 - Mount under `/api/*` via `api/app.js`
 - Protect with `protect`, then `authorize('RESOURCE:ACTION')`
-- Valid resources: `USER`, `GROUP`, `OBJECT`
+- Valid resources: `USER`, `GROUP`, `ASSET`
 - Valid actions: `READ`, `WRITE`, `CREATE`, `DELETE`, `ADMIN`
 
 ```js

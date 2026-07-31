@@ -1,7 +1,8 @@
 const express = require('express');
 const authRoutes = require('./routes/authRoutes');
 const groupRoutes = require('./routes/groupRoutes');
-const objectRoutes = require('./routes/objectRoutes');
+const assetRoutes = require('./routes/assetRoutes');
+const surveyRoutes = require('./routes/surveyRoutes');
 const userRoutes = require('./routes/userRoutes');
 
 /**
@@ -20,7 +21,8 @@ function createApp({ fallback } = {}) {
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/groups', groupRoutes);
-  app.use('/api/objects', objectRoutes);
+  app.use('/api/assets', assetRoutes);
+  app.use('/api/surveys', surveyRoutes);
   app.use('/api/permissions', require('./routes/permissionRoutes'));
 
   if (typeof fallback === 'function') {

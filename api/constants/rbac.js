@@ -1,4 +1,4 @@
-const RESOURCE_TYPES = ['USER', 'GROUP', 'OBJECT'];
+const RESOURCE_TYPES = ['USER', 'GROUP', 'ASSET'];
 const ACTIONS = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
 
 /**

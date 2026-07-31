@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Projects RBAC API
   description: |
-    REST API for authentication, groups, membership, RBAC policies, and protected objects.
+    REST API for authentication, groups, membership, RBAC policies, and protected assets.
 
     Import this file into Postman (**Import → File**), Insomnia, Thunder Client, or any OpenAPI 3 tool.
   version: 1.0.0
@@ -24,7 +24,8 @@ tags:
   - name: Users
   - name: Groups
   - name: Permissions
-  - name: Objects
+  - name: Assets
+  - name: Surveys
 
 components:
   securitySchemes:
@@ -221,8 +222,8 @@ components:
           example: User
         resourceType:
           type: string
-          enum: [USER, GROUP, OBJECT]
-          default: OBJECT
+          enum: [USER, GROUP, ASSET]
+          default: ASSET
 
     Permission:
       type: object
@@ -233,7 +234,7 @@ components:
           type: string
         resourceType:
           type: string
-          enum: [USER, GROUP, OBJECT]
+          enum: [USER, GROUP, ASSET]
         resourceId:
           type: string
           nullable: true
@@ -243,7 +244,7 @@ components:
           type: string
           enum: [READ, WRITE, CREATE, DELETE, ADMIN]
 
-    ObjectResource:
+    AssetResource:
       type: object
       properties:
         _id:
@@ -254,9 +255,16 @@ components:
           type: string
         ownerId:
           type: string
-        resourceType:
+        kind:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET]
+          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+        assetType:
+          type: string
+          enum: [Asset, Survey, SurveyResponse]
+        createdBy:
+          type: string
+        updatedBy:
+          type: string
         createdAt:
           type: string
           format: date-time
@@ -264,7 +272,7 @@ components:
           type: string
           format: date-time
 
-    CreateObjectRequest:
+    CreateAssetRequest:
       type: object
       required: [name]
       properties:
@@ -273,10 +281,57 @@ components:
           example: Billing Doc
         description:
           type: string
-        resourceType:
+        kind:
           type: string
           enum: [DOCUMENT, DASHBOARD, DATASET]
           default: DOCUMENT
+
+    SurveyQuestion:
+      type: object
+      required: [prompt, type]
+      properties:
+        questionId:
+          type: string
+        prompt:
+          type: string
+        type:
+          type: string
+          enum: [text, multiple_choice, yes_no]
+        options:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+          default: true
+
+    CreateSurveyRequest:
+      type: object
+      required: [name, questions]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SurveyQuestion'
+
+    SubmitSurveyResponseRequest:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items:
+            type: object
+            required: [questionId, value]
+            properties:
+              questionId:
+                type: string
+              value:
+                description: Text, Yes/No, or multiple-choice option
 
 paths:
   /api/health:
@@ -967,28 +1022,28 @@ paths:
         '404':
           description: Group not found
 
-  /api/objects:
+  /api/assets:
     get:
-      tags: [Objects]
-      summary: List objects
-      operationId: listObjects
+      tags: [Assets]
+      summary: List assets
+      operationId: listAssets
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: Object list
+          description: Asset list
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ObjectResource'
+                  $ref: '#/components/schemas/AssetResource'
         '401':
           description: Unauthorized
     post:
-      tags: [Objects]
-      summary: Create object
-      operationId: createObject
+      tags: [Assets]
+      summary: Create asset
+      operationId: createAsset
       security:
         - bearerAuth: []
       requestBody:
@@ -996,24 +1051,24 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateObjectRequest'
+              $ref: '#/components/schemas/CreateAssetRequest'
       responses:
         '201':
-          description: Object created
+          description: Asset created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ObjectResource'
+                $ref: '#/components/schemas/AssetResource'
         '400':
           description: Validation error
         '401':
           description: Unauthorized
 
-  /api/objects/{id}:
+  /api/assets/{id}:
     get:
-      tags: [Objects]
-      summary: Get object by ID
-      operationId: getObject
+      tags: [Assets]
+      summary: Get asset by ID
+      operationId: getAsset
       security:
         - bearerAuth: []
       parameters:
@@ -1024,19 +1079,19 @@ paths:
             type: string
       responses:
         '200':
-          description: Object found
+          description: Asset found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ObjectResource'
+                $ref: '#/components/schemas/AssetResource'
         '401':
           description: Unauthorized
         '404':
           description: Not found
     put:
-      tags: [Objects]
-      summary: Update object
-      operationId: updateObject
+      tags: [Assets]
+      summary: Update asset
+      operationId: updateAsset
       security:
         - bearerAuth: []
       parameters:
@@ -1050,18 +1105,18 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateObjectRequest'
+              $ref: '#/components/schemas/CreateAssetRequest'
       responses:
         '200':
-          description: Object updated
+          description: Asset updated
         '401':
           description: Unauthorized
         '404':
           description: Not found
     delete:
-      tags: [Objects]
-      summary: Delete object
-      operationId: deleteObject
+      tags: [Assets]
+      summary: Delete asset
+      operationId: deleteAsset
       security:
         - bearerAuth: []
       parameters:
@@ -1072,22 +1127,22 @@ paths:
             type: string
       responses:
         '200':
-          description: Object deleted
+          description: Asset deleted
         '401':
           description: Unauthorized
         '404':
           description: Not found
 
-  /api/objects/{objectId}/members:
+  /api/assets/{assetId}/members:
     post:
-      tags: [Objects]
-      summary: Add object member (not implemented)
-      operationId: addObjectMember
+      tags: [Assets]
+      summary: Add asset member (not implemented)
+      operationId: addAssetMember
       security:
         - bearerAuth: []
       parameters:
         - in: path
-          name: objectId
+          name: assetId
           required: true
           schema:
             type: string
@@ -1103,16 +1158,16 @@ paths:
         '401':
           description: Unauthorized
 
-  /api/objects/{objectId}/permissions:
+  /api/assets/{assetId}/permissions:
     post:
-      tags: [Objects]
-      summary: Update object permissions (not implemented)
-      operationId: updateObjectPermissions
+      tags: [Assets]
+      summary: Update asset permissions (not implemented)
+      operationId: updateAssetPermissions
       security:
         - bearerAuth: []
       parameters:
         - in: path
-          name: objectId
+          name: assetId
           required: true
           schema:
             type: string
@@ -1127,3 +1182,130 @@ paths:
           description: Not implemented yet
         '401':
           description: Unauthorized
+
+  /api/surveys:
+    get:
+      tags: [Surveys]
+      summary: List surveys
+      operationId: listSurveys
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Survey list
+        '401':
+          description: Unauthorized
+    post:
+      tags: [Surveys]
+      summary: Create a survey asset with questions
+      operationId: createSurvey
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSurveyRequest'
+      responses:
+        '201':
+          description: Survey created
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized
+
+  /api/surveys/{id}:
+    get:
+      tags: [Surveys]
+      summary: Get survey by ID
+      operationId: getSurvey
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Survey found
+        '404':
+          description: Not found
+    put:
+      tags: [Surveys]
+      summary: Update survey
+      operationId: updateSurvey
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSurveyRequest'
+      responses:
+        '200':
+          description: Survey updated
+    delete:
+      tags: [Surveys]
+      summary: Delete survey and its responses
+      operationId: deleteSurvey
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+
+  /api/surveys/{id}/responses:
+    get:
+      tags: [Surveys]
+      summary: List responses and visualization summary
+      operationId: listSurveyResponses
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Responses and summary
+    post:
+      tags: [Surveys]
+      summary: Submit survey answers as a SurveyResponse asset
+      operationId: submitSurveyResponse
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitSurveyResponseRequest'
+      responses:
+        '201':
+          description: Response saved
+        '400':
+          description: Validation error

@@ -172,7 +172,7 @@ __tests__/                Component + API tests
 ## RBAC notes
 
 - Permissions live in the **`permissions`** collection (not embedded on groups).
-- Each permission row links a **group** to a resource action (`READ`, `WRITE`, `CREATE`, `DELETE`, `ADMIN`) for `USER`, `GROUP`, or `OBJECT`.
+- Each permission row links a **group** to a resource action (`READ`, `WRITE`, `CREATE`, `DELETE`, `ADMIN`) for `USER`, `GROUP`, or `ASSET`.
 - `authorize('RESOURCE:ACTION')` resolves the caller’s groups (`roleId` + membership) and loads matching permission rows.
 - `ADMIN` on a resource type grants every action; `WRITE` also covers `CREATE`.
 - `npm run db:init` upserts the **admin** group and writes the full permission matrix into `permissions`.

@@ -139,7 +139,7 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3">{user.isVerified ? 'Yes' : 'No'}</td>
                   <td className="space-x-3 px-4 py-3 text-right">
                     <Link
-                      href={`/account/password?userId=${user._id}`}
+                      href={`/account?userId=${user._id}`}
                       className="text-[var(--accent)] hover:underline"
                     >
                       Password

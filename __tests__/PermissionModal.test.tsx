@@ -33,7 +33,7 @@ describe('PermissionModal Component', () => {
       />
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/object name/i), {
+    fireEvent.change(screen.getByPlaceholderText(/asset name/i), {
       target: { value: '*' },
     });
     fireEvent.click(screen.getByRole('button', { name: /save policy/i }));
@@ -54,7 +54,7 @@ describe('PermissionModal Component', () => {
     );
 
     fireEvent.click(screen.getByLabelText(/^read$/i));
-    fireEvent.change(screen.getByPlaceholderText(/object name/i), {
+    fireEvent.change(screen.getByPlaceholderText(/asset name/i), {
       target: { value: '*' },
     });
     fireEvent.click(screen.getByRole('button', { name: /save policy/i }));

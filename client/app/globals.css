@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-:root {
+:root,
+[data-theme="light"] {
   --background: #f4f7f5;
   --foreground: #14201b;
   --surface: #ffffff;
@@ -11,6 +12,20 @@
   --accent-soft: #d9f2ee;
   --danger: #b42318;
   --sidebar: #10241f;
+  --sidebar-text: #e7f3ef;
+}
+
+[data-theme="dark"] {
+  --background: #0c1613;
+  --foreground: #e7f3ef;
+  --surface: #15241f;
+  --muted: #9bb0a7;
+  --border: #2a3d36;
+  --accent: #2dd4bf;
+  --accent-strong: #14b8a6;
+  --accent-soft: #1a3d36;
+  --danger: #f97066;
+  --sidebar: #081512;
   --sidebar-text: #e7f3ef;
 }
 
@@ -42,4 +57,11 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+input,
+select,
+textarea {
+  background: var(--surface);
+  color: var(--foreground);
 }

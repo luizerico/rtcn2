@@ -397,76 +397,142 @@ describe('API endpoints', () => {
     });
   });
 
-  describe('Objects', () => {
+  describe('Assets', () => {
     it('requires auth', async () => {
-      const res = await request(app).get('/api/objects');
+      const res = await request(app).get('/api/assets');
       expect(res.status).toBe(401);
     });
 
     it('CRUD lifecycle works', async () => {
       const create = await request(app)
-        .post('/api/objects')
+        .post('/api/assets')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           name: 'Billing Doc',
           description: 'Invoices',
-          resourceType: 'DOCUMENT',
+          kind: 'DOCUMENT',
         });
       expect(create.status).toBe(201);
       expect(create.body.ownerId).toBe(String(userId));
+      expect(create.body.createdBy).toBe(String(userId));
+      expect(create.body.updatedBy).toBe(String(userId));
+      expect(create.body.createdAt).toBeDefined();
+      expect(create.body.updatedAt).toBeDefined();
 
       const list = await request(app)
-        .get('/api/objects')
+        .get('/api/assets')
         .set('Authorization', `Bearer ${authToken}`);
       expect(list.status).toBe(200);
       expect(list.body).toHaveLength(1);
 
-      const objectId = create.body._id;
+      const assetId = create.body._id;
 
       const getOne = await request(app)
-        .get(`/api/objects/${objectId}`)
+        .get(`/api/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`);
       expect(getOne.status).toBe(200);
 
       const update = await request(app)
-        .put(`/api/objects/${objectId}`)
+        .put(`/api/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({ description: 'Updated invoices' });
       expect(update.status).toBe(200);
       expect(update.body.description).toBe('Updated invoices');
+      expect(update.body.updatedBy).toBe(String(userId));
 
       const remove = await request(app)
-        .delete(`/api/objects/${objectId}`)
+        .delete(`/api/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`);
       expect(remove.status).toBe(200);
     });
 
     it('rejects create without name', async () => {
       const res = await request(app)
-        .post('/api/objects')
+        .post('/api/assets')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ description: 'missing name' });
       expect(res.status).toBe(400);
     });
 
-    it('returns 501 for unimplemented object policy endpoints', async () => {
+    it('returns 501 for unimplemented asset policy endpoints', async () => {
       const create = await request(app)
-        .post('/api/objects')
+        .post('/api/assets')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ name: 'Policy Object' });
-      const objectId = create.body._id;
+        .send({ name: 'Policy Asset' });
+      const assetId = create.body._id;
 
       const members = await request(app)
-        .post(`/api/objects/${objectId}/members`)
+        .post(`/api/assets/${assetId}/members`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({ targetUserId: secondaryUserId });
       expect(members.status).toBe(501);
 
       const permissions = await request(app)
-        .post(`/api/objects/${objectId}/permissions`)
+        .post(`/api/assets/${assetId}/permissions`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({ scopes: ['READ'], target: 'User' });
       expect(permissions.status).toBe(501);
+    });
+  });
+
+  describe('Surveys', () => {
+    it('creates a survey, accepts answers, and visualizes response summary', async () => {
+      const create = await request(app)
+        .post('/api/surveys')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Customer pulse',
+          description: 'Quick feedback',
+          questions: [
+            { prompt: 'How was the service?', type: 'text' },
+            { prompt: 'Would you recommend us?', type: 'yes_no' },
+            {
+              prompt: 'Favorite channel?',
+              type: 'multiple_choice',
+              options: ['Email', 'Chat', 'Phone'],
+            },
+          ],
+        });
+      expect(create.status).toBe(201);
+      expect(create.body.assetType).toBe('Survey');
+      expect(create.body.kind).toBe('SURVEY');
+      expect(create.body.questions).toHaveLength(3);
+      expect(create.body.createdBy).toBe(String(userId));
+
+      const surveyId = create.body._id;
+      const [textQ, yesNoQ, choiceQ] = create.body.questions;
+
+      const submit = await request(app)
+        .post(`/api/surveys/${surveyId}/responses`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          answers: [
+            { questionId: textQ.questionId, value: 'Great support' },
+            { questionId: yesNoQ.questionId, value: 'Yes' },
+            { questionId: choiceQ.questionId, value: 'Chat' },
+          ],
+        });
+      expect(submit.status).toBe(201);
+      expect(submit.body.assetType).toBe('SurveyResponse');
+      expect(submit.body.kind).toBe('SURVEY_RESPONSE');
+      expect(submit.body.surveyId).toBe(surveyId);
+
+      const results = await request(app)
+        .get(`/api/surveys/${surveyId}/responses`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(results.status).toBe(200);
+      expect(results.body.responses).toHaveLength(1);
+      expect(results.body.summary.responseCount).toBe(1);
+      expect(results.body.summary.questions[1].counts.Yes).toBe(1);
+      expect(results.body.summary.questions[2].counts.Chat).toBe(1);
+    });
+
+    it('rejects surveys without questions', async () => {
+      const res = await request(app)
+        .post('/api/surveys')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'Empty', questions: [] });
+      expect(res.status).toBe(400);
     });
   });
 });

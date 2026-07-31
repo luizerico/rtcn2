@@ -3,7 +3,7 @@ name: rbac-api-endpoint
 description: >-
   Add or change Express API endpoints with JWT protect and RBAC authorize checks.
   Use when creating routes, controllers, models, permissions, or updating OpenAPI
-  for USER/GROUP/OBJECT resources.
+  for USER/GROUP/ASSET resources.
 ---
 
 # RBAC API Endpoint Workflow

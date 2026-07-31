@@ -4,10 +4,10 @@ import React, { FormEvent, useEffect, useId, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 
 type PermissionLevel = 'READ' | 'WRITE' | 'CREATE' | 'DELETE' | 'ADMIN';
-type ResourceType = 'USER' | 'GROUP' | 'OBJECT';
+type ResourceType = 'USER' | 'GROUP' | 'ASSET';
 
 const PERMISSION_LEVELS: PermissionLevel[] = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
-const RESOURCE_TYPES: ResourceType[] = ['USER', 'GROUP', 'OBJECT'];
+const RESOURCE_TYPES: ResourceType[] = ['USER', 'GROUP', 'ASSET'];
 
 const PERMISSION_LABELS: Record<PermissionLevel, string> = {
   READ: 'Read',
@@ -43,7 +43,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
   isOpen,
   onClose,
   onUpdatePolicy,
-  initialResourceType = 'OBJECT',
+  initialResourceType = 'ASSET',
   initialTarget = '*',
 }) => {
   const [permissions, setPermissions] = useState(initialPermissions);
@@ -140,7 +140,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
           <input
             id={targetInputId}
             type="text"
-            placeholder="* or object name / id"
+            placeholder="* or asset name / id"
             value={targetResource}
             onChange={(e) => {
               setTargetResource(e.target.value);

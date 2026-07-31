@@ -18,7 +18,7 @@ interface PermissionRecord {
   permission: string;
 }
 
-type ViewMode = 'group' | 'object';
+type ViewMode = 'group' | 'asset';
 
 function groupBy<T>(items: T[], keyFn: (item: T) => string): Record<string, T[]> {
   return items.reduce<Record<string, T[]>>((acc, item) => {
@@ -145,7 +145,7 @@ export default function AdminPermissionsPage() {
         </p>
         <h1 className="mt-2 text-3xl font-semibold">Permission management</h1>
         <p className="mt-2 text-[var(--muted)]">
-          Review access policies per group and per object/resource from the permissions table.
+          Review access policies per group and per asset/resource from the permissions table.
         </p>
       </header>
 
@@ -168,12 +168,12 @@ export default function AdminPermissionsPage() {
           </button>
           <button
             type="button"
-            onClick={() => setViewMode('object')}
+            onClick={() => setViewMode('asset')}
             className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-              viewMode === 'object' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)]'
+              viewMode === 'asset' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)]'
             }`}
           >
-            By object
+            By asset
           </button>
         </div>
 
@@ -249,7 +249,7 @@ export default function AdminPermissionsPage() {
                           <table className="min-w-full text-left text-sm">
                             <thead className="bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                               <tr>
-                                <th className="px-3 py-2 font-medium">Target / object</th>
+                                <th className="px-3 py-2 font-medium">Target / asset</th>
                                 <th className="px-3 py-2 font-medium">Actions</th>
                               </tr>
                             </thead>
@@ -284,7 +284,7 @@ export default function AdminPermissionsPage() {
         </section>
       ) : (
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Permissions by object / resource</h2>
+          <h2 className="text-lg font-semibold">Permissions by asset / resource</h2>
           {permissionsByObject.length === 0 ? (
             <p className="text-[var(--muted)]">No permissions found.</p>
           ) : (
@@ -342,7 +342,7 @@ export default function AdminPermissionsPage() {
         isOpen={policyModalOpen}
         onClose={() => setPolicyModalOpen(false)}
         onUpdatePolicy={handleUpdatePolicy}
-        initialResourceType="OBJECT"
+        initialResourceType="ASSET"
         initialTarget="*"
       />
     </div>

@@ -8,7 +8,7 @@ import { useToast } from '@/components/ToastProvider';
 
 const links = [
   { href: '/', label: 'Home' },
-  { href: '/account/password', label: 'Password' },
+  { href: '/surveys', label: 'Surveys' },
   { href: '/admin', label: 'Admin' },
   { href: '/admin/users', label: 'Users', indent: true },
   { href: '/admin/groups', label: 'Groups', indent: true },
@@ -77,6 +77,7 @@ export default function AppNav() {
       </nav>
 
       <div className="mt-auto space-y-2 border-t border-teal-900/80 pt-4">
+        <NavLink href="/account" label="Profile" />
         <Link href="/login" className="block rounded-md px-3 py-2 text-sm text-teal-50/85 hover:bg-teal-900">
           Switch account
         </Link>

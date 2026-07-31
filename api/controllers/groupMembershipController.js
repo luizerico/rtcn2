@@ -80,7 +80,7 @@ exports.updateGroupPermissions = async (req, res) => {
   try {
     const { scopes, target, resourceType } = req.body;
     const allowedScopes = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
-    const allowedResourceTypes = ['USER', 'GROUP', 'OBJECT'];
+    const allowedResourceTypes = ['USER', 'GROUP', 'ASSET'];
 
     if (!Array.isArray(scopes) || scopes.length === 0) {
       return res.status(400).json({ message: 'At least one permission scope is required.' });
@@ -90,7 +90,7 @@ exports.updateGroupPermissions = async (req, res) => {
       return res.status(400).json({ message: 'Target resource is required.' });
     }
 
-    const normalizedResourceType = String(resourceType || 'OBJECT').toUpperCase();
+    const normalizedResourceType = String(resourceType || 'ASSET').toUpperCase();
     if (!allowedResourceTypes.includes(normalizedResourceType)) {
       return res.status(400).json({ message: 'Invalid resource type.' });
     }

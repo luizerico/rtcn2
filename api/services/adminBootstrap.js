@@ -1,8 +1,34 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Group = require('../models/Group');
+const Permission = require('../models/Permission');
 const { buildFullAdminPermissions } = require('../constants/rbac');
 const { replaceGroupPermissions, listGroupPermissions } = require('./rbacService');
+
+/**
+ * Rename legacy OBJECT resource type rows to ASSET, and rename objects→assets collection if present.
+ */
+async function migrateObjectToAsset(mongooseConnection) {
+  const renamed = await Permission.updateMany(
+    { resourceType: 'OBJECT' },
+    { $set: { resourceType: 'ASSET' } }
+  );
+
+  try {
+    const db = mongooseConnection.db;
+    const existing = await db.listCollections({ name: 'objects' }).toArray();
+    if (existing.length) {
+      const assets = await db.listCollections({ name: 'assets' }).toArray();
+      if (!assets.length) {
+        await db.collection('objects').rename('assets');
+      }
+    }
+  } catch (error) {
+    console.warn('Collection rename objects→assets skipped:', error.message);
+  }
+
+  return renamed.modifiedCount || 0;
+}
 
 /**
  * Ensure the admin group has full RBAC coverage and the admin user is linked.
@@ -12,10 +38,13 @@ async function ensureAdminBootstrap({
   adminUsername = process.env.ADMIN_USERNAME || 'admin',
   adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com',
   adminPassword = process.env.ADMIN_PASSWORD,
+  mongooseConnection = require('mongoose').connection,
 } = {}) {
   if (!adminPassword) {
     throw new Error('ADMIN_PASSWORD is required to bootstrap the admin account.');
   }
+
+  await migrateObjectToAsset(mongooseConnection);
 
   let adminGroup = await Group.findOne({ name: 'admin' });
   if (!adminGroup) {
@@ -62,4 +91,5 @@ async function ensureAdminBootstrap({
 
 module.exports = {
   ensureAdminBootstrap,
+  migrateObjectToAsset,
 };
