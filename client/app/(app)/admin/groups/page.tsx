@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { apiDelete, apiGet, apiPost } from '@/lib/apiUtils';
 import AddMemberModal, { AddMemberPayload } from '@/components/ui/AddMemberModal';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 interface GroupRecord {
   _id: string;
@@ -73,6 +74,13 @@ export default function AdminGroupsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Admin', href: '/admin' },
+            { label: 'Groups' },
+          ]}
+        />
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Admin / Groups</p>
         <h1 className="mt-2 text-3xl font-semibold">Group management</h1>
         <p className="mt-2 text-[var(--muted)]">Create groups and attach members for shared roles.</p>
@@ -84,7 +92,7 @@ export default function AdminGroupsPage() {
         </div>
       )}
 
-      <form onSubmit={handleCreate} className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:grid-cols-3">
+      <form onSubmit={handleCreate} className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:grid-cols-4">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -98,6 +106,16 @@ export default function AdminGroupsPage() {
           placeholder="Description"
           className="rounded-md border border-[var(--border)] px-3 py-2"
         />
+        <button
+          type="button"
+          onClick={() => {
+            setName('');
+            setDescription('');
+          }}
+          className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
+        >
+          Cancel
+        </button>
         <button
           type="submit"
           className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)]"

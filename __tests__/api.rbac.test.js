@@ -267,7 +267,7 @@ describe('RBAC admin full access', () => {
 
     const listSurveys = await request(app).get('/api/surveys').set(auth);
     expect(listSurveys.status).toBe(200);
-    expect(listSurveys.body.some((s) => s.name === 'Scoped survey')).toBe(true);
+    expect(listSurveys.body.items.some((s) => s.name === 'Scoped survey')).toBe(true);
   });
 
   it('keeps full permissions after re-running admin bootstrap', async () => {

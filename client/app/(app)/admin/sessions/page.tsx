@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiDelete, apiGet } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 interface SessionRecord {
   _id: string;
@@ -63,6 +64,13 @@ export default function AdminSessionsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Admin', href: '/admin' },
+            { label: 'Sessions' },
+          ]}
+        />
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
           Admin / Sessions
         </p>

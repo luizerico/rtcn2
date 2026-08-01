@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { apiGet, apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import { useTheme, type ThemeMode } from '@/components/ThemeProvider';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 interface UserRecord {
   _id: string;
@@ -127,6 +128,7 @@ function ProfileContent() {
   return (
     <div className="mx-auto max-w-xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
+        <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Profile' }]} />
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Profile</p>
         <h1 className="mt-2 text-3xl font-semibold">Your profile</h1>
         <p className="mt-2 text-[var(--muted)]">
@@ -265,13 +267,27 @@ function ProfileContent() {
           />
         </div>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
-        >
-          {saving ? 'Saving…' : 'Update password'}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentPassword('');
+              setNewPassword('');
+              setConfirmPassword('');
+              setSelectedUserId(targetUserId || '');
+            }}
+            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
+          >
+            {saving ? 'Saving…' : 'Update password'}
+          </button>
+        </div>
       </form>
     </div>
   );

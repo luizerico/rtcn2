@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 const adminSections = [
   {
@@ -32,6 +33,7 @@ export default function AdminPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <header className="mb-8 border-b border-[var(--border)] pb-6">
+        <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Admin' }]} />
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Admin</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Administration</h1>
         <p className="mt-2 max-w-2xl text-[var(--muted)]">

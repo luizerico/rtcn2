@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiDelete, apiGet, apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 interface UserRecord {
   _id: string;
@@ -72,6 +73,13 @@ export default function AdminUsersPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Admin', href: '/admin' },
+            { label: 'Users' },
+          ]}
+        />
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Admin / Users</p>
         <h1 className="mt-2 text-3xl font-semibold">User management</h1>
         <p className="mt-2 text-[var(--muted)]">Create accounts and review registered users.</p>
@@ -83,7 +91,7 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      <form onSubmit={handleCreate} className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:grid-cols-4">
+      <form onSubmit={handleCreate} className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:grid-cols-5">
         <input
           value={username}
           onChange={(e) => setUsername(e.target.value)}
@@ -107,6 +115,17 @@ export default function AdminUsersPage() {
           required
           className="rounded-md border border-[var(--border)] px-3 py-2"
         />
+        <button
+          type="button"
+          onClick={() => {
+            setUsername('');
+            setEmail('');
+            setPassword('');
+          }}
+          className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
+        >
+          Cancel
+        </button>
         <button
           type="submit"
           disabled={saving}

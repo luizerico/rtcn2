@@ -29,6 +29,7 @@ export default function Page() {
 - Use `next/link` for internal navigation
 - Fetch via `apiGet` / `apiPost` / `apiPut` / `apiDelete` from `@/lib/apiUtils`
 - Keep pages focused; extract modals/forms into `components/`
+- Follow `.cursor/rules/page-navigation.mdc`: breadcrumbs on pages; action forms **Cancel** then **Save**
 
 ## Do not
 

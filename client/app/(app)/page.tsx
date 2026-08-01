@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 const menuItems = [
   {
@@ -27,6 +28,7 @@ export default function HomePage() {
   return (
     <div className="mx-auto max-w-5xl">
       <header className="mb-10 border-b border-[var(--border)] pb-6">
+        <Breadcrumbs items={[{ label: 'Home' }]} />
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Welcome</p>
         <h1 className="mt-2 text-4xl font-semibold tracking-tight text-[var(--foreground)]">
           RBAC Control Center

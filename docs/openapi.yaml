@@ -1140,9 +1140,81 @@ paths:
       operationId: listSurveys
       security:
         - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number (1-based)
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Case-insensitive search on name and description
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Alias for search
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [name, createdAt, updatedAt, questionCount]
+            default: updatedAt
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: createdBy
+          schema:
+            type: string
+          description: Filter by creator user id
       responses:
         '200':
-          description: Survey list
+          description: Paginated survey list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+                  total:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  sort:
+                    type: string
+                  order:
+                    type: string
+                  search:
+                    type: string
+                  filters:
+                    type: object
+                    properties:
+                      createdBy:
+                        type: string
+                        nullable: true
         '401':
           description: Unauthorized
     post:

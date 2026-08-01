@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiGet, apiPost } from '@/lib/apiUtils';
 import PermissionModal, { UpdatePolicyPayload } from '@/components/ui/PermissionModal';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 interface GroupRecord {
   _id: string;
@@ -141,6 +142,13 @@ export default function AdminPermissionsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Admin', href: '/admin' },
+            { label: 'Permissions' },
+          ]}
+        />
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
           Admin / Permissions
         </p>

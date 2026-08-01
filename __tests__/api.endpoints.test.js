@@ -525,5 +525,63 @@ describe('API endpoints', () => {
         .send({ name: 'Empty', questions: [] });
       expect(res.status).toBe(400);
     });
+
+    it('lists surveys with pagination, search, filter, and sort', async () => {
+      const created = [];
+      for (const name of ['Alpha searchmark', 'Beta other', 'Gamma searchmark']) {
+        const res = await request(app)
+          .post('/api/surveys')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            name,
+            description: `${name} description`,
+            questions: [{ prompt: 'Q?', type: 'text' }],
+          });
+        expect(res.status).toBe(201);
+        created.push(res.body);
+      }
+
+      const listed = await request(app)
+        .get('/api/surveys')
+        .query({ search: 'searchmark', sort: 'name', order: 'asc', page: 1, limit: 10 })
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(listed.status).toBe(200);
+      expect(listed.body).toMatchObject({
+        page: 1,
+        limit: 10,
+        sort: 'name',
+        order: 'asc',
+        search: 'searchmark',
+      });
+      expect(listed.body.total).toBeGreaterThanOrEqual(2);
+      expect(listed.body.items.every((s) => /searchmark/i.test(s.name))).toBe(true);
+      expect(listed.body.items.map((s) => s.name)).toEqual(
+        [...listed.body.items.map((s) => s.name)].sort((a, b) => a.localeCompare(b))
+      );
+
+      const pageOne = await request(app)
+        .get('/api/surveys')
+        .query({ search: 'searchmark', sort: 'name', order: 'asc', page: 1, limit: 1 })
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(pageOne.status).toBe(200);
+      expect(pageOne.body.items).toHaveLength(1);
+      expect(pageOne.body.totalPages).toBeGreaterThanOrEqual(2);
+
+      const filtered = await request(app)
+        .get('/api/surveys')
+        .query({ createdBy: String(userId), limit: 50 })
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(filtered.status).toBe(200);
+      expect(filtered.body.filters.createdBy).toBe(String(userId));
+      expect(filtered.body.items.length).toBeGreaterThanOrEqual(3);
+      expect(
+        filtered.body.items.every((s) => String(s.createdBy?._id || s.createdBy) === String(userId))
+      ).toBe(true);
+
+      created.forEach((survey) => {
+        expect(survey._id).toBeTruthy();
+      });
+    });
   });
 });

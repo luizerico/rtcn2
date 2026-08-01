@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { apiGet } from '@/lib/apiUtils';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 interface QuestionSummary {
   questionId: string;
@@ -72,10 +73,14 @@ export default function SurveyResponsesPage() {
   if (error || !data) {
     return (
       <div className="space-y-3">
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Surveys', href: '/surveys' },
+            { label: 'Results' },
+          ]}
+        />
         <p className="text-red-700">{error || 'Results unavailable.'}</p>
-        <Link href="/surveys" className="text-[var(--accent)] hover:underline">
-          Back to surveys
-        </Link>
       </div>
     );
   }
@@ -85,6 +90,14 @@ export default function SurveyResponsesPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Surveys', href: '/surveys' },
+            { label: survey.name, href: `/surveys/${survey._id}` },
+            { label: 'Results' },
+          ]}
+        />
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
           Survey results
         </p>
@@ -96,10 +109,6 @@ export default function SurveyResponsesPage() {
         <p className="mt-3 text-sm">
           <Link href={`/surveys/${survey._id}`} className="text-[var(--accent)] hover:underline">
             Answer survey
-          </Link>
-          {' · '}
-          <Link href="/surveys" className="text-[var(--accent)] hover:underline">
-            All surveys
           </Link>
         </p>
       </header>

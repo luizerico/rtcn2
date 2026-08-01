@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const Survey = require('../models/assets/Survey');
 const SurveyResponse = require('../models/assets/SurveyResponse');
 const Question = require('../models/Question');
@@ -193,30 +194,90 @@ async function replaceSurveyQuestions(surveyId, questions, userId) {
   return Question.insertMany(docs);
 }
 
+const SORT_FIELDS = new Set(['name', 'createdAt', 'updatedAt', 'questionCount']);
+
+function parseListQuery(query = {}) {
+  const page = Math.max(1, parseInt(String(query.page || '1'), 10) || 1);
+  const limitRaw = parseInt(String(query.limit || '10'), 10) || 10;
+  const limit = Math.min(100, Math.max(1, limitRaw));
+  const search = String(query.search || query.q || '').trim();
+  const sortField = SORT_FIELDS.has(String(query.sort || ''))
+    ? String(query.sort)
+    : 'updatedAt';
+  const order = String(query.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+  const createdBy = String(query.createdBy || '').trim();
+
+  return { page, limit, search, sortField, order, createdBy };
+}
+
 exports.listSurveys = async (req, res) => {
   try {
+    const { page, limit, search, sortField, order, createdBy } = parseListQuery(req.query);
     const filter = {};
+
     const access = req.accessibleResources;
     if (access && !access.all) {
       if (!access.ids.length) {
-        return res.status(200).json([]);
+        return res.status(200).json({
+          items: [],
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+          sort: sortField,
+          order,
+          search,
+          filters: { createdBy: createdBy || null },
+        });
       }
       filter._id = { $in: access.ids };
     }
 
+    if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.$or = [
+        { name: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
+      ];
+    }
+
+    if (createdBy) {
+      if (!mongoose.isValidObjectId(createdBy)) {
+        return res.status(400).json({ message: 'Invalid createdBy filter.' });
+      }
+      filter.createdBy = createdBy;
+    }
+
+    const total = await Survey.countDocuments(filter);
+    const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+    const skip = (page - 1) * limit;
+
     const surveys = await Survey.find(filter)
-      .sort({ updatedAt: -1 })
+      .sort({ [sortField]: order === 'asc' ? 1 : -1 })
+      .skip(skip)
+      .limit(limit)
       .populate('createdBy', 'username email')
       .populate('updatedBy', 'username email');
 
-    const withQuestions = await Promise.all(
-      surveys.map(async (survey) => {
-        const questions = await loadSurveyQuestions(survey._id);
-        return serializeSurvey(survey, questions);
-      })
-    );
+    const items = surveys.map((survey) => {
+      const plain = survey.toObject();
+      return {
+        ...plain,
+        questionCount: plain.questionCount ?? 0,
+      };
+    });
 
-    res.status(200).json(withQuestions);
+    res.status(200).json({
+      items,
+      page,
+      limit,
+      total,
+      totalPages,
+      sort: sortField,
+      order,
+      search,
+      filters: { createdBy: createdBy || null },
+    });
   } catch (error) {
     res.status(500).json({ message: 'Error listing surveys', error: error.message });
   }

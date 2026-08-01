@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { apiGet, apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 type QuestionType = 'text' | 'multiple_choice' | 'yes_no';
 
@@ -83,10 +84,14 @@ export default function TakeSurveyPage() {
   if (error || !survey) {
     return (
       <div className="space-y-3">
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Surveys', href: '/surveys' },
+            { label: 'Survey' },
+          ]}
+        />
         <p className="text-red-700">{error || 'Survey not found.'}</p>
-        <Link href="/surveys" className="text-[var(--accent)] hover:underline">
-          Back to surveys
-        </Link>
       </div>
     );
   }
@@ -94,16 +99,19 @@ export default function TakeSurveyPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Surveys', href: '/surveys' },
+            { label: survey.name },
+          ]}
+        />
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Survey</p>
         <h1 className="mt-2 text-3xl font-semibold">{survey.name}</h1>
         <p className="mt-2 text-[var(--muted)]">{survey.description || 'Answer each question below.'}</p>
         <p className="mt-3 text-sm">
           <Link href={`/surveys/${survey._id}/responses`} className="text-[var(--accent)] hover:underline">
             View results
-          </Link>
-          {' · '}
-          <Link href="/surveys" className="text-[var(--accent)] hover:underline">
-            All surveys
           </Link>
         </p>
       </header>
@@ -170,13 +178,21 @@ export default function TakeSurveyPage() {
           </fieldset>
         ))}
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
-        >
-          {saving ? 'Submitting…' : 'Submit answers'}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/surveys"
+            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
+          >
+            Cancel
+          </Link>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
+          >
+            {saving ? 'Submitting…' : 'Submit answers'}
+          </button>
+        </div>
       </form>
     </div>
   );
