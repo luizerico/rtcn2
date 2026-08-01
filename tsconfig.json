@@ -9,21 +9,18 @@
     "strict": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "jsx": "react-native",
+    "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./client/*"]
     },
-    "types": ["jest", "node", "@testing-library/jest-dom"],
+    "types": ["jest", "node", "@testing-library/jest-dom"]
   },
   "include": [
-    "src/**/*",
     "client/components/**/*.tsx",
     "client/app/**/*.{ts,tsx}",
-    "__tests__/**/*",
-    "types/**/*.d.ts"
+    "client/lib/**/*.ts",
+    "__tests__/**/*"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules", "client/.next", "dist"]
 }

@@ -222,7 +222,7 @@ components:
           example: User
         resourceType:
           type: string
-          enum: [USER, GROUP, ASSET]
+          enum: [USER, GROUP, ASSET, DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
           default: ASSET
 
     Permission:
@@ -234,7 +234,7 @@ components:
           type: string
         resourceType:
           type: string
-          enum: [USER, GROUP, ASSET]
+          enum: [USER, GROUP, ASSET, DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
         resourceId:
           type: string
           nullable: true
@@ -1132,56 +1132,6 @@ paths:
           description: Unauthorized
         '404':
           description: Not found
-
-  /api/assets/{assetId}/members:
-    post:
-      tags: [Assets]
-      summary: Add asset member (not implemented)
-      operationId: addAssetMember
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: assetId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MemberRequest'
-      responses:
-        '501':
-          description: Not implemented yet
-        '401':
-          description: Unauthorized
-
-  /api/assets/{assetId}/permissions:
-    post:
-      tags: [Assets]
-      summary: Update asset permissions (not implemented)
-      operationId: updateAssetPermissions
-      security:
-        - bearerAuth: []
-      parameters:
-        - in: path
-          name: assetId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdatePermissionsRequest'
-      responses:
-        '501':
-          description: Not implemented yet
-        '401':
-          description: Unauthorized
 
   /api/surveys:
     get:

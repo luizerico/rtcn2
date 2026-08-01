@@ -13,13 +13,25 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 router.use(protect);
 
-router.get('/', authorize('ASSET:READ'), listSurveys);
-router.post('/', authorize('ASSET:CREATE'), createSurvey);
-router.get('/:id', authorize('ASSET:READ'), getSurveyById);
-router.put('/:id', authorize('ASSET:WRITE'), updateSurvey);
-router.delete('/:id', authorize('ASSET:DELETE'), deleteSurvey);
+router.get(
+  '/',
+  authorize('SURVEY:READ', { allowAnyInstance: true, attachAccessible: true }),
+  listSurveys
+);
+router.post('/', authorize('SURVEY:CREATE', { classWideOnly: true }), createSurvey);
+router.get('/:id', authorize('SURVEY:READ', { param: 'id' }), getSurveyById);
+router.put('/:id', authorize('SURVEY:WRITE', { param: 'id' }), updateSurvey);
+router.delete('/:id', authorize('SURVEY:DELETE', { param: 'id' }), deleteSurvey);
 
-router.get('/:id/responses', authorize('ASSET:READ'), listSurveyResponses);
-router.post('/:id/responses', authorize('ASSET:CREATE'), submitSurveyResponse);
+router.get(
+  '/:id/responses',
+  authorize('SURVEY_RESPONSE:READ', { allowAnyInstance: true }),
+  listSurveyResponses
+);
+router.post(
+  '/:id/responses',
+  authorize('SURVEY_RESPONSE:CREATE', { classWideOnly: true }),
+  submitSurveyResponse
+);
 
 module.exports = router;

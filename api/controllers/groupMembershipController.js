@@ -1,8 +1,9 @@
 const Group = require('../models/Group');
 const User = require('../models/User');
+const { RESOURCE_TYPES } = require('../constants/rbac');
 const {
   listGroupPermissions,
-  replaceGroupTargetPermissions,
+  replaceGroupClassPermissions,
 } = require('../services/rbacService');
 
 exports.addMemberToGroup = async (req, res) => {
@@ -78,21 +79,18 @@ exports.getGroupPermissions = async (req, res) => {
 
 exports.updateGroupPermissions = async (req, res) => {
   try {
-    const { scopes, target, resourceType } = req.body;
+    const { scopes, resourceType, allObjects = false, objects = [] } = req.body;
     const allowedScopes = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
-    const allowedResourceTypes = ['USER', 'GROUP', 'ASSET'];
 
     if (!Array.isArray(scopes) || scopes.length === 0) {
       return res.status(400).json({ message: 'At least one permission scope is required.' });
     }
 
-    if (!target || typeof target !== 'string') {
-      return res.status(400).json({ message: 'Target resource is required.' });
-    }
-
-    const normalizedResourceType = String(resourceType || 'ASSET').toUpperCase();
-    if (!allowedResourceTypes.includes(normalizedResourceType)) {
-      return res.status(400).json({ message: 'Invalid resource type.' });
+    const normalizedResourceType = String(resourceType || '').toUpperCase();
+    if (!RESOURCE_TYPES.includes(normalizedResourceType)) {
+      return res.status(400).json({
+        message: 'Invalid resource type. Choose a concrete class (USER, GROUP, SURVEY, …).',
+      });
     }
 
     const invalidScopes = scopes.filter((scope) => !allowedScopes.includes(scope));
@@ -100,16 +98,27 @@ exports.updateGroupPermissions = async (req, res) => {
       return res.status(400).json({ message: `Invalid scopes: ${invalidScopes.join(', ')}` });
     }
 
+    const selectedObjects = Array.isArray(objects)
+      ? objects.filter((o) => o && (o.id || o.resourceId))
+      : [];
+
+    if (!allObjects && selectedObjects.length === 0) {
+      return res.status(400).json({
+        message: 'Select all objects of this class, or one or more existing database objects.',
+      });
+    }
+
     const group = await Group.findById(req.params.groupId);
     if (!group) {
       return res.status(404).json({ message: 'Group not found.' });
     }
 
-    const permissions = await replaceGroupTargetPermissions({
+    const permissions = await replaceGroupClassPermissions({
       groupId: group._id,
       resourceType: normalizedResourceType,
-      target,
       scopes,
+      allObjects: Boolean(allObjects),
+      objects: selectedObjects,
     });
 
     res.status(200).json({

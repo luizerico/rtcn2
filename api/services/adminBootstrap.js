@@ -6,13 +6,11 @@ const { buildFullAdminPermissions } = require('../constants/rbac');
 const { replaceGroupPermissions, listGroupPermissions } = require('./rbacService');
 
 /**
- * Rename legacy OBJECT resource type rows to ASSET, and rename objects→assets collection if present.
+ * Drop abstract OBJECT/ASSET permission rows (permissions are concrete DB objects now).
+ * Rename objects→assets collection if present.
  */
 async function migrateObjectToAsset(mongooseConnection) {
-  const renamed = await Permission.updateMany(
-    { resourceType: 'OBJECT' },
-    { $set: { resourceType: 'ASSET' } }
-  );
+  await Permission.deleteMany({ resourceType: { $in: ['OBJECT', 'ASSET'] } });
 
   try {
     const db = mongooseConnection.db;
@@ -27,7 +25,7 @@ async function migrateObjectToAsset(mongooseConnection) {
     console.warn('Collection rename objects→assets skipped:', error.message);
   }
 
-  return renamed.modifiedCount || 0;
+  return 0;
 }
 
 /**
@@ -91,5 +89,4 @@ async function ensureAdminBootstrap({
 
 module.exports = {
   ensureAdminBootstrap,
-  migrateObjectToAsset,
 };

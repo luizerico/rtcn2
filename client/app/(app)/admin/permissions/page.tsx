@@ -128,8 +128,9 @@ export default function AdminPermissionsPage() {
     try {
       await apiPost(`/groups/${selectedGroupId}/permissions`, {
         scopes: payload.scopes,
-        target: payload.target,
         resourceType: payload.resourceType,
+        allObjects: payload.allObjects,
+        objects: payload.objects,
       });
       await loadData();
     } catch (err) {
@@ -145,7 +146,8 @@ export default function AdminPermissionsPage() {
         </p>
         <h1 className="mt-2 text-3xl font-semibold">Permission management</h1>
         <p className="mt-2 text-[var(--muted)]">
-          Review access policies per group and per asset/resource from the permissions table.
+          Grant group access to concrete database objects: pick a class, then one, many, or all
+          existing objects. Survey responses are a separate class from surveys.
         </p>
       </header>
 
@@ -342,8 +344,7 @@ export default function AdminPermissionsPage() {
         isOpen={policyModalOpen}
         onClose={() => setPolicyModalOpen(false)}
         onUpdatePolicy={handleUpdatePolicy}
-        initialResourceType="ASSET"
-        initialTarget="*"
+        initialResourceType="SURVEY"
       />
     </div>
   );

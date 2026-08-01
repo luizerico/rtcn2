@@ -5,6 +5,9 @@ const assetRoutes = require('./routes/assetRoutes');
 const surveyRoutes = require('./routes/surveyRoutes');
 const userRoutes = require('./routes/userRoutes');
 
+// Register Asset subclasses (discriminators) once for the API process.
+require('./models/assets');
+
 /**
  * Build the Express application with API routes.
  * Optional `fallback` handles non-API traffic (used by the unified Next.js server).

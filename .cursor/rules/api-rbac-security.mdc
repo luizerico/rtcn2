@@ -10,7 +10,7 @@ alwaysApply: false
 
 - Mount under `/api/*` via `api/app.js`
 - Protect with `protect`, then `authorize('RESOURCE:ACTION')`
-- Valid resources: `USER`, `GROUP`, `ASSET`
+- Valid resources are concrete DB classes: `USER`, `GROUP`, `DOCUMENT`, `DASHBOARD`, `DATASET`, `SURVEY`, `SURVEY_RESPONSE`. Grant access to all objects of a class (`*`) or specific object ids. `SURVEY_RESPONSE` is not a Survey subclass. Questions are not permission resources.
 - Valid actions: `READ`, `WRITE`, `CREATE`, `DELETE`, `ADMIN`
 
 ```js

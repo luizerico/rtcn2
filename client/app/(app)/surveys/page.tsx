@@ -127,8 +127,9 @@ export default function SurveysPage() {
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Surveys</p>
         <h1 className="mt-2 text-3xl font-semibold">Create and manage surveys</h1>
         <p className="mt-2 text-[var(--muted)]">
-          Surveys are Asset subclasses stored in the <code>assets</code> collection. Questions can be
-          text, multiple choice, or yes/no.
+          Surveys are Asset subclasses stored in the <code>assets</code> collection. Questions live in
+          the separate <code>questions</code> collection (not assets). Question types: text, multiple
+          choice, or yes/no.
         </p>
       </header>
 

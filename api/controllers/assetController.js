@@ -1,4 +1,10 @@
-const { Asset } = require('../models/Asset');
+const {
+  Asset,
+  DocumentAsset,
+  DashboardAsset,
+  DatasetAsset,
+} = require('../models/assets');
+const { kindToDiscriminator } = require('../constants/assetTypes');
 
 function auditFields(userId, existing) {
   if (existing) {
@@ -11,21 +17,52 @@ function auditFields(userId, existing) {
   };
 }
 
+function modelForKind(kind) {
+  switch (String(kind || '').toUpperCase()) {
+    case 'DASHBOARD':
+      return DashboardAsset;
+    case 'DATASET':
+      return DatasetAsset;
+    case 'DOCUMENT':
+    default:
+      return DocumentAsset;
+  }
+}
+
 /**
  * List assets (excludes survey responses by default unless kind filter asks for them).
+ * Results are limited to objects the caller can READ.
  */
 exports.getAllAssets = async (req, res) => {
   try {
-    const filter = {};
-    if (req.query.kind) {
-      filter.kind = String(req.query.kind).toUpperCase();
-    } else if (req.query.assetType) {
-      filter.assetType = req.query.assetType;
-    } else {
-      filter.kind = { $nin: ['SURVEY_RESPONSE'] };
+    const { listAccessibleResources } = require('../services/rbacService');
+    const { ASSET_KINDS } = require('../constants/rbac');
+
+    const kindFilter = req.query.kind
+      ? [String(req.query.kind).toUpperCase()]
+      : req.query.assetType
+        ? null
+        : ASSET_KINDS.filter((k) => k !== 'SURVEY_RESPONSE');
+
+    const orClauses = [];
+
+    const kindsToCheck = kindFilter || ASSET_KINDS;
+    for (const kind of kindsToCheck) {
+      const access = await listAccessibleResources(req.user, `${kind}:READ`);
+      if (access.all) {
+        const clause = { kind };
+        if (req.query.assetType) clause.assetType = req.query.assetType;
+        orClauses.push(clause);
+      } else if (access.ids.length) {
+        orClauses.push({ kind, _id: { $in: access.ids } });
+      }
     }
 
-    const assets = await Asset.find(filter)
+    if (!orClauses.length) {
+      return res.status(200).json([]);
+    }
+
+    const assets = await Asset.find({ $or: orClauses })
       .sort({ updatedAt: -1 })
       .populate('createdBy', 'username email')
       .populate('updatedBy', 'username email')
@@ -51,7 +88,12 @@ exports.createAsset = async (req, res) => {
       });
     }
 
-    const asset = await Asset.create({
+    if (!kindToDiscriminator(normalizedKind)) {
+      return res.status(400).json({ message: 'Invalid asset kind.' });
+    }
+
+    const Model = modelForKind(normalizedKind);
+    const asset = await Model.create({
       name,
       description: description || '',
       kind: normalizedKind,
@@ -93,7 +135,11 @@ exports.updateAsset = async (req, res) => {
       if (['SURVEY', 'SURVEY_RESPONSE'].includes(normalizedKind)) {
         return res.status(400).json({ message: 'Cannot change asset kind to a survey type here.' });
       }
+      if (!kindToDiscriminator(normalizedKind)) {
+        return res.status(400).json({ message: 'Invalid asset kind.' });
+      }
       updates.kind = normalizedKind;
+      updates.assetType = kindToDiscriminator(normalizedKind);
     }
 
     const updated = await Asset.findByIdAndUpdate(req.params.id, updates, {

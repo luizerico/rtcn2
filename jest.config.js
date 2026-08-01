@@ -24,7 +24,7 @@ module.exports = {
         '^react-dom/(.*)$': '<rootDir>/node_modules/react-dom/$1',
         '^react/(.*)$': '<rootDir>/node_modules/react/$1',
         '^@/components/ui/(.*)$': '<rootDir>/client/components/ui/$1',
-        '^@/(.*)$': '<rootDir>/$1',
+        '^@/(.*)$': '<rootDir>/client/$1',
       },
     },
     {

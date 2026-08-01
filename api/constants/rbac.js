@@ -1,16 +1,27 @@
-const RESOURCE_TYPES = ['USER', 'GROUP', 'ASSET'];
+const { ASSET_KINDS } = require('./assetTypes');
+
+const IDENTITY_RESOURCE_TYPES = ['USER', 'GROUP'];
+
+/** Concrete DB classes only — no abstract ASSET umbrella. */
+const RESOURCE_TYPES = [...IDENTITY_RESOURCE_TYPES, ...ASSET_KINDS];
 const ACTIONS = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
 
-/**
- * Full admin policy matrix for a group (standalone Permission documents).
- */
+const RESOURCE_TYPE_LABELS = {
+  USER: 'Users',
+  GROUP: 'Groups',
+  DOCUMENT: 'Documents',
+  DASHBOARD: 'Dashboards',
+  DATASET: 'Datasets',
+  SURVEY: 'Surveys',
+  SURVEY_RESPONSE: 'Survey responses',
+};
+
 function buildFullAdminPermissions(groupId) {
   if (!groupId) {
     throw new Error('groupId is required to build admin permissions.');
   }
 
   const permissions = [];
-
   for (const resourceType of RESOURCE_TYPES) {
     for (const permission of ACTIONS) {
       permissions.push({
@@ -22,7 +33,6 @@ function buildFullAdminPermissions(groupId) {
       });
     }
   }
-
   return permissions;
 }
 
@@ -43,24 +53,18 @@ function parsePermissionString(permission) {
 }
 
 function actionIsAllowed(requiredAction, grantedActions) {
-  if (grantedActions.has('ADMIN')) {
+  if (grantedActions.has('ADMIN') || grantedActions.has(requiredAction)) {
     return true;
   }
-
-  if (grantedActions.has(requiredAction)) {
-    return true;
-  }
-
-  if (requiredAction === 'CREATE' && grantedActions.has('WRITE')) {
-    return true;
-  }
-
-  return false;
+  return requiredAction === 'CREATE' && grantedActions.has('WRITE');
 }
 
 module.exports = {
+  IDENTITY_RESOURCE_TYPES,
   RESOURCE_TYPES,
   ACTIONS,
+  RESOURCE_TYPE_LABELS,
+  ASSET_KINDS,
   buildFullAdminPermissions,
   parsePermissionString,
   actionIsAllowed,

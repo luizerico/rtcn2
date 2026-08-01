@@ -3,8 +3,9 @@ const Schema = mongoose.Schema;
 const { RESOURCE_TYPES, ACTIONS } = require('../constants/rbac');
 
 /**
- * Standalone permissions collection.
- * Each row grants one action on a resource type/target to a group.
+ * Each row grants one action to a group on either:
+ * - all objects of a class (target='*', resourceId=null), or
+ * - one concrete database object (resourceId set, target = display name).
  */
 const permissionSchema = new Schema(
   {
@@ -23,6 +24,7 @@ const permissionSchema = new Schema(
       type: Schema.Types.ObjectId,
       required: false,
       default: null,
+      index: true,
     },
     target: {
       type: String,
@@ -39,7 +41,7 @@ const permissionSchema = new Schema(
 );
 
 permissionSchema.index(
-  { groupId: 1, resourceType: 1, target: 1, permission: 1 },
+  { groupId: 1, resourceType: 1, resourceId: 1, permission: 1 },
   { unique: true }
 );
 

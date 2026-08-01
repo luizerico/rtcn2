@@ -325,14 +325,25 @@ describe('API endpoints', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           scopes: ['READ', 'WRITE'],
-          target: 'User',
           resourceType: 'USER',
+          allObjects: false,
+          objects: [{ id: secondaryUserId, label: 'bob' }],
         });
       expect(updatePermissions.status).toBe(200);
       expect(updatePermissions.body.permissions).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ permission: 'READ', target: 'User', resourceType: 'USER' }),
-          expect.objectContaining({ permission: 'WRITE', target: 'User', resourceType: 'USER' }),
+          expect.objectContaining({
+            permission: 'READ',
+            target: 'bob',
+            resourceType: 'USER',
+            resourceId: expect.anything(),
+          }),
+          expect.objectContaining({
+            permission: 'WRITE',
+            target: 'bob',
+            resourceType: 'USER',
+            resourceId: expect.anything(),
+          }),
         ])
       );
 
@@ -366,7 +377,7 @@ describe('API endpoints', () => {
       const badPermissions = await request(app)
         .post(`/api/groups/${groupId}/permissions`)
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ scopes: [], target: 'User' });
+        .send({ scopes: [], resourceType: 'USER', allObjects: true });
       expect(badPermissions.status).toBe(400);
     });
   });
@@ -452,26 +463,6 @@ describe('API endpoints', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send({ description: 'missing name' });
       expect(res.status).toBe(400);
-    });
-
-    it('returns 501 for unimplemented asset policy endpoints', async () => {
-      const create = await request(app)
-        .post('/api/assets')
-        .set('Authorization', `Bearer ${authToken}`)
-        .send({ name: 'Policy Asset' });
-      const assetId = create.body._id;
-
-      const members = await request(app)
-        .post(`/api/assets/${assetId}/members`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .send({ targetUserId: secondaryUserId });
-      expect(members.status).toBe(501);
-
-      const permissions = await request(app)
-        .post(`/api/assets/${assetId}/permissions`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .send({ scopes: ['READ'], target: 'User' });
-      expect(permissions.status).toBe(501);
     });
   });
 

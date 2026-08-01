@@ -12,11 +12,11 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 
 router.use(protect);
 
-router.get('/', authorize('USER:READ'), getAllUsers);
-router.post('/', authorize('USER:CREATE'), createUser);
-router.post('/:id/password', authorize('USER:WRITE'), adminChangeUserPassword);
-router.get('/:id', authorize('USER:READ'), getUserById);
-router.put('/:id', authorize('USER:WRITE'), updateUser);
-router.delete('/:id', authorize('USER:DELETE'), deleteUser);
+router.get('/', authorize('USER:READ', { allowAnyInstance: true }), getAllUsers);
+router.post('/', authorize('USER:CREATE', { classWideOnly: true }), createUser);
+router.post('/:id/password', authorize('USER:WRITE', { param: 'id' }), adminChangeUserPassword);
+router.get('/:id', authorize('USER:READ', { param: 'id' }), getUserById);
+router.put('/:id', authorize('USER:WRITE', { param: 'id' }), updateUser);
+router.delete('/:id', authorize('USER:DELETE', { param: 'id' }), deleteUser);
 
 module.exports = router;
