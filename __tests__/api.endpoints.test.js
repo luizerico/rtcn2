@@ -67,7 +67,8 @@ describe('API endpoints', () => {
       members: [userId],
     });
     await replaceGroupPermissions(adminGroup._id, buildFullAdminPermissions(adminGroup._id));
-    await User.findByIdAndUpdate(userId, { roleId: adminGroup._id });
+    await User.findByIdAndUpdate(userId, { roleId: adminGroup._id, isVerified: true });
+    await User.findByIdAndUpdate(secondaryUserId, { isVerified: true });
 
     const loginRes = await request(app).post('/api/auth/login').send({
       username: 'alice',
@@ -105,6 +106,17 @@ describe('API endpoints', () => {
         password: 'wrong-password',
       });
       expect(res.status).toBe(401);
+    });
+
+    it('POST /api/auth/login rejects unverified accounts', async () => {
+      await User.findByIdAndUpdate(userId, { isVerified: false });
+      const res = await request(app).post('/api/auth/login').send({
+        username: 'alice',
+        password: 'Password123!',
+      });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('NOT_VERIFIED');
+      expect(res.body.token).toBeUndefined();
     });
 
     it('POST /api/auth/login accepts email as login id', async () => {

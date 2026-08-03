@@ -202,6 +202,13 @@ Separate FastAPI container that reads the same MongoDB and exposes analytics at 
 - `ADMIN` on a resource type grants every action; `WRITE` also covers `CREATE`.
 - `npm run db:init` upserts the **admin** group and writes the full permission matrix into `permissions`.
 
+## Account verification
+
+- `User.isVerified` must be `true` to sign in (`POST /api/auth/login`) and to use an existing session.
+- Self-registration creates unverified users; an admin must set `isVerified` (for example `PUT /api/users/{id}`) before they can log in.
+- Admin-created users (`POST /api/users`) and the bootstrap admin are verified automatically.
+- There is no email-verification flow yet; verification is admin-managed.
+
 - **Two terminals still?** Use root `npm run dev` only — not `client` and `api` separately.
 - **`JWT_SECRET is not configured`**: set it in `.env`.
 - **401 on protected routes**: login and send `Authorization: Bearer <token>`.

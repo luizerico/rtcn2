@@ -41,8 +41,14 @@ exports.registerUser = async (req, res) => {
     req.actionLogContext = { userId: newUser._id, username: newUser.username };
 
     res.status(201).json({
-      message: 'User registered successfully.',
-      user: { id: newUser._id, username: newUser.username, email: newUser.email },
+      message:
+        'User registered successfully. An administrator must verify the account before sign-in.',
+      user: {
+        id: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        isVerified: newUser.isVerified,
+      },
     });
   } catch (err) {
     console.error('Registration Error:', err);
@@ -66,6 +72,15 @@ exports.loginUser = async (req, res) => {
       return res.status(401).json({
         message: 'Invalid credentials.',
         code: 'INVALID_CREDENTIALS',
+      });
+    }
+
+    if (!user.isVerified) {
+      req.actionLogContext = { userId: user._id, username: user.username };
+      return res.status(403).json({
+        message:
+          'Account is not verified. An administrator must set isVerified before you can sign in.',
+        code: 'NOT_VERIFIED',
       });
     }
 

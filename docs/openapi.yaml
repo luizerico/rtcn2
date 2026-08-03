@@ -110,7 +110,7 @@ components:
           type: string
         code:
           type: string
-          enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, PASSWORD_CHANGED, CONFIG]
+          enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, NOT_VERIFIED, PASSWORD_CHANGED, CONFIG]
       required: [message, code]
 
     SessionRecord:
@@ -433,6 +433,9 @@ paths:
     post:
       tags: [Auth]
       summary: Register a user
+      description: |
+        Creates an unverified account (`isVerified: false`). The user cannot sign in until an
+        administrator sets `isVerified` to true.
       operationId: registerUser
       requestBody:
         required: true
@@ -442,7 +445,7 @@ paths:
               $ref: '#/components/schemas/RegisterRequest'
       responses:
         '201':
-          description: User registered
+          description: User registered (unverified; cannot sign in yet)
           content:
             application/json:
               schema:
@@ -467,6 +470,10 @@ paths:
         Creates a MongoDB session document (shared auth store) and returns a JWT whose `sid`
         claim matches the session. Other apps can validate the same token via `/api/auth/validate`
         or by reading the `sessions` collection.
+
+        Login requires `user.isVerified === true`. Self-registered users default to unverified
+        until an administrator sets `isVerified` (for example via `PUT /api/users/{id}`).
+        Admin-created users and the bootstrap admin are verified automatically.
       operationId: loginUser
       requestBody:
         required: true
@@ -489,6 +496,12 @@ paths:
                 $ref: '#/components/schemas/ErrorMessage'
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+        '403':
+          description: Account exists but is not verified (`NOT_VERIFIED`)
           content:
             application/json:
               schema:
@@ -723,6 +736,8 @@ paths:
     post:
       tags: [Users]
       summary: Create user
+      description: |
+        Admin-provisioned users are created with `isVerified: true` so they can sign in immediately.
       operationId: createUser
       security:
         - bearerAuth: []
@@ -734,7 +749,7 @@ paths:
               $ref: '#/components/schemas/RegisterRequest'
       responses:
         '201':
-          description: User created
+          description: User created (verified)
         '400':
           description: Validation error
         '401':

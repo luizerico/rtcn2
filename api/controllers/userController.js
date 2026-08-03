@@ -32,10 +32,12 @@ exports.createUser = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    // Admin-provisioned accounts are trusted and can sign in immediately.
     const user = await User.create({
       username,
       email,
       password: hashedPassword,
+      isVerified: true,
     });
 
     res.status(201).json({
