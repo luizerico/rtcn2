@@ -114,17 +114,16 @@ function isClassWide(policy) {
   return !policy.resourceId && (policy.target === '*' || policy.target === '');
 }
 
+/**
+ * Authorization hot-path filter. Requires principals already normalized
+ * (principalType + principalId) — see migratePermissionPrincipals on connect.
+ */
 function principalQueryForUser(userId, groupIds) {
   const clauses = [{ principalType: 'USER', principalId: userId }];
   if (groupIds.length) {
     clauses.push({ principalType: 'GROUP', principalId: { $in: groupIds } });
-    // Legacy rows written before principalType existed.
-    clauses.push({
-      groupId: { $in: groupIds },
-      $or: [{ principalType: { $exists: false } }, { principalType: null }],
-    });
   }
-  return { $or: clauses };
+  return clauses.length === 1 ? clauses[0] : { $or: clauses };
 }
 
 function collectGrantedActions(permissions, resourceType, { resourceId, allowAnyInstance = false } = {}) {
@@ -277,10 +276,8 @@ async function listUserPermissions(user) {
 
 async function listGroupPermissions(groupId) {
   return Permission.find({
-    $or: [
-      { principalType: 'GROUP', principalId: groupId },
-      { groupId, $or: [{ principalType: { $exists: false } }, { principalType: null }] },
-    ],
+    principalType: 'GROUP',
+    principalId: groupId,
   }).sort({ resourceType: 1, target: 1, permission: 1 });
 }
 
@@ -636,21 +633,32 @@ async function migratePermissionPrincipals() {
     console.warn('Permission index migration skipped:', error.message);
   }
 
-  const legacy = await Permission.find({
+  const legacyFilter = {
     $or: [{ principalType: { $exists: false } }, { principalType: null }, { principalId: { $exists: false } }],
+  };
+
+  const deleted = await Permission.deleteMany({
+    $and: [legacyFilter, { $or: [{ groupId: { $exists: false } }, { groupId: null }] }],
   });
 
-  for (const row of legacy) {
-    if (!row.groupId) {
-      await Permission.deleteOne({ _id: row._id });
-      continue;
-    }
-    row.principalType = 'GROUP';
-    row.principalId = row.groupId;
-    await row.save();
-  }
+  const updated = await Permission.collection.updateMany(
+    {
+      $and: [legacyFilter, { groupId: { $exists: true, $ne: null } }],
+    },
+    [
+      {
+        $set: {
+          principalType: 'GROUP',
+          principalId: '$groupId',
+        },
+      },
+    ]
+  );
 
-  return legacy.length;
+  return {
+    deleted: deleted.deletedCount || 0,
+    updated: updated.modifiedCount || 0,
+  };
 }
 
 module.exports = {
@@ -666,4 +674,5 @@ module.exports = {
   listAssetAcl,
   listPermissionCatalog,
   migratePermissionPrincipals,
+  principalQueryForUser,
 };
