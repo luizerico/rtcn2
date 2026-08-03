@@ -1,0 +1,48 @@
+name: Close issue 24
+
+on:
+  push:
+    branches:
+      - chore/close-issue-24
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  close-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comment and close #24
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(cat <<'EOF'
+          ## Fixed on `fix/issue-24`
+
+          Refactored `PermissionModal.tsx` into hooks (`usePermissionCatalog`, `useAssetAclEditor`) and presentational components under `client/components/ui/permission-modal/` (object picker, principal list, scope table).
+
+          Commit: 3e3ac3b1a032759f156a44e2c91c6dec682c4a03
+          EOF
+          )"
+          body="$(printf '%s\n' "$body" | sed 's/^          //')"
+          gh issue comment 24 --repo luizerico/baseapp --body "$body"
+          gh issue close 24 --repo luizerico/baseapp --reason completed
+          echo '{"issue":24,"state":"closed","branch":"fix/issue-24","sha":"3e3ac3b1a032759f156a44e2c91c6dec682c4a03"}' > scripts/close-issue-24-result.json
+
+      - name: Commit close result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p scripts
+          git add scripts/close-issue-24-result.json
+          if git diff --cached --quiet; then
+            echo "No result file to commit"
+          else
+            git commit -m "Record close of issue #24"
+            git push
+          fi
