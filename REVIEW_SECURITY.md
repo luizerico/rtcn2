@@ -54,7 +54,7 @@ Defect-first security review of the RBAC Next.js + Express platform and the Fast
 
 ### 7. Controllers leak internal exception messages to clients
 - **GitHub issue:** [#8](https://github.com/luizerico/baseapp/issues/8)
-- **Status:** Fixed (pending GitHub close) — fix/issue-8 @ 8ae9cd8
+- **Status:** Fixed — fix/issue-8 @ 8ae9cd8 (close via chore/close-issue-8 @ 818e7eb)
 - **Severity:** Medium
 - **Location:** Controllers under `api/controllers/` (e.g. `surveyController.js`, `userController.js`, `permissionController.js`, `groupMembershipController.js`, `actionLogController.js`)
 - **Why it matters:** Responses include `error: error.message`, which can expose Mongo/driver details, path fragments, or validation internals useful to attackers and noisy for clients.
