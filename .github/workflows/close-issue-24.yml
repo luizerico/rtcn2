@@ -24,25 +24,38 @@ jobs:
           body="$(cat <<'EOF'
           ## Fixed on `fix/issue-24`
 
-          Refactored `PermissionModal.tsx` into hooks (`usePermissionCatalog`, `useAssetAclEditor`) and presentational components under `client/components/ui/permission-modal/` (object picker, principal list, scope table).
+          Refactored `PermissionModal.tsx` into hooks and presentational pieces:
 
-          Commit: 3e3ac3b1a032759f156a44e2c91c6dec682c4a03
+          - `usePermissionCatalog` — catalog loading
+          - `useAssetAclEditor` — ACL selection, principals, apply
+          - Presentational components under `client/components/ui/permission-modal/` (object picker, principal list, scope table, add-principal panel)
+
+          Public import path `@/components/ui/PermissionModal` unchanged.
+
+          Commit: 3e3ac3b1a032759f156a44e2c91c6dec682c4a03 (`fix/issue-24`)
           EOF
           )"
           body="$(printf '%s\n' "$body" | sed 's/^          //')"
-          gh issue comment 24 --repo luizerico/baseapp --body "$body"
-          gh issue close 24 --repo luizerico/baseapp --reason completed
-          echo '{"issue":24,"state":"closed","branch":"fix/issue-24","sha":"3e3ac3b1a032759f156a44e2c91c6dec682c4a03"}' > scripts/close-issue-24-result.json
+          gh issue comment 24 --repo "${{ github.repository }}" --body "$body"
+          gh issue close 24 --repo "${{ github.repository }}" --reason completed
 
-      - name: Commit close result
+      - name: Record close result
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          mkdir -p scripts
+          cat > scripts/close-issue-24-result.json <<EOF
+          {
+            "issue": 24,
+            "state": "closed",
+            "fixBranch": "fix/issue-24",
+            "fixSha": "3e3ac3b1a032759f156a44e2c91c6dec682c4a03",
+            "closedBy": "${{ github.run_id }}",
+            "closedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          mkdir -p scripts
           git add scripts/close-issue-24-result.json
-          if git diff --cached --quiet; then
-            echo "No result file to commit"
-          else
-            git commit -m "Record close of issue #24"
-            git push
-          fi
+          git commit -m "Record close of issue #24."
+          git push origin HEAD:chore/close-issue-24
