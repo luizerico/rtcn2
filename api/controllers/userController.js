@@ -1,12 +1,13 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
+const { sendServerError } = require('../utils/httpErrors');
 
 exports.getAllUsers = async (_req, res) => {
   try {
     const users = await User.find({}).select('-password -resetToken -tokenExpiry').sort({ createdAt: -1 });
     res.status(200).json(users);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching users', error: error.message });
+    return sendServerError(res, error, 'Error fetching users');
   }
 };
 
@@ -18,7 +19,7 @@ exports.getUserById = async (req, res) => {
     }
     res.status(200).json(user);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching user', error: error.message });
+    return sendServerError(res, error, 'Error fetching user');
   }
 };
 
@@ -50,7 +51,7 @@ exports.createUser = async (req, res) => {
       createdAt: user.createdAt,
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error creating user', error: error.message });
+    return sendServerError(res, error, 'Error creating user');
   }
 };
 
@@ -72,7 +73,7 @@ exports.updateUser = async (req, res) => {
 
     res.status(200).json(user);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating user', error: error.message });
+    return sendServerError(res, error, 'Error updating user');
   }
 };
 
@@ -84,6 +85,6 @@ exports.deleteUser = async (req, res) => {
     }
     res.status(200).json({ message: 'User deleted successfully.' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting user', error: error.message });
+    return sendServerError(res, error, 'Error deleting user');
   }
 };

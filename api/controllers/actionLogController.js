@@ -3,13 +3,14 @@ const {
   listDistinctActions,
   listDistinctResourceTypes,
 } = require('../services/actionLogService');
+const { sendServerError } = require('../utils/httpErrors');
 
 exports.listActionLogs = async (req, res) => {
   try {
     const result = await queryActionLogs(req.query);
     res.status(200).json(result);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching action logs', error: error.message });
+    return sendServerError(res, error, 'Error fetching action logs');
   }
 };
 
@@ -33,6 +34,6 @@ exports.getActionLogFilters = async (_req, res) => {
       ],
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching log filter options', error: error.message });
+    return sendServerError(res, error, 'Error fetching log filter options');
   }
 };
