@@ -121,6 +121,20 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
     [classes, resourceType]
   );
 
+  /** Editing an existing asset/class grant — do not offer other assets. */
+  const selectionLocked = Boolean(initialResourceId) || Boolean(initialAllObjects);
+
+  const selectableObjects = useMemo(() => {
+    const objects = selectedClass?.objects || [];
+    if (!selectionLocked || allObjects) return objects;
+    const lockedIds = selectedIds.length
+      ? selectedIds
+      : initialResourceId
+        ? [initialResourceId]
+        : [];
+    return objects.filter((object) => lockedIds.includes(object.id));
+  }, [selectedClass, selectionLocked, allObjects, selectedIds, initialResourceId]);
+
   const selectedEntry = useMemo(() => {
     if (!selectedPrincipalKey) return null;
     return entries.find(
@@ -431,7 +445,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
             <select
               id={`${formId}-type`}
               value={resourceType}
-              disabled={catalogLoading}
+              disabled={catalogLoading || selectionLocked}
               onChange={(e) => {
                 const nextType = e.target.value;
                 setResourceType(nextType);
@@ -441,7 +455,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
                 setSelectedPrincipalKey(null);
                 setPermissionMap(emptyScopes());
               }}
-              className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
+              className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm disabled:bg-slate-50 disabled:opacity-70"
             >
               {classes.map((entry) => (
                 <option key={entry.resourceType} value={entry.resourceType}>
@@ -455,6 +469,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
               <input
                 type="checkbox"
                 checked={allObjects}
+                disabled={selectionLocked}
                 onChange={(e) => {
                   const checked = e.target.checked;
                   setAllObjects(checked);
@@ -475,21 +490,34 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
 
         {!allObjects && (
           <fieldset>
-            <legend className="mb-2 text-sm font-medium">Select asset(s)</legend>
+            <legend className="mb-2 text-sm font-medium">
+              {selectionLocked ? 'Asset' : 'Select asset(s)'}
+            </legend>
             <div className="max-h-36 space-y-2 overflow-y-auto rounded-md border border-[var(--border)] p-3">
               {catalogLoading ? (
                 <p className="text-sm text-[var(--muted)]">Loading…</p>
-              ) : !selectedClass?.objects.length ? (
+              ) : selectionLocked && selectableObjects.length === 0 ? (
+                <p className="text-sm font-medium">
+                  {initialResourceId || 'Selected asset'}
+                </p>
+              ) : !selectableObjects.length ? (
                 <p className="text-sm text-[var(--muted)]">No assets of this type exist yet.</p>
               ) : (
-                selectedClass.objects.map((object) => (
-                  <label key={object.id} className="flex cursor-pointer items-start gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(object.id)}
-                      onChange={() => toggleObject(object.id)}
-                      className="mt-0.5"
-                    />
+                selectableObjects.map((object) => (
+                  <label
+                    key={object.id}
+                    className={`flex items-start gap-2 text-sm ${
+                      selectionLocked ? 'cursor-default' : 'cursor-pointer'
+                    }`}
+                  >
+                    {!selectionLocked ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(object.id)}
+                        onChange={() => toggleObject(object.id)}
+                        className="mt-0.5"
+                      />
+                    ) : null}
                     <span>
                       <span className="font-medium">{object.label || object.name}</span>
                       {object.detail && (
@@ -512,9 +540,9 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
               <p className="text-sm font-medium">Group or user names</p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setAddMode('USER')}
@@ -655,7 +683,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
           </p>
         )}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
@@ -665,11 +693,11 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
           </button>
           <button
             type="submit"
-          disabled={saving || catalogLoading}
-          className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
-        >
-          {saving ? 'Applying…' : 'Apply'}
-        </button>
+            disabled={saving || catalogLoading}
+            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
+          >
+            {saving ? 'Applying…' : 'Apply'}
+          </button>
         </div>
       </form>
     </Modal>

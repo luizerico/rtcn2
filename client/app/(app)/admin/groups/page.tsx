@@ -1,8 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiDelete, apiGet, apiPost } from '@/lib/apiUtils';
+import { useToast } from '@/components/ToastProvider';
 import EditMembersModal, { EditMembersPayload } from '@/components/ui/EditMembersModal';
+import CreateGroupModal from '@/components/ui/CreateGroupModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 interface GroupRecord {
@@ -13,11 +15,11 @@ interface GroupRecord {
 }
 
 export default function AdminGroupsPage() {
+  const { pushToast } = useToast();
   const [groups, setGroups] = useState<GroupRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [memberModalOpen, setMemberModalOpen] = useState(false);
 
@@ -40,23 +42,11 @@ export default function AdminGroupsPage() {
     loadGroups();
   }, []);
 
-  const handleCreate = async (event: FormEvent) => {
-    event.preventDefault();
-    setError(null);
-    try {
-      await apiPost('/groups', { name, description });
-      setName('');
-      setDescription('');
-      await loadGroups();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create group.');
-    }
-  };
-
   const handleDelete = async (id: string) => {
     setError(null);
     try {
       await apiDelete(`/groups/${id}`);
+      pushToast({ tone: 'info', title: 'Group deleted', message: 'The group was removed.' });
       await loadGroups();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete group.');
@@ -85,9 +75,22 @@ export default function AdminGroupsPage() {
             { label: 'Groups' },
           ]}
         />
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Admin / Groups</p>
-        <h1 className="mt-2 text-3xl font-semibold">Group management</h1>
-        <p className="mt-2 text-[var(--muted)]">Create groups and attach members for shared roles.</p>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
+              Admin / Groups
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold">Group management</h1>
+            <p className="mt-2 text-[var(--muted)]">Create groups and attach members for shared roles.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
+          >
+            Create group
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -95,38 +98,6 @@ export default function AdminGroupsPage() {
           {error}
         </div>
       )}
-
-      <form onSubmit={handleCreate} className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:grid-cols-4">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Group name"
-          required
-          className="rounded-md border border-[var(--border)] px-3 py-2"
-        />
-        <input
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Description"
-          className="rounded-md border border-[var(--border)] px-3 py-2"
-        />
-        <button
-          type="button"
-          onClick={() => {
-            setName('');
-            setDescription('');
-          }}
-          className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)]"
-        >
-          Create group
-        </button>
-      </form>
 
       <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
         {loading ? (
@@ -174,6 +145,15 @@ export default function AdminGroupsPage() {
           </table>
         )}
       </section>
+
+      <CreateGroupModal
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={({ name }) => {
+          pushToast({ tone: 'success', title: 'Group created', message: `${name} was added.` });
+          void loadGroups();
+        }}
+      />
 
       <EditMembersModal
         isOpen={memberModalOpen}

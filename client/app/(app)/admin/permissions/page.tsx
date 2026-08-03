@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { apiGet } from '@/lib/apiUtils';
 import PermissionModal from '@/components/ui/PermissionModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
@@ -71,6 +71,7 @@ export default function AdminPermissionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<{
     resourceType: string;
     resourceId: string | null;
@@ -132,18 +133,18 @@ export default function AdminPermissionsPage() {
 
   const activeTargets = useMemo(() => {
     const resourceRows = permissions.filter((row) => row.resourceType === activeType);
-    const byTarget = groupBy(resourceRows, (row) =>
-      row.resourceId ? `${row.target}::${row.resourceId}` : row.target
+    const byAsset = groupBy(resourceRows, (row) =>
+      row.resourceId ? String(row.resourceId) : row.target || '*'
     );
 
-    return Object.keys(byTarget)
+    return Object.keys(byAsset)
       .sort((a, b) => {
-        const aLabel = byTarget[a][0]?.target || a;
-        const bLabel = byTarget[b][0]?.target || b;
+        const aLabel = byAsset[a][0]?.target || a;
+        const bLabel = byAsset[b][0]?.target || b;
         return aLabel.localeCompare(bLabel);
       })
       .map((key) => {
-        const targetRows = byTarget[key];
+        const targetRows = byAsset[key];
         const byPrincipal = groupBy(
           targetRows,
           (row) =>
@@ -173,51 +174,35 @@ export default function AdminPermissionsPage() {
   const isSurveyResponseTab = activeType === 'SURVEY_RESPONSE';
   const isSurveyTab = activeType === 'SURVEY';
 
-  const tableRows = useMemo(() => {
-    const rows: Array<{
-      key: string;
-      objectLabel: string;
-      resourceId: string | null;
-      allObjects: boolean;
-      answeredBy: string | null;
-      submittedAt: string | null;
-      owner: string | null;
-      principalType: 'USER' | 'GROUP';
-      principalId: string;
-      principalName: string;
-      actions: string[];
-    }> = [];
-
-    for (const target of activeTargets) {
-      const allObjects = !target.resourceId && (target.target === '*' || !target.target);
-      const objectLabel = allObjects ? 'All objects of this type' : target.target;
-      for (const principal of target.principals) {
-        rows.push({
-          key: `${target.resourceId || target.target}-${principal.principalType}-${principal.principalId || principal.principalName}`,
-          objectLabel,
-          resourceId: target.resourceId,
-          allObjects,
-          answeredBy: target.answeredBy,
-          submittedAt: target.submittedAt,
-          owner: target.owner,
-          principalType: principal.principalType,
-          principalId: principal.principalId,
-          principalName: principal.principalName,
-          actions: principal.actions,
-        });
-      }
+  const catalogById = useMemo(() => {
+    const map = new Map<string, CatalogClass['objects'][number]>();
+    for (const object of activeTabObjects(tabs, activeType)) {
+      map.set(object.id, object);
     }
+    return map;
+  }, [tabs, activeType]);
 
-    return rows.sort((a, b) => {
-      const byObject = a.objectLabel.localeCompare(b.objectLabel);
-      if (byObject !== 0) return byObject;
-      const byAnswered = (a.answeredBy || '').localeCompare(b.answeredBy || '');
-      if (byAnswered !== 0) return byAnswered;
-      const byOwner = (a.owner || '').localeCompare(b.owner || '');
-      if (byOwner !== 0) return byOwner;
-      return a.principalName.localeCompare(b.principalName);
+  const assetGroups = useMemo(() => {
+    return activeTargets.map((target) => {
+      const allObjects = !target.resourceId && (target.target === '*' || !target.target);
+      const catalogObject = target.resourceId ? catalogById.get(String(target.resourceId)) : undefined;
+      const objectLabel = allObjects
+        ? 'All objects of this type'
+        : catalogObject?.label || catalogObject?.name || target.target;
+
+      return {
+        key: `${target.resourceId || 'all'}::${target.target}`,
+        objectLabel,
+        resourceId: target.resourceId,
+        allObjects,
+        answeredBy: catalogObject?.answeredBy || target.answeredBy || null,
+        submittedAt: catalogObject?.submittedAt || target.submittedAt || null,
+        owner: catalogObject?.owner || target.owner || null,
+        detail: catalogObject?.detail || null,
+        principals: target.principals,
+      };
     });
-  }, [activeTargets]);
+  }, [activeTargets, catalogById]);
 
   const openEditForType = () => {
     setEditTarget({
@@ -230,13 +215,13 @@ export default function AdminPermissionsPage() {
     setPolicyModalOpen(true);
   };
 
-  const openEditForRow = (row: (typeof tableRows)[number]) => {
+  const openEditForAsset = (group: (typeof assetGroups)[number]) => {
     setEditTarget({
       resourceType: activeType,
-      resourceId: row.resourceId,
-      allObjects: row.allObjects,
-      principalType: row.principalType,
-      principalId: row.principalId || null,
+      resourceId: group.resourceId,
+      allObjects: group.allObjects,
+      principalType: null,
+      principalId: null,
     });
     setPolicyModalOpen(true);
   };
@@ -261,8 +246,8 @@ export default function AdminPermissionsPage() {
     actions.map((action) => actionLabels[action] || action).join(', ');
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <header className="border-b border-[var(--border)] pb-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 sm:space-y-8">
+      <header className="border-b border-[var(--border)] pb-4 sm:pb-6">
         <Breadcrumbs
           items={[
             { label: 'Home', href: '/' },
@@ -273,8 +258,8 @@ export default function AdminPermissionsPage() {
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
           Admin / Permissions
         </p>
-        <h1 className="mt-2 text-3xl font-semibold">Permission management</h1>
-        <p className="mt-2 text-[var(--muted)]">
+        <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Permission management</h1>
+        <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">
           Windows-style access control for assets only. Choose an asset type tab, then edit
           permissions for objects of that type.
         </p>
@@ -286,44 +271,49 @@ export default function AdminPermissionsPage() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div
-          className="flex flex-wrap gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
+          className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 lg:flex-wrap lg:overflow-visible"
           role="tablist"
           aria-label="Asset types"
         >
-          {tabs.map((tab) => {
-            const selected = tab.resourceType === activeType;
-            const count = grantCountByType[tab.resourceType] || 0;
-            return (
-              <button
-                key={tab.resourceType}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                id={`perm-tab-${tab.resourceType}`}
-                onClick={() => setActiveType(tab.resourceType)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                  selected
-                    ? 'bg-[var(--accent)] text-white'
-                    : 'text-[var(--muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--foreground)]'
-                }`}
-              >
-                {tab.label}
-                <span className={`ml-1.5 text-xs ${selected ? 'text-white/80' : 'text-[var(--muted)]'}`}>
-                  ({count})
-                </span>
-              </button>
-            );
-          })}
+          <div className="flex min-w-max gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 lg:min-w-0 lg:flex-wrap">
+            {tabs.map((tab) => {
+              const selected = tab.resourceType === activeType;
+              const count = grantCountByType[tab.resourceType] || 0;
+              return (
+                <button
+                  key={tab.resourceType}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  id={`perm-tab-${tab.resourceType}`}
+                  onClick={() => {
+                    setActiveType(tab.resourceType);
+                    setExpandedKey(null);
+                  }}
+                  className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                    selected
+                      ? 'bg-[var(--accent)] text-white'
+                      : 'text-[var(--muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--foreground)]'
+                  }`}
+                >
+                  {tab.label}
+                  <span className={`ml-1.5 text-xs ${selected ? 'text-white/80' : 'text-[var(--muted)]'}`}>
+                    ({count})
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <button
           type="button"
           onClick={openEditForType}
-          className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
+          className="w-full shrink-0 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] sm:w-auto"
         >
-          Edit {activeTab?.label?.toLowerCase() || 'asset'} permissions…
+          Add permission
         </button>
       </div>
 
@@ -334,64 +324,224 @@ export default function AdminPermissionsPage() {
       >
         {loading ? (
           <p className="p-5 text-[var(--muted)]">Loading permissions…</p>
-        ) : tableRows.length === 0 ? (
+        ) : assetGroups.length === 0 ? (
           <p className="p-5 text-[var(--muted)]">
-            No permissions for {activeTab?.label?.toLowerCase() || 'this type'} yet. Use Edit to
-            select assets and assign users or groups.
+            No permissions for {activeTab?.label?.toLowerCase() || 'this type'} yet. Use Add
+            permission to select assets and assign users or groups.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
-                <tr>
-                  <th className="px-4 py-3 font-medium">
-                    {isSurveyResponseTab ? 'Survey' : 'Object'}
-                  </th>
-                  {isSurveyResponseTab && (
-                    <>
-                      <th className="px-4 py-3 font-medium">Answered by</th>
-                      <th className="px-4 py-3 font-medium">Submitted</th>
-                    </>
-                  )}
-                  {isSurveyTab && <th className="px-4 py-3 font-medium">Owner</th>}
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Type</th>
-                  <th className="px-4 py-3 font-medium">Permissions</th>
-                  <th className="px-4 py-3 font-medium text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tableRows.map((row) => (
-                  <tr key={row.key} className="border-b border-[var(--border)] last:border-0">
-                    <td className="max-w-xs px-4 py-3 font-medium">{row.objectLabel}</td>
-                    {isSurveyResponseTab && (
-                      <>
-                        <td className="px-4 py-3">{row.answeredBy || '—'}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-[var(--muted)]">
-                          {formatSubmittedAt(row.submittedAt)}
-                        </td>
-                      </>
-                    )}
-                    {isSurveyTab && <td className="px-4 py-3">{row.owner || '—'}</td>}
-                    <td className="px-4 py-3">{row.principalName}</td>
-                    <td className="px-4 py-3 text-[var(--muted)]">
-                      {row.principalType === 'USER' ? 'User' : 'Group'}
-                    </td>
-                    <td className="px-4 py-3">{formatActions(row.actions)}</td>
-                    <td className="px-4 py-3 text-right">
+          <>
+            {/* Mobile / tablet cards */}
+            <ul className="divide-y divide-[var(--border)] lg:hidden">
+              {assetGroups.map((group) => {
+                const expanded = expandedKey === group.key;
+                return (
+                  <li key={group.key} className="p-4">
+                    <div className="flex items-start justify-between gap-3">
                       <button
                         type="button"
-                        onClick={() => openEditForRow(row)}
-                        className="text-[var(--accent)] hover:underline"
+                        onClick={() =>
+                          setExpandedKey((prev) => (prev === group.key ? null : group.key))
+                        }
+                        className="min-w-0 flex-1 text-left"
+                        aria-expanded={expanded}
                       >
-                        Edit
+                        <p className="font-medium break-words">{group.objectLabel}</p>
+                        {group.detail ? (
+                          <p className="mt-0.5 text-xs text-[var(--muted)]">{group.detail}</p>
+                        ) : null}
+                        {isSurveyTab ? (
+                          <p className="mt-1 text-xs text-[var(--muted)]">
+                            Owner: {group.owner || '—'}
+                          </p>
+                        ) : null}
+                        {isSurveyResponseTab ? (
+                          <p className="mt-1 text-xs text-[var(--muted)]">
+                            {group.answeredBy || '—'}
+                            {group.submittedAt ? ` · ${formatSubmittedAt(group.submittedAt)}` : ''}
+                          </p>
+                        ) : null}
+                        <p className="mt-1 text-xs text-[var(--muted)]">
+                          {group.principals.length} principal
+                          {group.principals.length === 1 ? '' : 's'}
+                          {group.principals.length
+                            ? `: ${group.principals.map((p) => p.principalName).join(', ')}`
+                            : ''}
+                        </p>
                       </button>
-                    </td>
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditForAsset(group)}
+                          className="text-sm text-[var(--accent)] hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedKey((prev) => (prev === group.key ? null : group.key))
+                          }
+                          className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)]"
+                          aria-expanded={expanded}
+                        >
+                          {expanded ? 'Hide' : 'Details'}
+                        </button>
+                      </div>
+                    </div>
+                    {expanded ? (
+                      <div className="mt-3 space-y-2 rounded-md border border-[var(--border)] bg-slate-50/80 p-3">
+                        {group.principals.map((principal) => (
+                          <div
+                            key={`${principal.principalType}-${principal.principalId || principal.principalName}`}
+                            className="text-sm"
+                          >
+                            <p className="font-medium">
+                              {principal.principalName}{' '}
+                              <span className="font-normal text-[var(--muted)]">
+                                ({principal.principalType === 'USER' ? 'User' : 'Group'})
+                              </span>
+                            </p>
+                            <p className="text-[var(--muted)]">{formatActions(principal.actions)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Desktop table */}
+            <div className="hidden overflow-x-auto lg:block">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
+                  <tr>
+                    <th className="w-10 px-4 py-3 font-medium" aria-label="Expand" />
+                    <th className="px-4 py-3 font-medium">
+                      {isSurveyResponseTab ? 'Survey' : 'Asset'}
+                    </th>
+                    {isSurveyResponseTab && (
+                      <>
+                        <th className="px-4 py-3 font-medium">Answered by</th>
+                        <th className="px-4 py-3 font-medium">Submitted</th>
+                      </>
+                    )}
+                    {isSurveyTab && <th className="px-4 py-3 font-medium">Owner</th>}
+                    <th className="px-4 py-3 font-medium">Principals</th>
+                    <th className="hidden px-4 py-3 font-medium xl:table-cell">Granted to</th>
+                    <th className="px-4 py-3 font-medium text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {assetGroups.map((group) => {
+                    const expanded = expandedKey === group.key;
+                    const colSpan =
+                      5 + (isSurveyResponseTab ? 2 : 0) + (isSurveyTab ? 1 : 0);
+                    const summaryPrincipals = group.principals
+                      .map((principal) => principal.principalName)
+                      .filter(Boolean);
+
+                    return (
+                      <Fragment key={group.key}>
+                        <tr className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--accent-soft)]/20">
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedKey((prev) => (prev === group.key ? null : group.key))
+                              }
+                              className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--accent-soft)]/40"
+                              aria-expanded={expanded}
+                              aria-label={
+                                expanded ? 'Hide permission details' : 'Show permission details'
+                              }
+                            >
+                              {expanded ? '▾' : '▸'}
+                            </button>
+                          </td>
+                          <td className="max-w-xs px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedKey((prev) => (prev === group.key ? null : group.key))
+                              }
+                              className="text-left font-medium hover:underline"
+                            >
+                              {group.objectLabel}
+                            </button>
+                            {group.detail ? (
+                              <div className="mt-0.5 text-xs text-[var(--muted)]">{group.detail}</div>
+                            ) : null}
+                          </td>
+                          {isSurveyResponseTab && (
+                            <>
+                              <td className="px-4 py-3">{group.answeredBy || '—'}</td>
+                              <td className="whitespace-nowrap px-4 py-3 text-[var(--muted)]">
+                                {formatSubmittedAt(group.submittedAt)}
+                              </td>
+                            </>
+                          )}
+                          {isSurveyTab && (
+                            <td className="px-4 py-3">{group.owner || '—'}</td>
+                          )}
+                          <td className="px-4 py-3">{group.principals.length}</td>
+                          <td className="hidden max-w-sm px-4 py-3 text-[var(--muted)] xl:table-cell">
+                            {summaryPrincipals.length ? summaryPrincipals.join(', ') : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => openEditForAsset(group)}
+                              className="text-[var(--accent)] hover:underline"
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                        {expanded ? (
+                          <tr className="border-b border-[var(--border)] bg-slate-50/80">
+                            <td colSpan={colSpan} className="px-4 py-3">
+                              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+                                Permission details
+                              </p>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                  <thead className="text-[var(--muted)]">
+                                    <tr>
+                                      <th className="py-1 pr-3 font-medium">Name</th>
+                                      <th className="py-1 pr-3 font-medium">Type</th>
+                                      <th className="py-1 font-medium">Permissions</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {group.principals.map((principal) => (
+                                      <tr
+                                        key={`${principal.principalType}-${principal.principalId || principal.principalName}`}
+                                        className="border-t border-[var(--border)]"
+                                      >
+                                        <td className="py-2 pr-3">{principal.principalName}</td>
+                                        <td className="py-2 pr-3 text-[var(--muted)]">
+                                          {principal.principalType === 'USER' ? 'User' : 'Group'}
+                                        </td>
+                                        <td className="py-2">
+                                          {formatActions(principal.actions)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 
@@ -407,4 +557,8 @@ export default function AdminPermissionsPage() {
       />
     </div>
   );
+}
+
+function activeTabObjects(tabs: CatalogClass[], activeType: string) {
+  return tabs.find((tab) => tab.resourceType === activeType)?.objects || [];
 }
