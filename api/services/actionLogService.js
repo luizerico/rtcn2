@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const ActionLog = require('../models/ActionLog');
+const { parsePagination } = require('../validation');
 
 const SENSITIVE_KEYS = new Set([
   'password',
@@ -247,8 +248,11 @@ async function queryActionLogs(query = {}) {
 
   const sortField = SORTABLE_FIELDS.has(query.sort) ? query.sort : 'createdAt';
   const sortOrder = String(query.order || 'desc').toLowerCase() === 'asc' ? 1 : -1;
-  const limit = Math.min(100, Math.max(1, Number(query.limit) || 25));
-  let page = Math.max(1, Number(query.page) || 1);
+  const { page: parsedPage, limit } = parsePagination(query, {
+    defaultLimit: 25,
+    maxLimit: 100,
+  });
+  let page = parsedPage;
 
   const total = await ActionLog.countDocuments(filter);
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);

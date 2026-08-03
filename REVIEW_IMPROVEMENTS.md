@@ -6,7 +6,6 @@ Practical improvement opportunities across the unified Next.js + Express RBAC ap
 
 ### 1. Add rate limiting and security headers at the Express edge
 - **GitHub issue:** [#13](https://github.com/luizerico/baseapp/issues/13)
-- **Status:** Closed as superseded by #7 — fix/issue-7 @ cd6ea41
 - **Severity:** High
 - **Location:** `api/app.js`, `server.js`, `api/routes/authRoutes.js`
 - **Why it matters:** Auth and mutation endpoints are unprotected against brute force and payload abuse; the app also lacks common security headers.
