@@ -17,12 +17,18 @@ const {
   clearDatabase,
   createTestApp,
 } = require('./helpers/apiTestUtils');
+const {
+  createMemoryEmailSender,
+  setEmailSender,
+  resetEmailSender,
+} = require('../api/services/emailService');
 
 describe('API endpoints', () => {
   let app;
   let authToken;
   let userId;
   let secondaryUserId;
+  let mailer;
 
   beforeAll(async () => {
     await connectTestDatabase();
@@ -30,10 +36,13 @@ describe('API endpoints', () => {
   }, 120000);
 
   afterAll(async () => {
+    resetEmailSender();
     await disconnectTestDatabase();
   });
 
   beforeEach(async () => {
+    mailer = createMemoryEmailSender();
+    setEmailSender(mailer);
     await clearDatabase();
 
     const registerRes = await request(app).post('/api/auth/register').send({
@@ -220,10 +229,16 @@ describe('API endpoints', () => {
         .get('/api/auth/forgot-password')
         .query({ email: 'alice@example.com' });
       expect(forgot.status).toBe(200);
-      expect(forgot.body.resetToken).toBeDefined();
+      expect(forgot.body.resetToken).toBeUndefined();
+      expect(mailer.messages).toHaveLength(1);
+      expect(mailer.last().to).toBe('alice@example.com');
+      expect(mailer.last().subject).toBe('Password Reset Request');
+
+      const resetToken = mailer.extractResetToken();
+      expect(resetToken).toBeTruthy();
 
       const reset = await request(app)
-        .post(`/api/auth/reset-password/${forgot.body.resetToken}`)
+        .post(`/api/auth/reset-password/${resetToken}`)
         .send({ newPassword: 'NewPassword123!' });
       expect(reset.status).toBe(200);
 
@@ -244,9 +259,13 @@ describe('API endpoints', () => {
       const forgot = await request(app)
         .get('/api/auth/forgot-password')
         .query({ email: 'alice@example.com' });
+      expect(forgot.status).toBe(200);
+
+      const resetToken = mailer.extractResetToken();
+      expect(resetToken).toBeTruthy();
 
       const res = await request(app)
-        .post(`/api/auth/reset-password/${forgot.body.resetToken}`)
+        .post(`/api/auth/reset-password/${resetToken}`)
         .send({});
       expect(res.status).toBe(400);
     });
