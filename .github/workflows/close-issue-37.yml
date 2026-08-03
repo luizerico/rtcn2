@@ -1,0 +1,56 @@
+name: Close issue 37
+
+on:
+  push:
+    branches:
+      - chore/close-issue-37
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  close-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comment and close #37
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(cat <<'EOF'
+          ## Fixed on `fix/issue-37`
+
+          Enforced `isVerified` end-to-end:
+
+          - Admin UI verify/revoke flows for users
+          - Login/session returns `NOT_VERIFIED` when the account is unverified
+          - Admin create sets verified as appropriate
+          - Whitelist updates aligned with verification rules
+          - Docs and tests updated for the verification behavior
+
+          Branch: `fix/issue-37`
+          Commit: `e2e7568093756821e6e313c00677b5251dc3038e`
+          EOF
+          )"
+          body="$(printf '%s\n' "$body" | sed 's/^          //')"
+          gh issue comment 37 --repo luizerico/baseapp --body "$body"
+          gh issue close 37 --repo luizerico/baseapp --reason completed
+          mkdir -p scripts
+          echo '{"issue":37,"state":"closed","branch":"fix/issue-37","sha":"e2e7568093756821e6e313c00677b5251dc3038e"}' > scripts/close-issue-37-result.json
+
+      - name: Commit close result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p scripts
+          git add scripts/close-issue-37-result.json
+          if git diff --cached --quiet; then
+            echo "No result file to commit"
+          else
+            git commit --trailer "Co-authored-by: Cursor <cursoragent@cursor.com>" -m "Record close of issue #37"
+            git push
+          fi
