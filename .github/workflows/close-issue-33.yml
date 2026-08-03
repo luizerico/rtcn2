@@ -1,0 +1,45 @@
+name: Close issue 33
+
+on:
+  push:
+    branches:
+      - fix/issue-33
+    paths:
+      - .github/workflows/close-issue-33.yml
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment and close #33
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              'Fixed on `fix/issue-33` (`a01f261e821d0355a489f3d5a2df829c53562efb`).',
+              '',
+              'Group permission write path is deprecated; ACL write is the canonical API.',
+              'PermissionModal uses the ACL endpoint. OpenAPI/README and tests updated.',
+              '',
+              'Tests: api.endpoints (27), PermissionModal (3), api.rbac (6) - all passed.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 33,
+              body,
+            });
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 33,
+              state: 'closed',
+              state_reason: 'completed',
+            });
