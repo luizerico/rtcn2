@@ -89,6 +89,16 @@ describe('API endpoints', () => {
       expect(res.status).toBe(400);
     });
 
+    it('POST /api/auth/register rejects passwords that fail shared policy', async () => {
+      const res = await request(app).post('/api/auth/register').send({
+        username: 'weakuser',
+        email: 'weak@example.com',
+        password: 'short',
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/at least 8 characters/i);
+    });
+
     it('POST /api/auth/login rejects invalid credentials', async () => {
       const res = await request(app).post('/api/auth/login').send({
         username: 'alice',
@@ -446,6 +456,17 @@ describe('API endpoints', () => {
         });
       expect(create.status).toBe(201);
       expect(create.body.username).toBe('carol');
+
+      const weakCreate = await request(app)
+        .post('/api/users')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          username: 'dave',
+          email: 'dave@example.com',
+          password: 'tiny',
+        });
+      expect(weakCreate.status).toBe(400);
+      expect(weakCreate.body.message).toMatch(/at least 8 characters/i);
     });
   });
 

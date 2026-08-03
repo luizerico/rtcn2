@@ -9,6 +9,7 @@ const {
   listUserSessions,
 } = require('../services/sessionService');
 const { userHasPermission } = require('../services/rbacService');
+const { assertPasswordPolicy } = require('../utils/passwordPolicy');
 
 const mockSendEmail = async (email, subject) => {
   console.log(`[MOCK EMAIL SENT] To: ${email} | Subject: ${subject}`);
@@ -27,6 +28,11 @@ exports.registerUser = async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ message: 'Please include all fields.' });
+  }
+
+  const passwordPolicy = assertPasswordPolicy(password);
+  if (!passwordPolicy.ok) {
+    return res.status(400).json({ message: passwordPolicy.message });
   }
 
   try {
@@ -152,6 +158,11 @@ exports.resetPassword = async (req, res) => {
     return res.status(400).json({ message: 'New password is required.' });
   }
 
+  const passwordPolicy = assertPasswordPolicy(newPassword, { label: 'New password' });
+  if (!passwordPolicy.ok) {
+    return res.status(400).json({ message: passwordPolicy.message });
+  }
+
   try {
     const user = await User.findOne({ resetToken: token }).select(
       'password email resetToken tokenExpiry'
@@ -212,8 +223,10 @@ exports.changeOwnPassword = async (req, res) => {
   if (!currentPassword || !newPassword) {
     return res.status(400).json({ message: 'Current password and new password are required.' });
   }
-  if (String(newPassword).length < 8) {
-    return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+
+  const passwordPolicy = assertPasswordPolicy(newPassword, { label: 'New password' });
+  if (!passwordPolicy.ok) {
+    return res.status(400).json({ message: passwordPolicy.message });
   }
 
   try {
@@ -242,8 +255,9 @@ exports.adminChangeUserPassword = async (req, res) => {
   const { newPassword } = req.body;
   const { id } = req.params;
 
-  if (!newPassword || String(newPassword).length < 8) {
-    return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+  const passwordPolicy = assertPasswordPolicy(newPassword, { label: 'New password' });
+  if (!passwordPolicy.ok) {
+    return res.status(400).json({ message: passwordPolicy.message });
   }
 
   try {

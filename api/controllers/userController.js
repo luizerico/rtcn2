@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
+const { assertPasswordPolicy } = require('../utils/passwordPolicy');
 
 exports.getAllUsers = async (_req, res) => {
   try {
@@ -27,6 +28,11 @@ exports.createUser = async (req, res) => {
     const { username, email, password } = req.body;
     if (!username || !email || !password) {
       return res.status(400).json({ message: 'Username, email, and password are required.' });
+    }
+
+    const passwordPolicy = assertPasswordPolicy(password);
+    if (!passwordPolicy.ok) {
+      return res.status(400).json({ message: passwordPolicy.message });
     }
 
     const existing = await User.findOne({ $or: [{ username }, { email }] });
