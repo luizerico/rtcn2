@@ -68,6 +68,7 @@ components:
         password:
           type: string
           format: password
+          minLength: 8
           example: Password123!
 
     LoginRequest:
@@ -654,15 +655,14 @@ paths:
             format: email
       responses:
         '200':
-          description: Reset email sent (resetToken included only in non-production)
+          description: Reset email sent (token is delivered via the configured email sender only)
           content:
             application/json:
               schema:
                 type: object
+                required: [message]
                 properties:
                   message:
-                    type: string
-                  resetToken:
                     type: string
         '400':
           description: Missing email
