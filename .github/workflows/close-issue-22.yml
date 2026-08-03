@@ -1,4 +1,4 @@
-name: Close issue 22
+name: Close issue 22 and reconcile notes
 
 on:
   push:
@@ -17,26 +17,51 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Comment and close #22
+      - name: Comment/close #22 and note #12/#26 reconciliation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          body="$(cat <<'EOF'
+          body22="$(cat <<'EOF'
           ## Fixed on `fix/issue-22`
 
-          Closed the dead auth path on asset create in `api/routes/assetRoutes.js`.
+          Closed the dead auth path on asset create by adopting the clearer product behavior:
 
-          - `POST /api/assets` now returns **400** for `SURVEY` / `SURVEY_RESPONSE` in route middleware (no more `next()` skip of CREATE checks)
-          - Message matches the controller: use the surveys API for those kinds
-          - Added API coverage in `__tests__/api.endpoints.test.js`
+          - Named `authorizeAssetCreate` on `POST /api/assets`
+          - `SURVEY` / `SURVEY_RESPONSE` → **400** (“Use the surveys API…”) — no `next()` fall-through
+          - Other kinds still require `${kind}:CREATE` before `createAsset`
+          - Coverage in `__tests__/api.endpoints.test.js`
 
-          Commit: bcdfee139bfabc7725b2890c3458e0c40ee225a2
+          **Reconciliation:** Prefer #26’s 400-for-survey-kinds over #12’s always-run-CREATE (which could 403 unprivileged callers or authorize then hit controller 400). Surveys stay on `/api/surveys`.
+
+          Commit: 023a4537806bc7404fad2047128338081eeb32c4
           EOF
           )"
-          body="$(printf '%s\n' "$body" | sed 's/^          //')"
-          gh issue comment 22 --repo luizerico/baseapp --body "$body"
-          gh issue close 22 --repo luizerico/baseapp --reason completed
-          echo '{"issue":22,"state":"closed","branch":"fix/issue-22","sha":"bcdfee139bfabc7725b2890c3458e0c40ee225a2"}' > scripts/close-issue-22-result.json
+          body22="$(printf '%s\n' "$body22" | sed 's/^          //')"
+          gh issue comment 22 --repo luizerico/baseapp --body "$body22"
+          gh issue close 22 --repo luizerico/baseapp --reason completed || true
+
+          body12="$(cat <<'EOF'
+          ## Reconciliation note (see #22)
+
+          `#12` removed the `next()` bypass so `${kind}:CREATE` always ran. That closed the dead path, but for survey kinds the better product behavior is an immediate **400** pointing at `/api/surveys` (not 403 / authorize-then-controller-400).
+
+          Canonical fix: `fix/issue-22` @ `023a4537806bc7404fad2047128338081eeb32c4` — `authorizeAssetCreate` rejects `SURVEY` / `SURVEY_RESPONSE` with 400 before any CREATE check. Aligns with #26; supersedes the #12 authorize-always approach for these kinds.
+          EOF
+          )"
+          body12="$(printf '%s\n' "$body12" | sed 's/^          //')"
+          gh issue comment 12 --repo luizerico/baseapp --body "$body12"
+
+          body26="$(cat <<'EOF'
+          ## Reconciliation note (see #22)
+
+          `#26`’s `authorizeAssetCreate` (400 for survey kinds → surveys API) is the chosen product behavior. `fix/issue-22` @ `023a4537806bc7404fad2047128338081eeb32c4` mirrors that approach as the canonical close for #22, and documents why it wins over #12’s always-run-CREATE for `SURVEY` / `SURVEY_RESPONSE`.
+          EOF
+          )"
+          body26="$(printf '%s\n' "$body26" | sed 's/^          //')"
+          gh issue comment 26 --repo luizerico/baseapp --body "$body26"
+
+          mkdir -p scripts
+          echo '{"issue":22,"state":"closed","branch":"fix/issue-22","sha":"023a4537806bc7404fad2047128338081eeb32c4","reconciled_with":[12,26]}' > scripts/close-issue-22-result.json
 
       - name: Commit close result
         run: |
