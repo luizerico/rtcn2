@@ -52,7 +52,9 @@ router.get('/', authorizeAnyAssetKind('READ', { allowAnyInstance: true }), getAl
 router.post('/', async (req, res, next) => {
   const kind = String(req.body.kind || 'DOCUMENT').toUpperCase();
   if (['SURVEY', 'SURVEY_RESPONSE'].includes(kind)) {
-    return next();
+    return res.status(400).json({
+      message: 'Use the surveys API to create Survey or SurveyResponse assets.',
+    });
   }
   if (!ASSET_KINDS.includes(kind)) {
     return res.status(400).json({ message: 'Invalid asset kind.' });

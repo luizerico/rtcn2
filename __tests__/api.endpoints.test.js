@@ -505,6 +505,17 @@ describe('API endpoints', () => {
         .send({ description: 'missing name' });
       expect(res.status).toBe(400);
     });
+
+    it('rejects survey kinds on asset create (route-level)', async () => {
+      for (const kind of ['SURVEY', 'SURVEY_RESPONSE']) {
+        const res = await request(app)
+          .post('/api/assets')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({ name: `Should fail ${kind}`, kind });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/surveys API/i);
+      }
+    });
   });
 
   describe('Surveys', () => {
