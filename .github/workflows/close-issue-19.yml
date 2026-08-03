@@ -22,24 +22,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           body="$(cat <<'EOF'
-          ## Fixed on `fix/issue-19`
+          ## Closed as completed (covered by #8 + #29)
 
-          Centralized API error responses on top of #8:
+          Issue #19 asked to centralize API error responses via a shared helper and Express error middleware. That is fully delivered across:
 
-          - Expanded `api/utils/httpErrors.js` with `sendError`, `HttpError`, `asyncHandler` (kept `sendServerError`)
-          - Added Express `errorHandler` middleware (`api/middleware/errorMiddleware.js`) wired in `api/app.js`
-          - Migrated auth controller + auth middleware onto the shared helpers
-          - Documented optional `code` on OpenAPI `ErrorMessage`
-          - Tests: `__tests__/api.httpErrors.test.js` (7 passing)
+          - **#8** (`fix/issue-8` @ `8ae9cd8453a5478570f9533f62c115012f0cf89a`) — `sendServerError` so catch paths log server-side and return `{ message, code }` only
+          - **#29** (`fix/issue-29` @ `6f743653e891962cbca6cdbe1f5f2f2d4dde8cc7`) — extends `api/utils/httpErrors.js` with `sendError` / `HttpError` / `errorHandler`, wires app-level middleware, aligns auth + 4xx controllers/routes to `{ message, code, details? }`, updates OpenAPI + client parser
 
-          Builds on #8 (`8ae9cd8`). Commit: `ca378ed01354e8d1200663bed77edb82e9854978`
+          No further code changes needed on `fix/issue-19` beyond what #8+#29 already shipped.
           EOF
           )"
           body="$(printf '%s\n' "$body" | sed 's/^          //')"
           gh issue comment 19 --repo luizerico/baseapp --body "$body"
           gh issue close 19 --repo luizerico/baseapp --reason completed
           mkdir -p scripts
-          echo '{"issue":19,"state":"closed","branch":"fix/issue-19","sha":"ca378ed01354e8d1200663bed77edb82e9854978"}' > scripts/close-issue-19-result.json
+          printf '%s\n' '{"issue":19,"state":"closed","outcome":"closed-as-covered","coveredBy":["fix/issue-8","fix/issue-29"],"sha":"6f743653e891962cbca6cdbe1f5f2f2d4dde8cc7"}' > scripts/close-issue-19-result.json
 
       - name: Commit close result
         run: |
@@ -50,6 +47,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No result file to commit"
           else
-            git commit -m "Record close of issue #19"
+            git commit -m "Record close of issue #19 (covered by #8+#29)"
             git push
           fi
