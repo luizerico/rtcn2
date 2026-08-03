@@ -6,9 +6,12 @@ const surveyRoutes = require('./routes/surveyRoutes');
 const userRoutes = require('./routes/userRoutes');
 const actionLogRoutes = require('./routes/actionLogRoutes');
 const { actionLogMiddleware } = require('./middleware/actionLogMiddleware');
+const { securityHeaders, apiRateLimiter } = require('./middleware/security');
 
 // Register Asset subclasses (discriminators) once for the API process.
 require('./models/assets');
+
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '100kb';
 
 /**
  * Build the Express application with API routes.
@@ -17,12 +20,19 @@ require('./models/assets');
 function createApp({ fallback } = {}) {
   const app = express();
 
-  app.use(express.json());
+  if (process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true') {
+    app.set('trust proxy', 1);
+  }
+
+  app.use(securityHeaders());
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
   app.use(actionLogMiddleware);
 
   app.get('/api/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
   });
+
+  app.use('/api', apiRateLimiter());
 
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
@@ -37,6 +47,9 @@ function createApp({ fallback } = {}) {
   }
 
   app.use((err, _req, res, _next) => {
+    if (err?.type === 'entity.too.large' || err?.status === 413) {
+      return res.status(413).json({ message: 'Request body too large.' });
+    }
     console.error('Unhandled error:', err);
     res.status(500).json({ message: 'Internal server error.' });
   });
