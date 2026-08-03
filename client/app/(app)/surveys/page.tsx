@@ -124,12 +124,12 @@ export default function SurveysPage() {
   const total = data?.total || 0;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      <header className="border-b border-[var(--border)] pb-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 sm:space-y-8">
+      <header className="border-b border-[var(--border)] pb-4 sm:pb-6">
         <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Surveys' }]} />
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Surveys</p>
-        <h1 className="mt-2 text-3xl font-semibold">Surveys</h1>
-        <p className="mt-2 text-[var(--muted)]">
+        <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Surveys</h1>
+        <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">
           Browse, search, and manage surveys. Create new surveys from the table toolbar.
         </p>
       </header>
@@ -197,7 +197,7 @@ export default function SurveysPage() {
 
           <Link
             href="/surveys/new"
-            className="inline-flex items-center justify-center rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
+            className="inline-flex w-full items-center justify-center rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] sm:w-auto"
           >
             Create survey
           </Link>
@@ -208,75 +208,115 @@ export default function SurveysPage() {
         ) : items.length === 0 ? (
           <p className="p-5 text-[var(--muted)]">No surveys match your filters.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
-                <tr>
-                  <th className="px-4 py-3 font-medium">
-                    <button type="button" onClick={() => toggleSort('name')} className="hover:text-[var(--foreground)]">
-                      Name{sortMark('name')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 font-medium">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort('questionCount')}
-                      className="hover:text-[var(--foreground)]"
-                    >
-                      Questions{sortMark('questionCount')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 font-medium">Owner</th>
-                  <th className="px-4 py-3 font-medium">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort('updatedAt')}
-                      className="hover:text-[var(--foreground)]"
-                    >
-                      Updated{sortMark('updatedAt')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 font-medium text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((survey) => (
-                  <tr key={survey._id} className="border-b border-[var(--border)] last:border-0">
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{survey.name}</div>
-                      <div className="text-xs text-[var(--muted)]">{survey.description || '—'}</div>
-                    </td>
-                    <td className="px-4 py-3">{survey.questionCount ?? 0}</td>
-                    <td className="px-4 py-3">{surveyOwnerName(survey)}</td>
-                    <td className="px-4 py-3">
+          <>
+            <ul className="divide-y divide-[var(--border)] md:hidden">
+              {items.map((survey) => (
+                <li key={survey._id} className="space-y-3 p-4">
+                  <div>
+                    <p className="font-medium break-words">{survey.name}</p>
+                    <p className="mt-0.5 text-xs text-[var(--muted)]">
+                      {survey.description || '—'}
+                    </p>
+                    <p className="mt-2 text-xs text-[var(--muted)]">
+                      {survey.questionCount ?? 0} questions · Owner: {surveyOwnerName(survey)}
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">
+                      Updated{' '}
                       {survey.updatedAt ? new Date(survey.updatedAt).toLocaleString() : '—'}
-                    </td>
-                    <td className="space-x-3 px-4 py-3 text-right">
-                      <Link
-                        href={`/surveys/${survey._id}`}
-                        className="text-[var(--accent)] hover:underline"
-                      >
-                        Answer
-                      </Link>
-                      <Link
-                        href={`/surveys/${survey._id}/responses`}
-                        className="text-[var(--accent)] hover:underline"
-                      >
-                        Results
-                      </Link>
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                    <Link href={`/surveys/${survey._id}`} className="text-[var(--accent)] hover:underline">
+                      Answer
+                    </Link>
+                    <Link
+                      href={`/surveys/${survey._id}/responses`}
+                      className="text-[var(--accent)] hover:underline"
+                    >
+                      Results
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(survey._id)}
+                      className="text-[var(--danger)] hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">
+                      <button type="button" onClick={() => toggleSort('name')} className="hover:text-[var(--foreground)]">
+                        Name{sortMark('name')}
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 font-medium">
                       <button
                         type="button"
-                        onClick={() => handleDelete(survey._id)}
-                        className="text-[var(--danger)] hover:underline"
+                        onClick={() => toggleSort('questionCount')}
+                        className="hover:text-[var(--foreground)]"
                       >
-                        Delete
+                        Questions{sortMark('questionCount')}
                       </button>
-                    </td>
+                    </th>
+                    <th className="px-4 py-3 font-medium">Owner</th>
+                    <th className="hidden px-4 py-3 font-medium lg:table-cell">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort('updatedAt')}
+                        className="hover:text-[var(--foreground)]"
+                      >
+                        Updated{sortMark('updatedAt')}
+                      </button>
+                    </th>
+                    <th className="px-4 py-3 font-medium text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {items.map((survey) => (
+                    <tr key={survey._id} className="border-b border-[var(--border)] last:border-0">
+                      <td className="px-4 py-3">
+                        <div className="font-medium">{survey.name}</div>
+                        <div className="text-xs text-[var(--muted)]">{survey.description || '—'}</div>
+                      </td>
+                      <td className="px-4 py-3">{survey.questionCount ?? 0}</td>
+                      <td className="px-4 py-3">{surveyOwnerName(survey)}</td>
+                      <td className="hidden px-4 py-3 lg:table-cell">
+                        {survey.updatedAt ? new Date(survey.updatedAt).toLocaleString() : '—'}
+                      </td>
+                      <td className="space-x-3 px-4 py-3 text-right whitespace-nowrap">
+                        <Link
+                          href={`/surveys/${survey._id}`}
+                          className="text-[var(--accent)] hover:underline"
+                        >
+                          Answer
+                        </Link>
+                        <Link
+                          href={`/surveys/${survey._id}/responses`}
+                          className="text-[var(--accent)] hover:underline"
+                        >
+                          Results
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(survey._id)}
+                          className="text-[var(--danger)] hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         <div className="flex flex-col gap-3 border-t border-[var(--border)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
