@@ -1,0 +1,55 @@
+name: Close issue 10
+
+on:
+  push:
+    branches:
+      - chore/close-issue-10
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  close-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comment and close #10
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(cat <<'EOF'
+          ## Fixed on `fix/issue-10`
+
+          Enforced a shared minimum password policy across all password-setting flows:
+
+          - Added `api/utils/passwordPolicy.js` with `assertPasswordPolicy` (minimum length 8)
+          - Applied to register, admin create user, password reset, change-own-password, and admin change-password
+          - Documented `minLength: 8` on Register and ResetPassword OpenAPI schemas
+          - Added unit and API tests for short-password rejection
+
+          Commit: 6a94bac6f4388cd9ab3b593e22dbe0eef381a2bf
+          Compare: https://github.com/luizerico/baseapp/compare/base_platform...fix/issue-10
+          EOF
+          )"
+          body="$(printf '%s\n' "$body" | sed 's/^          //')"
+          gh issue comment 10 --repo luizerico/baseapp --body "$body"
+          gh issue close 10 --repo luizerico/baseapp --reason completed
+          mkdir -p scripts
+          echo '{"issue":10,"state":"closed","branch":"fix/issue-10","sha":"6a94bac6f4388cd9ab3b593e22dbe0eef381a2bf"}' > scripts/close-issue-10-result.json
+
+      - name: Commit close result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p scripts
+          git add scripts/close-issue-10-result.json
+          if git diff --cached --quiet; then
+            echo "No result file to commit"
+          else
+            git commit -m "Record close of issue #10"
+            git push
+          fi
