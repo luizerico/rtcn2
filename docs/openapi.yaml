@@ -53,6 +53,9 @@ components:
         email:
           type: string
           format: email
+        isVerified:
+          type: boolean
+          description: When false, login and session use are rejected (NOT_VERIFIED).
 
     RegisterRequest:
       type: object
@@ -109,7 +112,7 @@ components:
           type: string
         code:
           type: string
-          enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, PASSWORD_CHANGED, CONFIG]
+          enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, NOT_VERIFIED, PASSWORD_CHANGED, CONFIG]
       required: [message, code]
 
     SessionRecord:
@@ -466,6 +469,10 @@ paths:
         Creates a MongoDB session document (shared auth store) and returns a JWT whose `sid`
         claim matches the session. Other apps can validate the same token via `/api/auth/validate`
         or by reading the `sessions` collection.
+
+        Login requires `user.isVerified === true`. Self-registered users default to unverified
+        until an administrator verifies them (Admin Users UI or `PUT /api/users/{id}`).
+        Admin-created users and the bootstrap admin are verified automatically.
       operationId: loginUser
       requestBody:
         required: true
@@ -488,6 +495,12 @@ paths:
                 $ref: '#/components/schemas/ErrorMessage'
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+        '403':
+          description: Account exists but is not verified (`NOT_VERIFIED`)
           content:
             application/json:
               schema:
@@ -763,6 +776,10 @@ paths:
     put:
       tags: [Users]
       summary: Update user
+      description: |
+        Whitelisted fields only: `username`, `email`, `isVerified`.
+        Setting `isVerified` is how admins grant or revoke sign-in for self-registered accounts.
+        Password, roleId, and reset tokens cannot be set here.
       operationId: updateUser
       security:
         - bearerAuth: []
@@ -772,9 +789,25 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                isVerified:
+                  type: boolean
       responses:
         '200':
           description: User updated
+        '400':
+          description: No allowed fields or invalid isVerified type
         '401':
           description: Unauthorized
         '404':

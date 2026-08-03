@@ -57,7 +57,8 @@ describe('API endpoints', () => {
       members: [userId],
     });
     await replaceGroupPermissions(adminGroup._id, buildFullAdminPermissions(adminGroup._id));
-    await User.findByIdAndUpdate(userId, { roleId: adminGroup._id });
+    await User.findByIdAndUpdate(userId, { roleId: adminGroup._id, isVerified: true });
+    await User.findByIdAndUpdate(secondaryUserId, { isVerified: true });
 
     const loginRes = await request(app).post('/api/auth/login').send({
       username: 'alice',
@@ -95,6 +96,17 @@ describe('API endpoints', () => {
         password: 'wrong-password',
       });
       expect(res.status).toBe(401);
+    });
+
+    it('POST /api/auth/login rejects unverified accounts', async () => {
+      await User.findByIdAndUpdate(userId, { isVerified: false });
+      const res = await request(app).post('/api/auth/login').send({
+        username: 'alice',
+        password: 'Password123!',
+      });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('NOT_VERIFIED');
+      expect(res.body.token).toBeUndefined();
     });
 
     it('POST /api/auth/login accepts email as login id', async () => {
@@ -446,6 +458,40 @@ describe('API endpoints', () => {
         });
       expect(create.status).toBe(201);
       expect(create.body.username).toBe('carol');
+      expect(create.body.isVerified).toBe(true);
+    });
+
+    it('allows admin to toggle isVerified and rejects roleId mass assignment', async () => {
+      const registered = await request(app).post('/api/auth/register').send({
+        username: 'dave',
+        email: 'dave@example.com',
+        password: 'Password123!',
+      });
+      expect(registered.status).toBe(201);
+      expect(registered.body.user.isVerified).toBe(false);
+      const daveId = registered.body.user.id;
+
+      const denyLogin = await request(app).post('/api/auth/login').send({
+        username: 'dave',
+        password: 'Password123!',
+      });
+      expect(denyLogin.status).toBe(403);
+      expect(denyLogin.body.code).toBe('NOT_VERIFIED');
+
+      const verify = await request(app)
+        .put(`/api/users/${daveId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ isVerified: true, roleId: userId, password: 'Hacked123!' });
+      expect(verify.status).toBe(200);
+      expect(verify.body.isVerified).toBe(true);
+      expect(String(verify.body.roleId || '')).not.toBe(String(userId));
+
+      const allowLogin = await request(app).post('/api/auth/login').send({
+        username: 'dave',
+        password: 'Password123!',
+      });
+      expect(allowLogin.status).toBe(200);
+      expect(allowLogin.body.token).toBeDefined();
     });
   });
 

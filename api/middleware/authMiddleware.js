@@ -76,6 +76,15 @@ const protect = async (req, res, next) => {
       return authError(res, 401, 'USER_NOT_FOUND', 'Authentication failed: user no longer exists.');
     }
 
+    if (!req.user.isVerified) {
+      return authError(
+        res,
+        403,
+        'NOT_VERIFIED',
+        'Account is not verified. An administrator must verify the account before you can use this session.'
+      );
+    }
+
     req.session = session;
     await touchSession(session);
     next();
