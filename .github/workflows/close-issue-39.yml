@@ -1,0 +1,36 @@
+name: Close issue 39
+
+on:
+  push:
+    branches:
+      - chore/close-issue-39
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  close-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment and close #39
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(cat <<'EOF'
+          ## Fixed on `fix/issue-39`
+
+          Introduced a pluggable email sender (`api/services/emailService.js`) so password reset no longer depends on an inline `mockSendEmail` console logger.
+
+          - **Safe default:** `EMAIL_PROVIDER=console` for development/test
+          - **Production:** requires `smtp` (nodemailer) or `module` (`EMAIL_SENDER_MODULE`); console default is refused
+          - **Security:** forgot-password responses no longer include `resetToken` in JSON
+          - **Tests:** read the reset token from an in-memory mailer fake
+
+          Commit: `fc202227082550017a2ef8cea5c656d08d3ef1cc`
+          Branch: `fix/issue-39`
+          EOF
+          )"
+          gh issue comment 39 --repo luizerico/baseapp --body "$body"
+          gh issue close 39 --repo luizerico/baseapp --reason completed
