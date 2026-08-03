@@ -68,6 +68,7 @@ components:
         password:
           type: string
           format: password
+          minLength: 8
           example: Password123!
 
     LoginRequest:
@@ -168,6 +169,7 @@ components:
         newPassword:
           type: string
           format: password
+          minLength: 8
 
     Group:
       type: object
