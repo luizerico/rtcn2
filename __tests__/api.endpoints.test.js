@@ -9,6 +9,7 @@ const mongoose = require('mongoose');
 const request = require('supertest');
 const User = require('../api/models/User');
 const Group = require('../api/models/Group');
+const Permission = require('../api/models/Permission');
 const { buildFullAdminPermissions } = require('../api/constants/rbac');
 const { replaceGroupPermissions } = require('../api/services/rbacService');
 const {
@@ -296,6 +297,45 @@ describe('API endpoints', () => {
         .get(`/api/groups/${groupId}`)
         .set('Authorization', `Bearer ${authToken}`);
       expect(missing.status).toBe(404);
+    });
+
+    it('deletes related permissions and clears roleId on group delete', async () => {
+      const create = await request(app)
+        .post('/api/groups')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'temp-editors', description: 'Temporary group' });
+      expect(create.status).toBe(201);
+      const groupId = create.body._id;
+
+      await User.findByIdAndUpdate(secondaryUserId, { roleId: groupId });
+
+      const setPermissions = await request(app)
+        .post(`/api/groups/${groupId}/permissions`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          scopes: ['READ', 'WRITE'],
+          resourceType: 'DOCUMENT',
+          allObjects: true,
+        });
+      expect(setPermissions.status).toBe(200);
+
+      const before = await Permission.countDocuments({
+        $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
+      });
+      expect(before).toBeGreaterThan(0);
+
+      const remove = await request(app)
+        .delete(`/api/groups/${groupId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(remove.status).toBe(200);
+
+      const after = await Permission.countDocuments({
+        $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
+      });
+      expect(after).toBe(0);
+
+      const secondary = await User.findById(secondaryUserId);
+      expect(secondary.roleId).toBeNull();
     });
 
     it('rejects create without name', async () => {
