@@ -1,0 +1,37 @@
+name: Close issue 34
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/issue-34
+    paths:
+      - .github/workflows/close-issue-34.yml
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment and close issue #34
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BODY=$(cat <<'EOF'
+          Fixed in `fix/issue-34` (`acaf393`).
+
+          Authorization hot path now queries `principalType`/`principalId` only. Legacy `groupId` `$or` clauses were removed from `principalQueryForUser` and `listGroupPermissions`.
+
+          Safe migration kept: `migratePermissionPrincipals` still runs on DB connect (bulk backfill + drop irreparable rows).
+
+          Tests: `__tests__/api.rbac.test.js` (9 passed).
+          EOF
+          )
+          # Trim leading indentation from heredoc
+          BODY=$(printf '%s\n' "$BODY" | sed 's/^          //')
+          gh issue comment 34 --repo luizerico/baseapp --body "$BODY"
+          gh issue close 34 --repo luizerico/baseapp --reason completed
