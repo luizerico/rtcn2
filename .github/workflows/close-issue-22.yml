@@ -1,0 +1,52 @@
+name: Close issue 22
+
+on:
+  push:
+    branches:
+      - chore/close-issue-22
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  close-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comment and close #22
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(cat <<'EOF'
+          ## Fixed on `fix/issue-22`
+
+          Closed the dead auth path on asset create in `api/routes/assetRoutes.js`.
+
+          - `POST /api/assets` now returns **400** for `SURVEY` / `SURVEY_RESPONSE` in route middleware (no more `next()` skip of CREATE checks)
+          - Message matches the controller: use the surveys API for those kinds
+          - Added API coverage in `__tests__/api.endpoints.test.js`
+
+          Commit: bcdfee139bfabc7725b2890c3458e0c40ee225a2
+          EOF
+          )"
+          body="$(printf '%s\n' "$body" | sed 's/^          //')"
+          gh issue comment 22 --repo luizerico/baseapp --body "$body"
+          gh issue close 22 --repo luizerico/baseapp --reason completed
+          echo '{"issue":22,"state":"closed","branch":"fix/issue-22","sha":"bcdfee139bfabc7725b2890c3458e0c40ee225a2"}' > scripts/close-issue-22-result.json
+
+      - name: Commit close result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p scripts
+          git add scripts/close-issue-22-result.json
+          if git diff --cached --quiet; then
+            echo "No result file to commit"
+          else
+            git commit -m "Record close of issue #22"
+            git push
+          fi
