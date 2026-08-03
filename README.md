@@ -183,7 +183,9 @@ Separate FastAPI container that reads the same MongoDB and exposes analytics at 
 ## RBAC notes
 
 - Permissions live in the **`permissions`** collection (not embedded on groups).
-- Each permission row links a **group** to a resource action (`READ`, `WRITE`, `CREATE`, `DELETE`, `ADMIN`) for `USER`, `GROUP`, or `ASSET`.
+- Each permission row links a **USER or GROUP** principal to a resource action (`READ`, `WRITE`, `CREATE`, `DELETE`, `ADMIN`) for asset subclasses (`DOCUMENT`, `DASHBOARD`, `DATASET`, `SURVEY`, `SURVEY_RESPONSE`).
+- **Canonical write API:** `POST /api/permissions/acl` (Windows-style ACL apply used by PermissionModal). Delete scope is limited to the selected assets or class-wide `*`.
+- **Deprecated:** `POST /api/groups/{groupId}/permissions` — prefer the ACL endpoint; the group path only mutates that group’s grants for the selection and returns `Deprecation` / `Link` headers.
 - `authorize('RESOURCE:ACTION')` resolves the caller’s groups (`roleId` + membership) and loads matching permission rows.
 - `ADMIN` on a resource type grants every action; `WRITE` also covers `CREATE`.
 - `npm run db:init` upserts the **admin** group and writes the full permission matrix into `permissions`.

@@ -392,6 +392,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
     setSaving(true);
     setError(null);
     try {
+      // Canonical permission write API (not the deprecated POST /groups/:id/permissions).
       await apiPost('/permissions/acl', {
         resourceType,
         allObjects,

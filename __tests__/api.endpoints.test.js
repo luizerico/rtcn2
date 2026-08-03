@@ -339,6 +339,10 @@ describe('API endpoints', () => {
           objects: [{ id: survey.body._id, label: 'Ops survey' }],
         });
       expect(updatePermissions.status).toBe(200);
+      expect(updatePermissions.headers.deprecation).toBe('true');
+      expect(updatePermissions.headers.link).toMatch(/\/api\/permissions\/acl/);
+      expect(updatePermissions.body.deprecated).toBe(true);
+      expect(updatePermissions.body.successor).toBe('/api/permissions/acl');
       expect(updatePermissions.body.permissions).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -388,6 +392,76 @@ describe('API endpoints', () => {
         .send({ targetUserId: secondaryUserId });
       expect(removeMember.status).toBe(200);
       expect(removeMember.body.group.members.map(String)).not.toContain(String(secondaryUserId));
+    });
+
+    it('deprecated group permission write does not wipe sibling instance grants', async () => {
+      const create = await request(app)
+        .post('/api/groups')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'scoped-ops' });
+      const groupId = create.body._id;
+
+      const surveyA = await request(app)
+        .post('/api/surveys')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Survey A',
+          questions: [{ prompt: 'A?', type: 'yes_no' }],
+        });
+      const surveyB = await request(app)
+        .post('/api/surveys')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Survey B',
+          questions: [{ prompt: 'B?', type: 'yes_no' }],
+        });
+      expect(surveyA.status).toBe(201);
+      expect(surveyB.status).toBe(201);
+
+      const grantA = await request(app)
+        .post(`/api/groups/${groupId}/permissions`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          scopes: ['READ'],
+          resourceType: 'SURVEY',
+          allObjects: false,
+          objects: [{ id: surveyA.body._id, label: 'Survey A' }],
+        });
+      expect(grantA.status).toBe(200);
+
+      const grantB = await request(app)
+        .post(`/api/groups/${groupId}/permissions`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          scopes: ['WRITE'],
+          resourceType: 'SURVEY',
+          allObjects: false,
+          objects: [{ id: surveyB.body._id, label: 'Survey B' }],
+        });
+      expect(grantB.status).toBe(200);
+      expect(grantB.headers.deprecation).toBe('true');
+
+      const listed = await request(app)
+        .get(`/api/groups/${groupId}/permissions`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(listed.status).toBe(200);
+      expect(listed.body.permissions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            permission: 'READ',
+            resourceId: expect.anything(),
+            target: 'Survey A',
+          }),
+          expect.objectContaining({
+            permission: 'WRITE',
+            resourceId: expect.anything(),
+            target: 'Survey B',
+          }),
+        ])
+      );
+      expect(
+        listed.body.permissions.filter((row) => String(row.resourceId) === String(surveyA.body._id))
+      ).toHaveLength(1);
     });
 
     it('validates membership and permission payloads', async () => {

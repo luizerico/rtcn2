@@ -27,6 +27,7 @@ router.get(
   authorize('GROUP:READ', { param: 'groupId' }),
   getGroupPermissions
 );
+// Deprecated write path — canonical permission writes use POST /api/permissions/acl.
 router.post(
   '/:groupId/permissions',
   authorize('GROUP:WRITE', { param: 'groupId' }),

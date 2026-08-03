@@ -77,7 +77,21 @@ exports.getGroupPermissions = async (req, res) => {
   }
 };
 
+/**
+ * @deprecated Prefer POST /api/permissions/acl (applyAssetAcl). Kept for
+ * backward compatibility; only mutates this group's grants for the selection.
+ */
 exports.updateGroupPermissions = async (req, res) => {
+  res.set('Deprecation', 'true');
+  res.set(
+    'Link',
+    '</api/permissions/acl>; rel="successor-version"; title="Canonical permission write API"'
+  );
+  res.set(
+    'Warning',
+    '299 - "POST /api/groups/{groupId}/permissions is deprecated; use POST /api/permissions/acl"'
+  );
+
   try {
     const { scopes, resourceType, allObjects = false, objects = [] } = req.body;
     const allowedScopes = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
@@ -122,11 +136,15 @@ exports.updateGroupPermissions = async (req, res) => {
     });
 
     res.status(200).json({
-      message: 'Group permissions updated successfully.',
+      message:
+        'Group permissions updated successfully. Deprecated: prefer POST /api/permissions/acl.',
+      deprecated: true,
+      successor: '/api/permissions/acl',
       group,
       permissions,
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating group permissions', error: error.message });
+    const status = /Select at least one asset/i.test(error.message) ? 400 : 500;
+    res.status(status).json({ message: 'Error updating group permissions', error: error.message });
   }
 };
