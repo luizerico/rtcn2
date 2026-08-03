@@ -1,0 +1,38 @@
+name: Close issue 36
+
+on:
+  push:
+    branches:
+      - chore/close-issue-36
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  close-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment and close #36
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(cat <<'EOF'
+          ## Fixed on `fix/issue-36`
+
+          Added Jest API coverage for high-risk authz allow/deny paths in `__tests__/api.authz.highrisk.test.js`:
+
+          - **Survey responses** — unprivileged deny; SURVEY-only deny; class-wide SURVEY_RESPONSE create/read allow; admin allow
+          - **Permissions ACL** — unprivileged deny on GET/POST `/api/permissions/acl` (+ catalog/list); admin apply + read allow
+          - **Identity admin routes** — unprivileged deny on users/groups/members; admin allow; admin password reset allow/deny
+
+          Verified with: `npm test -- --selectProjects api --testPathPattern=api.authz.highrisk` (7 passing).
+
+          Commit: 16128416b501958f1f18d88fa1fa677c8e058288
+          EOF
+          )"
+          # Trim leading indentation from heredoc
+          body="$(printf '%s\n' "$body" | sed 's/^          //')"
+          gh issue comment 36 --repo luizerico/baseapp --body "$body"
+          gh issue close 36 --repo luizerico/baseapp --reason completed
