@@ -1,4 +1,4 @@
-name: Close issue 39
+﻿name: Close issue 39
 
 on:
   push:
@@ -8,12 +8,15 @@ on:
 
 permissions:
   issues: write
-  contents: read
+  contents: write
 
 jobs:
   close-issue:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Comment and close #39
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -32,5 +35,5 @@ jobs:
           Branch: `fix/issue-39`
           EOF
           )"
-          gh issue comment 39 --repo luizerico/baseapp --body "$body"
-          gh issue close 39 --repo luizerico/baseapp --reason completed
+          gh issue comment 39 --repo "${{ github.repository }}" --body "$body"
+          gh issue close 39 --repo "${{ github.repository }}" --reason completed
