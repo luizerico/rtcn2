@@ -549,7 +549,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
                   disabled={!allObjects && selectedIds.length === 0}
                   className="rounded-md border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--accent-soft)] disabled:opacity-50"
                 >
-                  Add user…
+                  Create user…
                 </button>
                 <button
                   type="button"
@@ -557,7 +557,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
                   disabled={!allObjects && selectedIds.length === 0}
                   className="rounded-md border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--accent-soft)] disabled:opacity-50"
                 >
-                  Add group…
+                  Create group…
                 </button>
                 <button
                   type="button"

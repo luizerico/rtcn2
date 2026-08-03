@@ -158,7 +158,7 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
         </section>
 
         <form onSubmit={handleAdd} className="space-y-3 border-t border-[var(--border)] pt-4">
-          <h4 className="text-sm font-medium">Add member</h4>
+          <h4 className="text-sm font-medium">Create member</h4>
           <div>
             <label htmlFor={searchId} className="mb-2 block text-sm font-medium">
               Search users
@@ -240,7 +240,7 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
               disabled={!selectedUserId || loading || Boolean(busyUserId)}
               className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {busyUserId && busyUserId === selectedUserId ? 'Adding…' : 'Add member'}
+              {busyUserId && busyUserId === selectedUserId ? 'Creating…' : 'Create member'}
             </button>
           </div>
         </form>

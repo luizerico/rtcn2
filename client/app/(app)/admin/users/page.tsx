@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { apiDelete, apiGet } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import CreateUserModal from '@/components/ui/CreateUserModal';
+import { useAccess } from '@/components/AccessProvider';
+import { AccessLink, AccessPrimaryButton, AccessTextButton } from '@/components/ui/AccessControls';
 
 interface UserRecord {
   _id: string;
@@ -17,6 +18,10 @@ interface UserRecord {
 
 export default function AdminUsersPage() {
   const { pushToast } = useToast();
+  const { can } = useAccess();
+  const canCreate = can('USER:CREATE');
+  const canWrite = can('USER:WRITE');
+  const canDelete = can('USER:DELETE');
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,19 +67,12 @@ export default function AdminUsersPage() {
         />
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
-              Admin / Users
-            </p>
             <h1 className="mt-2 text-3xl font-semibold">User management</h1>
             <p className="mt-2 text-[var(--muted)]">Create accounts and review registered users.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
-          >
-            Add user
-          </button>
+          <AccessPrimaryButton allowed={canCreate} onClick={() => setCreateOpen(true)}>
+            Create user
+          </AccessPrimaryButton>
         </div>
       </header>
 
@@ -106,19 +104,16 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3">{user.email}</td>
                   <td className="px-4 py-3">{user.isVerified ? 'Yes' : 'No'}</td>
                   <td className="space-x-3 px-4 py-3 text-right">
-                    <Link
-                      href={`/account?userId=${user._id}`}
-                      className="text-[var(--accent)] hover:underline"
-                    >
+                    <AccessLink allowed={canWrite} href={`/account?userId=${user._id}`}>
                       Password
-                    </Link>
-                    <button
-                      type="button"
+                    </AccessLink>
+                    <AccessTextButton
+                      allowed={canDelete}
+                      danger
                       onClick={() => handleDelete(user._id)}
-                      className="text-[var(--danger)] hover:underline"
                     >
                       Delete
-                    </button>
+                    </AccessTextButton>
                   </td>
                 </tr>
               ))}

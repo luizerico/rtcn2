@@ -6,6 +6,8 @@ import { useToast } from '@/components/ToastProvider';
 import EditMembersModal, { EditMembersPayload } from '@/components/ui/EditMembersModal';
 import CreateGroupModal from '@/components/ui/CreateGroupModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { useAccess } from '@/components/AccessProvider';
+import { AccessPrimaryButton, AccessTextButton } from '@/components/ui/AccessControls';
 
 interface GroupRecord {
   _id: string;
@@ -16,6 +18,10 @@ interface GroupRecord {
 
 export default function AdminGroupsPage() {
   const { pushToast } = useToast();
+  const { can } = useAccess();
+  const canCreate = can('GROUP:CREATE');
+  const canWrite = can('GROUP:WRITE');
+  const canDelete = can('GROUP:DELETE');
   const [groups, setGroups] = useState<GroupRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,19 +83,12 @@ export default function AdminGroupsPage() {
         />
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
-              Admin / Groups
-            </p>
             <h1 className="mt-2 text-3xl font-semibold">Group management</h1>
             <p className="mt-2 text-[var(--muted)]">Create groups and attach members for shared roles.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
-          >
+          <AccessPrimaryButton allowed={canCreate} onClick={() => setCreateOpen(true)}>
             Create group
-          </button>
+          </AccessPrimaryButton>
         </div>
       </header>
 
@@ -121,23 +120,22 @@ export default function AdminGroupsPage() {
                   <td className="px-4 py-3">{group.description || '—'}</td>
                   <td className="px-4 py-3">{group.members?.length || 0}</td>
                   <td className="space-x-3 px-4 py-3 text-right">
-                    <button
-                      type="button"
+                    <AccessTextButton
+                      allowed={canWrite}
                       onClick={() => {
                         setSelectedGroupId(group._id);
                         setMemberModalOpen(true);
                       }}
-                      className="text-[var(--accent)] hover:underline"
                     >
                       Edit members
-                    </button>
-                    <button
-                      type="button"
+                    </AccessTextButton>
+                    <AccessTextButton
+                      allowed={canDelete}
+                      danger
                       onClick={() => handleDelete(group._id)}
-                      className="text-[var(--danger)] hover:underline"
                     >
                       Delete
-                    </button>
+                    </AccessTextButton>
                   </td>
                 </tr>
               ))}

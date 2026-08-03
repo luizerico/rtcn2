@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { useAccess } from '@/components/AccessProvider';
 
 type QuestionType = 'text' | 'multiple_choice' | 'yes_no';
 
@@ -30,11 +31,19 @@ function newQuestion(): QuestionDraft {
 export default function CreateSurveyPage() {
   const router = useRouter();
   const { pushToast } = useToast();
+  const { can } = useAccess();
+  const canCreate = can('SURVEY:CREATE', { classWideOnly: true });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [questions, setQuestions] = useState<QuestionDraft[]>([newQuestion()]);
+
+  useEffect(() => {
+    if (!canCreate) {
+      setError('You do not have permission to create surveys.');
+    }
+  }, [canCreate]);
 
   const updateQuestion = (key: string, patch: Partial<QuestionDraft>) => {
     setQuestions((prev) => prev.map((q) => (q.key === key ? { ...q, ...patch } : q)));
@@ -42,6 +51,10 @@ export default function CreateSurveyPage() {
 
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
+    if (!canCreate) {
+      setError('You do not have permission to create surveys.');
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -88,7 +101,6 @@ export default function CreateSurveyPage() {
             { label: 'Create' },
           ]}
         />
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Surveys</p>
         <h1 className="mt-2 text-3xl font-semibold">Create survey</h1>
         <p className="mt-2 text-[var(--muted)]">
           Add a name and one or more questions (text, multiple choice, or yes/no).
@@ -187,7 +199,7 @@ export default function CreateSurveyPage() {
             onClick={() => setQuestions((prev) => [...prev, newQuestion()])}
             className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
           >
-            Add question
+            Create question
           </button>
           <Link
             href="/surveys"
@@ -197,8 +209,9 @@ export default function CreateSurveyPage() {
           </Link>
           <button
             type="submit"
-            disabled={saving}
-            className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
+            disabled={saving || !canCreate}
+            title={!canCreate ? 'You do not have permission to create surveys.' : undefined}
+            className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? 'Saving…' : 'Create survey'}
           </button>

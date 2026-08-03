@@ -1,21 +1,60 @@
-﻿"use client";
+"use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
+import { useAccess } from '@/components/AccessProvider';
+import { clearAccessCache } from '@/lib/accessCache';
 
-const links = [
-  { href: '/', label: 'Home' },
-  { href: '/surveys', label: 'Surveys' },
-  { href: '/admin', label: 'Admin' },
-  { href: '/admin/users', label: 'Users', indent: true },
-  { href: '/admin/groups', label: 'Groups', indent: true },
-  { href: '/admin/permissions', label: 'Permissions', indent: true },
-  { href: '/admin/sessions', label: 'Sessions', indent: true },
-  { href: '/admin/logs', label: 'Logs', indent: true },
-  { href: '/admin/reports', label: 'Reports', indent: true },
+type NavItem = {
+  href: string;
+  label: string;
+  indent?: boolean;
+  /** Return true when the link should be shown. */
+  visible: (can: ReturnType<typeof useAccess>['can'], isAdmin: boolean) => boolean;
+};
+
+const links: NavItem[] = [
+  { href: '/', label: 'Home', visible: () => true },
+  {
+    href: '/surveys',
+    label: 'Surveys',
+    visible: (can) => can('SURVEY:READ', { allowAnyInstance: true }),
+  },
+  {
+    href: '/admin',
+    label: 'Admin',
+    visible: (can, isAdmin) =>
+      isAdmin ||
+      can('SURVEY:READ', { allowAnyInstance: true }) ||
+      can('USER:READ') ||
+      can('GROUP:READ') ||
+      can('LOG:READ'),
+  },
+  { href: '/admin/users', label: 'Users', indent: true, visible: (_c, isAdmin) => isAdmin },
+  { href: '/admin/groups', label: 'Groups', indent: true, visible: (_c, isAdmin) => isAdmin },
+  {
+    href: '/admin/permissions',
+    label: 'Permissions',
+    indent: true,
+    visible: (_c, isAdmin) => isAdmin,
+  },
+  {
+    href: '/admin/sessions',
+    label: 'Sessions',
+    indent: true,
+    // Any signed-in user can list/disconnect their own sessions.
+    visible: () => true,
+  },
+  { href: '/admin/logs', label: 'Logs', indent: true, visible: (_c, isAdmin) => isAdmin },
+  {
+    href: '/admin/reports',
+    label: 'Reports',
+    indent: true,
+    visible: (_c, isAdmin) => isAdmin,
+  },
 ];
 
 function NavLink({
@@ -49,30 +88,32 @@ function SidebarBody({
   username,
   onLogout,
   onNavigate,
+  visibleLinks,
 }: {
   username: string | null;
   onLogout: () => void;
   onNavigate?: () => void;
+  visibleLinks: NavItem[];
 }) {
   return (
     <>
       <div className="mb-8 px-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-teal-200/70">RBAC Platform</p>
-        <h1 className="mt-1 text-xl font-semibold text-white">Control Center</h1>
-        {username && (
-          <p className="mt-2 text-xs text-teal-100/80">
-            Signed in as <span className="font-semibold text-white">{username}</span>
-          </p>
-        )}
+        <p className="text-xs uppercase tracking-[0.2em] text-teal-200/70">LEMA Platform</p>
+        <h1 className="mt-1 text-xl font-semibold text-white">Common Services</h1>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto">
-        {links.map((link) => (
+        {visibleLinks.map((link) => (
           <NavLink key={link.href} {...link} onNavigate={onNavigate} />
         ))}
       </nav>
 
       <div className="mt-auto space-y-2 border-t border-teal-900/80 pt-4">
+        {username && (
+          <p className="px-3 text-xs text-teal-100/80">
+            Signed in as <span className="font-semibold text-white">{username}</span>
+          </p>
+        )}
         <NavLink href="/account" label="Profile" onNavigate={onNavigate} />
         <Link
           href="/login"
@@ -97,12 +138,15 @@ export default function AppNav() {
   const router = useRouter();
   const pathname = usePathname();
   const { pushToast } = useToast();
-  const [username, setUsername] = useState<string | null>(null);
+  const { can, isAdmin, user, clear } = useAccess();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => {
-    setUsername(localStorage.getItem('userUsername'));
-  }, []);
+  const username = user?.username || null;
+
+  const visibleLinks = useMemo(
+    () => links.filter((link) => link.visible(can, isAdmin)),
+    [can, isAdmin]
+  );
 
   useEffect(() => {
     setMobileOpen(false);
@@ -128,6 +172,8 @@ export default function AppNav() {
     } catch {
       // Still clear local session even if API logout fails.
     }
+    clearAccessCache();
+    clear();
     localStorage.removeItem('authToken');
     localStorage.removeItem('userUsername');
     localStorage.removeItem('sessionId');
@@ -156,7 +202,7 @@ export default function AppNav() {
           </svg>
         </button>
         <div className="min-w-0 text-center">
-          <p className="truncate text-sm font-semibold text-white">Control Center</p>
+          <p className="truncate text-sm font-semibold text-white">Common Services</p>
         </div>
         <div className="w-10" aria-hidden="true" />
       </header>
@@ -189,13 +235,14 @@ export default function AppNav() {
               username={username}
               onLogout={handleLogout}
               onNavigate={() => setMobileOpen(false)}
+              visibleLinks={visibleLinks}
             />
           </aside>
         </div>
       ) : null}
 
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-[var(--sidebar)] px-4 py-6 text-[var(--sidebar-text)] md:flex">
-        <SidebarBody username={username} onLogout={handleLogout} />
+        <SidebarBody username={username} onLogout={handleLogout} visibleLinks={visibleLinks} />
       </aside>
     </>
   );

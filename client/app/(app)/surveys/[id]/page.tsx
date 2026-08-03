@@ -6,6 +6,8 @@ import { useParams } from 'next/navigation';
 import { apiGet, apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { useAccess } from '@/components/AccessProvider';
+import { AccessLink } from '@/components/ui/AccessControls';
 
 type QuestionType = 'text' | 'multiple_choice' | 'yes_no';
 
@@ -28,6 +30,9 @@ export default function TakeSurveyPage() {
   const params = useParams<{ id: string }>();
   const surveyId = params.id;
   const { pushToast } = useToast();
+  const { can } = useAccess();
+  const canSubmit = can('SURVEY_RESPONSE:CREATE', { classWideOnly: true });
+  const canViewResults = can('SURVEY_RESPONSE:READ', { allowAnyInstance: true });
 
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -110,14 +115,18 @@ export default function TakeSurveyPage() {
         <h1 className="mt-2 text-3xl font-semibold">{survey.name}</h1>
         <p className="mt-2 text-[var(--muted)]">{survey.description || 'Answer each question below.'}</p>
         <p className="mt-3 text-sm">
-          <Link href={`/surveys/${survey._id}/responses`} className="text-[var(--accent)] hover:underline">
+          <AccessLink allowed={canViewResults} href={`/surveys/${survey._id}/responses`}>
             View results
-          </Link>
+          </AccessLink>
         </p>
       </header>
 
       <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
-        {survey.questions.map((question, index) => (
+        {!canSubmit ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            You can view this survey but do not have permission to submit answers.
+          </p>
+        ) : null}        {survey.questions.map((question, index) => (
           <fieldset key={question.questionId} className="space-y-2">
             <legend className="text-sm font-medium">
               {index + 1}. {question.prompt}
@@ -187,8 +196,9 @@ export default function TakeSurveyPage() {
           </Link>
           <button
             type="submit"
-            disabled={saving}
-            className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
+            disabled={saving || !canSubmit}
+            title={!canSubmit ? 'You do not have permission to submit answers.' : undefined}
+            className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? 'Submitting…' : 'Submit answers'}
           </button>

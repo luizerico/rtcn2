@@ -29,9 +29,8 @@ export default function HomePage() {
     <div className="mx-auto max-w-5xl">
       <header className="mb-10 border-b border-[var(--border)] pb-6">
         <Breadcrumbs items={[{ label: 'Home' }]} />
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Welcome</p>
         <h1 className="mt-2 text-4xl font-semibold tracking-tight text-[var(--foreground)]">
-          RBAC Control Center
+          LEMA Common Services
         </h1>
         <p className="mt-3 max-w-2xl text-base text-[var(--muted)]">
           Use the menu to administer identities and policies. Start with Admin, then drill into users,

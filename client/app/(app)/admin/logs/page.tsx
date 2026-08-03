@@ -158,9 +158,6 @@ export default function AdminLogsPage() {
             { label: 'Logs' },
           ]}
         />
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
-          Admin / Logs
-        </p>
         <h1 className="mt-2 text-3xl font-semibold">Action logs</h1>
         <p className="mt-2 text-[var(--muted)]">
           Search, filter, and order user actions stored in MongoDB. Filtering runs on the API.

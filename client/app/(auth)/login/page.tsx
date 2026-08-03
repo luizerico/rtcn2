@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
+import { clearAccessCache } from '@/lib/accessCache';
 
 const REASON_COPY: Record<string, { title: string; message: string }> = {
   NO_TOKEN: {
@@ -67,6 +68,7 @@ function LoginForm() {
       localStorage.setItem('authToken', response.token);
       localStorage.setItem('sessionId', response.sessionId);
       localStorage.setItem('userUsername', response.user.username);
+      clearAccessCache();
 
       pushToast({
         tone: 'success',

@@ -2,12 +2,13 @@ import './globals.css';
 import { cookies } from 'next/headers';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ToastProvider } from '@/components/ToastProvider';
+import { AccessProvider } from '@/components/AccessProvider';
 import AuthGate from '@/components/AuthGate';
 import { UI_PREFS_COOKIE, parseUiPreferences } from '@/lib/uiPreferences';
 
 export const metadata = {
-  title: 'RBAC Platform',
-  description: 'Role-Based Access Control Management System',
+  title: 'LEMA Platform',
+  description: 'LEMA Common Services',
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -20,7 +21,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <ThemeProvider initialPreferences={preferences}>
           <ToastProvider>
-            <AuthGate>{children}</AuthGate>
+            <AccessProvider>
+              <AuthGate>{children}</AuthGate>
+            </AccessProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>

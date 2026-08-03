@@ -6,6 +6,7 @@ import { apiGet, apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import { useTheme, type ThemeMode } from '@/components/ThemeProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { useAccess } from '@/components/AccessProvider';
 
 interface UserRecord {
   _id: string;
@@ -25,6 +26,7 @@ function ProfileContent() {
   const targetUserId = searchParams.get('userId');
   const { pushToast } = useToast();
   const { theme, setTheme } = useTheme();
+  const { user: accessUser, isAdmin, can } = useAccess();
 
   const [me, setMe] = useState<MeUser | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -32,25 +34,19 @@ function ProfileContent() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [canManageUsers, setCanManageUsers] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const canManageUsers = isAdmin && can('USER:WRITE');
 
   useEffect(() => {
     async function load() {
       try {
-        const profile = await apiGet<{
-          user: MeUser;
-          permissions: Array<{ resourceType: string; permission: string }>;
-          isAdmin?: boolean;
-        }>('/auth/me');
+        if (accessUser) {
+          setMe(accessUser);
+        }
 
-        setMe(profile.user);
-
-        const manage = Boolean(profile.isAdmin);
-        setCanManageUsers(manage);
-
-        if (manage) {
+        if (canManageUsers) {
           const list = await apiGet<UserRecord[]>('/users');
           setUsers(list);
           if (targetUserId) {
@@ -69,7 +65,7 @@ function ProfileContent() {
     }
 
     load();
-  }, [targetUserId, pushToast]);
+  }, [targetUserId, pushToast, accessUser, canManageUsers]);
 
   const isAdminMode = Boolean(canManageUsers && selectedUserId);
 
@@ -126,7 +122,6 @@ function ProfileContent() {
     <div className="mx-auto max-w-xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Profile' }]} />
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Profile</p>
         <h1 className="mt-2 text-3xl font-semibold">Your profile</h1>
         <p className="mt-2 text-[var(--muted)]">
           Review your account details, appearance, and password.

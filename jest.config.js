@@ -3,7 +3,10 @@ module.exports = {
   projects: [
     {
       displayName: 'components',
-      testMatch: ['<rootDir>/__tests__/*Modal*.test.tsx'],
+      testMatch: [
+        '<rootDir>/__tests__/*Modal*.test.tsx',
+        '<rootDir>/__tests__/access.test.ts',
+      ],
       testEnvironment: 'jsdom',
       setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
       transform: {

@@ -4,6 +4,8 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { apiGet } from '@/lib/apiUtils';
 import PermissionModal from '@/components/ui/PermissionModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { useAccess } from '@/components/AccessProvider';
+import { AccessPrimaryButton, AccessTextButton } from '@/components/ui/AccessControls';
 
 interface PermissionRecord {
   _id: string;
@@ -65,6 +67,8 @@ function principalLabel(row: PermissionRecord): string {
 }
 
 export default function AdminPermissionsPage() {
+  const { can, refresh } = useAccess();
+  const canWrite = can('GROUP:WRITE');
   const [permissions, setPermissions] = useState<PermissionRecord[]>([]);
   const [tabs, setTabs] = useState<CatalogClass[]>(FALLBACK_TABS);
   const [activeType, setActiveType] = useState('SURVEY');
@@ -255,9 +259,6 @@ export default function AdminPermissionsPage() {
             { label: 'Permissions' },
           ]}
         />
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
-          Admin / Permissions
-        </p>
         <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Permission management</h1>
         <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">
           Windows-style access control for assets only. Choose an asset type tab, then edit
@@ -308,13 +309,13 @@ export default function AdminPermissionsPage() {
           </div>
         </div>
 
-        <button
-          type="button"
+        <AccessPrimaryButton
+          allowed={canWrite}
           onClick={openEditForType}
-          className="w-full shrink-0 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] sm:w-auto"
+          className="w-full shrink-0 sm:w-auto"
         >
-          Add permission
-        </button>
+          Create permission
+        </AccessPrimaryButton>
       </div>
 
       <section
@@ -370,13 +371,12 @@ export default function AdminPermissionsPage() {
                         </p>
                       </button>
                       <div className="flex shrink-0 flex-col items-end gap-2">
-                        <button
-                          type="button"
+                        <AccessTextButton
+                          allowed={canWrite}
                           onClick={() => openEditForAsset(group)}
-                          className="text-sm text-[var(--accent)] hover:underline"
                         >
                           Edit
-                        </button>
+                        </AccessTextButton>
                         <button
                           type="button"
                           onClick={() =>
@@ -490,13 +490,12 @@ export default function AdminPermissionsPage() {
                             {summaryPrincipals.length ? summaryPrincipals.join(', ') : '—'}
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <button
-                              type="button"
+                            <AccessTextButton
+                              allowed={canWrite}
                               onClick={() => openEditForAsset(group)}
-                              className="text-[var(--accent)] hover:underline"
                             >
                               Edit
-                            </button>
+                            </AccessTextButton>
                           </td>
                         </tr>
                         {expanded ? (
@@ -548,7 +547,10 @@ export default function AdminPermissionsPage() {
       <PermissionModal
         isOpen={policyModalOpen}
         onClose={() => setPolicyModalOpen(false)}
-        onApplied={loadData}
+        onApplied={async () => {
+          await loadData();
+          await refresh();
+        }}
         initialResourceType={editTarget.resourceType}
         initialResourceId={editTarget.resourceId}
         initialAllObjects={editTarget.allObjects}

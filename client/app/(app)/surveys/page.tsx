@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { apiDelete, apiGet } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { useAccess } from '@/components/AccessProvider';
+import { AccessLink, AccessPrimaryButton, AccessTextButton } from '@/components/ui/AccessControls';
 
 interface SurveyRecord {
   _id: string;
@@ -43,6 +45,9 @@ function surveyOwnerName(survey: SurveyRecord): string {
 
 export default function SurveysPage() {
   const { pushToast } = useToast();
+  const { can } = useAccess();
+  const canCreate = can('SURVEY:CREATE', { classWideOnly: true });
+  const canViewResults = can('SURVEY_RESPONSE:READ', { allowAnyInstance: true });
   const [data, setData] = useState<SurveyListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +132,6 @@ export default function SurveysPage() {
     <div className="mx-auto w-full max-w-6xl space-y-6 sm:space-y-8">
       <header className="border-b border-[var(--border)] pb-4 sm:pb-6">
         <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Surveys' }]} />
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Surveys</p>
         <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Surveys</h1>
         <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">
           Browse, search, and manage surveys. Create new surveys from the table toolbar.
@@ -195,12 +199,18 @@ export default function SurveysPage() {
             </button>
           </form>
 
-          <Link
-            href="/surveys/new"
-            className="inline-flex w-full items-center justify-center rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] sm:w-auto"
-          >
-            Create survey
-          </Link>
+          {canCreate ? (
+            <Link
+              href="/surveys/new"
+              className="inline-flex w-full items-center justify-center rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] sm:w-auto"
+            >
+              Create survey
+            </Link>
+          ) : (
+            <AccessPrimaryButton allowed={false} className="w-full sm:w-auto">
+              Create survey
+            </AccessPrimaryButton>
+          )}
         </div>
 
         {loading ? (
@@ -226,22 +236,25 @@ export default function SurveysPage() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-                    <Link href={`/surveys/${survey._id}`} className="text-[var(--accent)] hover:underline">
+                    <AccessLink
+                      allowed={can('SURVEY:READ', { resourceId: survey._id })}
+                      href={`/surveys/${survey._id}`}
+                    >
                       Answer
-                    </Link>
-                    <Link
+                    </AccessLink>
+                    <AccessLink
+                      allowed={canViewResults}
                       href={`/surveys/${survey._id}/responses`}
-                      className="text-[var(--accent)] hover:underline"
                     >
                       Results
-                    </Link>
-                    <button
-                      type="button"
+                    </AccessLink>
+                    <AccessTextButton
+                      allowed={can('SURVEY:DELETE', { resourceId: survey._id })}
+                      danger
                       onClick={() => handleDelete(survey._id)}
-                      className="text-[var(--danger)] hover:underline"
                     >
                       Delete
-                    </button>
+                    </AccessTextButton>
                   </div>
                 </li>
               ))}
@@ -291,25 +304,25 @@ export default function SurveysPage() {
                         {survey.updatedAt ? new Date(survey.updatedAt).toLocaleString() : '—'}
                       </td>
                       <td className="space-x-3 px-4 py-3 text-right whitespace-nowrap">
-                        <Link
+                        <AccessLink
+                          allowed={can('SURVEY:READ', { resourceId: survey._id })}
                           href={`/surveys/${survey._id}`}
-                          className="text-[var(--accent)] hover:underline"
                         >
                           Answer
-                        </Link>
-                        <Link
+                        </AccessLink>
+                        <AccessLink
+                          allowed={canViewResults}
                           href={`/surveys/${survey._id}/responses`}
-                          className="text-[var(--accent)] hover:underline"
                         >
                           Results
-                        </Link>
-                        <button
-                          type="button"
+                        </AccessLink>
+                        <AccessTextButton
+                          allowed={can('SURVEY:DELETE', { resourceId: survey._id })}
+                          danger
                           onClick={() => handleDelete(survey._id)}
-                          className="text-[var(--danger)] hover:underline"
                         >
                           Delete
-                        </button>
+                        </AccessTextButton>
                       </td>
                     </tr>
                   ))}

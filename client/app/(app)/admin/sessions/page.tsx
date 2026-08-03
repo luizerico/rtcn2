@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { apiDelete, apiGet } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { useAccess } from '@/components/AccessProvider';
+import { AccessTextButton } from '@/components/ui/AccessControls';
 
 interface SessionRecord {
   _id: string;
@@ -20,6 +22,8 @@ interface SessionRecord {
 
 export default function AdminSessionsPage() {
   const { pushToast } = useToast();
+  const { can, user } = useAccess();
+  const canDisconnectOthers = can('USER:WRITE');
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [scope, setScope] = useState<'all' | 'self'>('self');
   const [loading, setLoading] = useState(true);
@@ -71,9 +75,6 @@ export default function AdminSessionsPage() {
             { label: 'Sessions' },
           ]}
         />
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
-          Admin / Sessions
-        </p>
         <h1 className="mt-2 text-3xl font-semibold">Active sessions</h1>
         <p className="mt-2 text-[var(--muted)]">
           Sessions are stored in MongoDB so other apps can share authentication. Scope:{' '}
@@ -120,13 +121,17 @@ export default function AdminSessionsPage() {
                   </td>
                   <td className="px-4 py-3">{new Date(session.expiresAt).toLocaleString()}</td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
+                    <AccessTextButton
+                      allowed={
+                        canDisconnectOthers ||
+                        String(session.userId) === String(user?.id)
+                      }
+                      danger
                       onClick={() => disconnect(session.sessionId)}
-                      className="text-[var(--danger)] hover:underline"
+                      reason="You can only disconnect your own sessions."
                     >
                       Disconnect
-                    </button>
+                    </AccessTextButton>
                   </td>
                 </tr>
               ))}
