@@ -193,6 +193,7 @@ exports.getCurrentUser = async (req, res) => {
         }
       : null,
     permissions: req.permissions || [],
+    isAdmin: Boolean(req.isAdmin),
   });
 };
 

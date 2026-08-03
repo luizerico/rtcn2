@@ -4,6 +4,7 @@ const {
   userHasPermission,
   listUserPermissions,
   listAccessibleResources,
+  userIsAdminGroupMember,
 } = require('../services/rbacService');
 const {
   findActiveSession,
@@ -139,6 +140,7 @@ const authorize = (permission, options = {}) => {
 const attachPermissions = async (req, res, next) => {
   try {
     req.permissions = await listUserPermissions(req.user);
+    req.isAdmin = await userIsAdminGroupMember(req.user);
     next();
   } catch (error) {
     next(error);

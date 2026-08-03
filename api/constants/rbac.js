@@ -1,19 +1,32 @@
 const { ASSET_KINDS } = require('./assetTypes');
 
-const IDENTITY_RESOURCE_TYPES = ['USER', 'GROUP'];
+/** Not permission targets — used only for admin route guards via admin-group membership. */
+const IDENTITY_RESOURCE_TYPES = ['USER', 'GROUP', 'LOG'];
+const PRINCIPAL_TYPES = ['USER', 'GROUP'];
 
-/** Concrete DB classes only — no abstract ASSET umbrella. */
-const RESOURCE_TYPES = [...IDENTITY_RESOURCE_TYPES, ...ASSET_KINDS];
+/**
+ * Permissions apply only to Asset subclasses.
+ * USER and GROUP are not assets and are not stored as permission resource types.
+ */
+const RESOURCE_TYPES = [...ASSET_KINDS];
+const PERMISSION_RESOURCE_TYPES = [...ASSET_KINDS];
+
 const ACTIONS = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
 
 const RESOURCE_TYPE_LABELS = {
-  USER: 'Users',
-  GROUP: 'Groups',
   DOCUMENT: 'Documents',
   DASHBOARD: 'Dashboards',
   DATASET: 'Datasets',
   SURVEY: 'Surveys',
   SURVEY_RESPONSE: 'Survey responses',
+};
+
+const ACTION_LABELS = {
+  ADMIN: 'Full control',
+  WRITE: 'Modify',
+  READ: 'Read',
+  CREATE: 'Create',
+  DELETE: 'Delete',
 };
 
 function buildFullAdminPermissions(groupId) {
@@ -25,6 +38,8 @@ function buildFullAdminPermissions(groupId) {
   for (const resourceType of RESOURCE_TYPES) {
     for (const permission of ACTIONS) {
       permissions.push({
+        principalType: 'GROUP',
+        principalId: groupId,
         groupId,
         resourceType,
         target: '*',
@@ -45,11 +60,20 @@ function parsePermissionString(permission) {
   const resourceType = String(resourceTypeRaw || '').toUpperCase();
   const action = String(actionRaw || '').toUpperCase();
 
-  if (!RESOURCE_TYPES.includes(resourceType) || !ACTIONS.includes(action)) {
+  if (!ACTIONS.includes(action)) {
     return null;
   }
 
-  return { resourceType, action };
+  // Identity route guards (USER:*, GROUP:*) — not asset permission rows.
+  if (IDENTITY_RESOURCE_TYPES.includes(resourceType)) {
+    return { resourceType, action, identity: true };
+  }
+
+  if (!RESOURCE_TYPES.includes(resourceType)) {
+    return null;
+  }
+
+  return { resourceType, action, identity: false };
 }
 
 function actionIsAllowed(requiredAction, grantedActions) {
@@ -61,9 +85,12 @@ function actionIsAllowed(requiredAction, grantedActions) {
 
 module.exports = {
   IDENTITY_RESOURCE_TYPES,
+  PRINCIPAL_TYPES,
   RESOURCE_TYPES,
+  PERMISSION_RESOURCE_TYPES,
   ACTIONS,
   RESOURCE_TYPE_LABELS,
+  ACTION_LABELS,
   ASSET_KINDS,
   buildFullAdminPermissions,
   parsePermissionString,

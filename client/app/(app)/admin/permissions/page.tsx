@@ -1,25 +1,47 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { apiGet, apiPost } from '@/lib/apiUtils';
-import PermissionModal, { UpdatePolicyPayload } from '@/components/ui/PermissionModal';
+import { apiGet } from '@/lib/apiUtils';
+import PermissionModal from '@/components/ui/PermissionModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
-
-interface GroupRecord {
-  _id: string;
-  name: string;
-}
 
 interface PermissionRecord {
   _id: string;
-  groupId: string;
-  groupName: string;
+  principalType?: 'USER' | 'GROUP';
+  principalId?: string;
+  principalName?: string;
+  groupId?: string | null;
+  groupName?: string | null;
   resourceType: string;
   target: string;
+  resourceId?: string | null;
   permission: string;
+  answeredBy?: string | null;
+  submittedAt?: string | null;
+  owner?: string | null;
 }
 
-type ViewMode = 'group' | 'asset';
+interface CatalogClass {
+  resourceType: string;
+  label: string;
+  objects: Array<{
+    id: string;
+    name: string;
+    label: string;
+    answeredBy?: string | null;
+    submittedAt?: string | null;
+    owner?: string | null;
+    detail?: string;
+  }>;
+}
+
+const FALLBACK_TABS: CatalogClass[] = [
+  { resourceType: 'DOCUMENT', label: 'Documents', objects: [] },
+  { resourceType: 'DASHBOARD', label: 'Dashboards', objects: [] },
+  { resourceType: 'DATASET', label: 'Datasets', objects: [] },
+  { resourceType: 'SURVEY', label: 'Surveys', objects: [] },
+  { resourceType: 'SURVEY_RESPONSE', label: 'Survey responses', objects: [] },
+];
 
 function groupBy<T>(items: T[], keyFn: (item: T) => string): Record<string, T[]> {
   return items.reduce<Record<string, T[]>>((acc, item) => {
@@ -34,27 +56,51 @@ function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
 
+function principalLabel(row: PermissionRecord): string {
+  return (
+    row.principalName ||
+    row.groupName ||
+    (row.principalType === 'USER' ? 'User' : 'Group')
+  );
+}
+
 export default function AdminPermissionsPage() {
-  const [groups, setGroups] = useState<GroupRecord[]>([]);
   const [permissions, setPermissions] = useState<PermissionRecord[]>([]);
+  const [tabs, setTabs] = useState<CatalogClass[]>(FALLBACK_TABS);
+  const [activeType, setActiveType] = useState('SURVEY');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('group');
-  const [selectedGroupId, setSelectedGroupId] = useState('');
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<{
+    resourceType: string;
+    resourceId: string | null;
+    allObjects: boolean;
+    principalType: 'USER' | 'GROUP' | null;
+    principalId: string | null;
+  }>({
+    resourceType: 'SURVEY',
+    resourceId: null,
+    allObjects: false,
+    principalType: null,
+    principalId: null,
+  });
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [groupData, permissionData] = await Promise.all([
-        apiGet<GroupRecord[]>('/groups'),
+      const [permissionData, catalog] = await Promise.all([
         apiGet<PermissionRecord[]>('/permissions'),
+        apiGet<{ classes: CatalogClass[] }>('/permissions/catalog'),
       ]);
-      setGroups(groupData);
       setPermissions(permissionData);
-      if (!selectedGroupId && groupData[0]?._id) {
-        setSelectedGroupId(groupData[0]._id);
+      if (catalog.classes?.length) {
+        setTabs(catalog.classes);
+        setActiveType((current) =>
+          catalog.classes.some((entry) => entry.resourceType === current)
+            ? current
+            : catalog.classes[0].resourceType
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load permissions.');
@@ -67,77 +113,152 @@ export default function AdminPermissionsPage() {
     loadData();
   }, []);
 
-  const permissionsByGroup = useMemo(() => {
-    const byGroup = groupBy(permissions, (row) => String(row.groupId));
-    return groups.map((group) => {
-      const rows = byGroup[group._id] || [];
-      const byResource = groupBy(rows, (row) => row.resourceType);
-      return {
-        group,
-        resourceTypes: Object.keys(byResource)
-          .sort()
-          .map((resourceType) => {
-            const resourceRows = byResource[resourceType];
-            const byTarget = groupBy(resourceRows, (row) => row.target);
-            return {
-              resourceType,
-              targets: Object.keys(byTarget)
-                .sort()
-                .map((target) => ({
-                  target,
-                  actions: uniqueSorted(byTarget[target].map((row) => row.permission)),
-                })),
-            };
-          }),
-        total: rows.length,
-      };
-    });
-  }, [groups, permissions]);
+  /** Count distinct targets (objects / class-wide scopes), not individual action rows. */
+  const grantCountByType = useMemo(() => {
+    const targetsByType: Record<string, Set<string>> = {};
+    for (const row of permissions) {
+      if (!targetsByType[row.resourceType]) {
+        targetsByType[row.resourceType] = new Set();
+      }
+      const targetKey = row.resourceId ? `${row.target}::${row.resourceId}` : row.target || '*';
+      targetsByType[row.resourceType].add(targetKey);
+    }
+    const counts: Record<string, number> = {};
+    for (const [resourceType, targets] of Object.entries(targetsByType)) {
+      counts[resourceType] = targets.size;
+    }
+    return counts;
+  }, [permissions]);
 
-  const permissionsByObject = useMemo(() => {
-    const byResource = groupBy(permissions, (row) => row.resourceType);
-    return Object.keys(byResource)
-      .sort()
-      .map((resourceType) => {
-        const resourceRows = byResource[resourceType];
-        const byTarget = groupBy(resourceRows, (row) => row.target);
+  const activeTargets = useMemo(() => {
+    const resourceRows = permissions.filter((row) => row.resourceType === activeType);
+    const byTarget = groupBy(resourceRows, (row) =>
+      row.resourceId ? `${row.target}::${row.resourceId}` : row.target
+    );
+
+    return Object.keys(byTarget)
+      .sort((a, b) => {
+        const aLabel = byTarget[a][0]?.target || a;
+        const bLabel = byTarget[b][0]?.target || b;
+        return aLabel.localeCompare(bLabel);
+      })
+      .map((key) => {
+        const targetRows = byTarget[key];
+        const byPrincipal = groupBy(
+          targetRows,
+          (row) =>
+            `${row.principalType || 'GROUP'}:${row.principalId || row.groupId}:${principalLabel(row)}`
+        );
         return {
-          resourceType,
-          targets: Object.keys(byTarget)
+          target: targetRows[0]?.target || key,
+          resourceId: targetRows[0]?.resourceId || null,
+          answeredBy: targetRows[0]?.answeredBy || null,
+          submittedAt: targetRows[0]?.submittedAt || null,
+          owner: targetRows[0]?.owner || null,
+          principals: Object.keys(byPrincipal)
             .sort()
-            .map((target) => {
-              const targetRows = byTarget[target];
-              const byGroupName = groupBy(targetRows, (row) => row.groupName || String(row.groupId));
+            .map((principalKey) => {
+              const rows = byPrincipal[principalKey];
               return {
-                target,
-                groups: Object.keys(byGroupName)
-                  .sort()
-                  .map((groupName) => ({
-                    groupName,
-                    groupId: byGroupName[groupName][0]?.groupId,
-                    actions: uniqueSorted(byGroupName[groupName].map((row) => row.permission)),
-                  })),
+                principalType: (rows[0].principalType || 'GROUP') as 'USER' | 'GROUP',
+                principalId: rows[0].principalId || rows[0].groupId || '',
+                principalName: principalLabel(rows[0]),
+                actions: uniqueSorted(rows.map((row) => row.permission)),
               };
             }),
         };
       });
-  }, [permissions]);
+  }, [permissions, activeType]);
 
-  const handleUpdatePolicy = async (payload: UpdatePolicyPayload) => {
-    if (!selectedGroupId) return;
-    setError(null);
-    try {
-      await apiPost(`/groups/${selectedGroupId}/permissions`, {
-        scopes: payload.scopes,
-        resourceType: payload.resourceType,
-        allObjects: payload.allObjects,
-        objects: payload.objects,
-      });
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update permissions.');
+  const isSurveyResponseTab = activeType === 'SURVEY_RESPONSE';
+  const isSurveyTab = activeType === 'SURVEY';
+
+  const tableRows = useMemo(() => {
+    const rows: Array<{
+      key: string;
+      objectLabel: string;
+      resourceId: string | null;
+      allObjects: boolean;
+      answeredBy: string | null;
+      submittedAt: string | null;
+      owner: string | null;
+      principalType: 'USER' | 'GROUP';
+      principalId: string;
+      principalName: string;
+      actions: string[];
+    }> = [];
+
+    for (const target of activeTargets) {
+      const allObjects = !target.resourceId && (target.target === '*' || !target.target);
+      const objectLabel = allObjects ? 'All objects of this type' : target.target;
+      for (const principal of target.principals) {
+        rows.push({
+          key: `${target.resourceId || target.target}-${principal.principalType}-${principal.principalId || principal.principalName}`,
+          objectLabel,
+          resourceId: target.resourceId,
+          allObjects,
+          answeredBy: target.answeredBy,
+          submittedAt: target.submittedAt,
+          owner: target.owner,
+          principalType: principal.principalType,
+          principalId: principal.principalId,
+          principalName: principal.principalName,
+          actions: principal.actions,
+        });
+      }
     }
+
+    return rows.sort((a, b) => {
+      const byObject = a.objectLabel.localeCompare(b.objectLabel);
+      if (byObject !== 0) return byObject;
+      const byAnswered = (a.answeredBy || '').localeCompare(b.answeredBy || '');
+      if (byAnswered !== 0) return byAnswered;
+      const byOwner = (a.owner || '').localeCompare(b.owner || '');
+      if (byOwner !== 0) return byOwner;
+      return a.principalName.localeCompare(b.principalName);
+    });
+  }, [activeTargets]);
+
+  const openEditForType = () => {
+    setEditTarget({
+      resourceType: activeType,
+      resourceId: null,
+      allObjects: false,
+      principalType: null,
+      principalId: null,
+    });
+    setPolicyModalOpen(true);
   };
+
+  const openEditForRow = (row: (typeof tableRows)[number]) => {
+    setEditTarget({
+      resourceType: activeType,
+      resourceId: row.resourceId,
+      allObjects: row.allObjects,
+      principalType: row.principalType,
+      principalId: row.principalId || null,
+    });
+    setPolicyModalOpen(true);
+  };
+
+  const formatSubmittedAt = (value: string | null) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+  };
+
+  const activeTab = tabs.find((tab) => tab.resourceType === activeType) || tabs[0];
+
+  const actionLabels: Record<string, string> = {
+    ADMIN: 'Full control',
+    WRITE: 'Modify',
+    READ: 'Read',
+    CREATE: 'Create',
+    DELETE: 'Delete',
+  };
+
+  const formatActions = (actions: string[]) =>
+    actions.map((action) => actionLabels[action] || action).join(', ');
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -154,8 +275,8 @@ export default function AdminPermissionsPage() {
         </p>
         <h1 className="mt-2 text-3xl font-semibold">Permission management</h1>
         <p className="mt-2 text-[var(--muted)]">
-          Grant group access to concrete database objects: pick a class, then one, many, or all
-          existing objects. Survey responses are a separate class from surveys.
+          Windows-style access control for assets only. Choose an asset type tab, then edit
+          permissions for objects of that type.
         </p>
       </header>
 
@@ -165,194 +286,124 @@ export default function AdminPermissionsPage() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="inline-flex rounded-lg border border-[var(--border)] p-1">
-          <button
-            type="button"
-            onClick={() => setViewMode('group')}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-              viewMode === 'group' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)]'
-            }`}
-          >
-            By group
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('asset')}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-              viewMode === 'asset' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)]'
-            }`}
-          >
-            By asset
-          </button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          className="flex flex-wrap gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
+          role="tablist"
+          aria-label="Asset types"
+        >
+          {tabs.map((tab) => {
+            const selected = tab.resourceType === activeType;
+            const count = grantCountByType[tab.resourceType] || 0;
+            return (
+              <button
+                key={tab.resourceType}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                id={`perm-tab-${tab.resourceType}`}
+                onClick={() => setActiveType(tab.resourceType)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  selected
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'text-[var(--muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--foreground)]'
+                }`}
+              >
+                {tab.label}
+                <span className={`ml-1.5 text-xs ${selected ? 'text-white/80' : 'text-[var(--muted)]'}`}>
+                  ({count})
+                </span>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <select
-            value={selectedGroupId}
-            onChange={(e) => setSelectedGroupId(e.target.value)}
-            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-          >
-            <option value="">Select group to edit</option>
-            {groups.map((group) => (
-              <option key={group._id} value={group._id}>
-                {group.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => {
-              if (!selectedGroupId) {
-                setError('Select a group first.');
-                return;
-              }
-              setPolicyModalOpen(true);
-            }}
-            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
-          >
-            Edit policy
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={openEditForType}
+          className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
+        >
+          Edit {activeTab?.label?.toLowerCase() || 'asset'} permissions…
+        </button>
       </div>
 
-      {loading ? (
-        <p className="text-[var(--muted)]">Loading permissions…</p>
-      ) : viewMode === 'group' ? (
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Permissions by group</h2>
-          {permissionsByGroup.length === 0 ? (
-            <p className="text-[var(--muted)]">No groups found.</p>
-          ) : (
-            permissionsByGroup.map(({ group, resourceTypes, total }) => (
-              <article
-                key={group._id}
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"
-              >
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-xl font-semibold">{group.name}</h3>
-                    <p className="text-sm text-[var(--muted)]">{total} permission row(s)</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedGroupId(group._id);
-                      setPolicyModalOpen(true);
-                    }}
-                    className="text-sm font-medium text-[var(--accent)] hover:underline"
-                  >
-                    Edit
-                  </button>
-                </div>
-
-                {resourceTypes.length === 0 ? (
-                  <p className="text-sm text-[var(--muted)]">No permissions assigned.</p>
-                ) : (
-                  <div className="space-y-4">
-                    {resourceTypes.map(({ resourceType, targets }) => (
-                      <div key={`${group._id}-${resourceType}`}>
-                        <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-                          {resourceType}
-                        </h4>
-                        <div className="overflow-hidden rounded-lg border border-[var(--border)]">
-                          <table className="min-w-full text-left text-sm">
-                            <thead className="bg-[var(--accent-soft)]/40 text-[var(--muted)]">
-                              <tr>
-                                <th className="px-3 py-2 font-medium">Target / asset</th>
-                                <th className="px-3 py-2 font-medium">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {targets.map(({ target, actions }) => (
-                                <tr key={`${group._id}-${resourceType}-${target}`} className="border-t border-[var(--border)]">
-                                  <td className="px-3 py-2 font-medium">{target}</td>
-                                  <td className="px-3 py-2">
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {actions.map((action) => (
-                                        <span
-                                          key={action}
-                                          className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-medium text-[var(--accent-strong)]"
-                                        >
-                                          {action}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </article>
-            ))
-          )}
-        </section>
-      ) : (
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Permissions by asset / resource</h2>
-          {permissionsByObject.length === 0 ? (
-            <p className="text-[var(--muted)]">No permissions found.</p>
-          ) : (
-            permissionsByObject.map(({ resourceType, targets }) => (
-              <article
-                key={resourceType}
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5"
-              >
-                <h3 className="mb-4 text-xl font-semibold">{resourceType}</h3>
-                <div className="space-y-4">
-                  {targets.map(({ target, groups: targetGroups }) => (
-                    <div key={`${resourceType}-${target}`}>
-                      <h4 className="mb-2 text-sm font-semibold text-[var(--foreground)]">
-                        Target: <span className="font-mono">{target}</span>
-                      </h4>
-                      <div className="overflow-hidden rounded-lg border border-[var(--border)]">
-                        <table className="min-w-full text-left text-sm">
-                          <thead className="bg-[var(--accent-soft)]/40 text-[var(--muted)]">
-                            <tr>
-                              <th className="px-3 py-2 font-medium">Group</th>
-                              <th className="px-3 py-2 font-medium">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {targetGroups.map(({ groupName, groupId, actions }) => (
-                              <tr key={`${resourceType}-${target}-${groupId}`} className="border-t border-[var(--border)]">
-                                <td className="px-3 py-2 font-medium">{groupName}</td>
-                                <td className="px-3 py-2">
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {actions.map((action) => (
-                                      <span
-                                        key={action}
-                                        className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-medium text-[var(--accent-strong)]"
-                                      >
-                                        {action}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </article>
-            ))
-          )}
-        </section>
-      )}
+      <section
+        className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
+        role="tabpanel"
+        aria-labelledby={`perm-tab-${activeType}`}
+      >
+        {loading ? (
+          <p className="p-5 text-[var(--muted)]">Loading permissions…</p>
+        ) : tableRows.length === 0 ? (
+          <p className="p-5 text-[var(--muted)]">
+            No permissions for {activeTab?.label?.toLowerCase() || 'this type'} yet. Use Edit to
+            select assets and assign users or groups.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
+                <tr>
+                  <th className="px-4 py-3 font-medium">
+                    {isSurveyResponseTab ? 'Survey' : 'Object'}
+                  </th>
+                  {isSurveyResponseTab && (
+                    <>
+                      <th className="px-4 py-3 font-medium">Answered by</th>
+                      <th className="px-4 py-3 font-medium">Submitted</th>
+                    </>
+                  )}
+                  {isSurveyTab && <th className="px-4 py-3 font-medium">Owner</th>}
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Type</th>
+                  <th className="px-4 py-3 font-medium">Permissions</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tableRows.map((row) => (
+                  <tr key={row.key} className="border-b border-[var(--border)] last:border-0">
+                    <td className="max-w-xs px-4 py-3 font-medium">{row.objectLabel}</td>
+                    {isSurveyResponseTab && (
+                      <>
+                        <td className="px-4 py-3">{row.answeredBy || '—'}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-[var(--muted)]">
+                          {formatSubmittedAt(row.submittedAt)}
+                        </td>
+                      </>
+                    )}
+                    {isSurveyTab && <td className="px-4 py-3">{row.owner || '—'}</td>}
+                    <td className="px-4 py-3">{row.principalName}</td>
+                    <td className="px-4 py-3 text-[var(--muted)]">
+                      {row.principalType === 'USER' ? 'User' : 'Group'}
+                    </td>
+                    <td className="px-4 py-3">{formatActions(row.actions)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => openEditForRow(row)}
+                        className="text-[var(--accent)] hover:underline"
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <PermissionModal
         isOpen={policyModalOpen}
         onClose={() => setPolicyModalOpen(false)}
-        onUpdatePolicy={handleUpdatePolicy}
-        initialResourceType="SURVEY"
+        onApplied={loadData}
+        initialResourceType={editTarget.resourceType}
+        initialResourceId={editTarget.resourceId}
+        initialAllObjects={editTarget.allObjects}
+        initialPrincipalType={editTarget.principalType}
+        initialPrincipalId={editTarget.principalId}
       />
     </div>
   );

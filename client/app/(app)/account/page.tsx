@@ -42,15 +42,12 @@ function ProfileContent() {
         const profile = await apiGet<{
           user: MeUser;
           permissions: Array<{ resourceType: string; permission: string }>;
+          isAdmin?: boolean;
         }>('/auth/me');
 
         setMe(profile.user);
 
-        const manage = profile.permissions.some(
-          (p) =>
-            p.resourceType === 'USER' &&
-            (p.permission === 'WRITE' || p.permission === 'ADMIN' || p.permission === 'CREATE')
-        );
+        const manage = Boolean(profile.isAdmin);
         setCanManageUsers(manage);
 
         if (manage) {

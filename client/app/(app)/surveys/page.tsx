@@ -13,7 +13,8 @@ interface SurveyRecord {
   questionCount?: number;
   createdAt?: string;
   updatedAt?: string;
-  createdBy?: { username?: string } | string;
+  ownerId?: { username?: string; email?: string } | string;
+  createdBy?: { username?: string; email?: string } | string;
 }
 
 interface SurveyListResponse {
@@ -29,6 +30,16 @@ interface SurveyListResponse {
 }
 
 type SortField = 'name' | 'createdAt' | 'updatedAt' | 'questionCount';
+
+function surveyOwnerName(survey: SurveyRecord): string {
+  const pick = (value: SurveyRecord['ownerId']) => {
+    if (value && typeof value === 'object') {
+      return value.username || value.email || null;
+    }
+    return null;
+  };
+  return pick(survey.ownerId) || pick(survey.createdBy) || '—';
+}
 
 export default function SurveysPage() {
   const { pushToast } = useToast();
@@ -215,7 +226,7 @@ export default function SurveysPage() {
                       Questions{sortMark('questionCount')}
                     </button>
                   </th>
-                  <th className="px-4 py-3 font-medium">Created by</th>
+                  <th className="px-4 py-3 font-medium">Owner</th>
                   <th className="px-4 py-3 font-medium">
                     <button
                       type="button"
@@ -236,11 +247,7 @@ export default function SurveysPage() {
                       <div className="text-xs text-[var(--muted)]">{survey.description || '—'}</div>
                     </td>
                     <td className="px-4 py-3">{survey.questionCount ?? 0}</td>
-                    <td className="px-4 py-3">
-                      {typeof survey.createdBy === 'object'
-                        ? survey.createdBy?.username || '—'
-                        : '—'}
-                    </td>
+                    <td className="px-4 py-3">{surveyOwnerName(survey)}</td>
                     <td className="px-4 py-3">
                       {survey.updatedAt ? new Date(survey.updatedAt).toLocaleString() : '—'}
                     </td>

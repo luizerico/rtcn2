@@ -1,10 +1,10 @@
-openapi: 3.0.3
+﻿openapi: 3.0.3
 info:
   title: Projects RBAC API
   description: |
     REST API for authentication, groups, membership, RBAC policies, and protected assets.
 
-    Import this file into Postman (**Import → File**), Insomnia, Thunder Client, or any OpenAPI 3 tool.
+    Import this file into Postman (**Import â†’ File**), Insomnia, Thunder Client, or any OpenAPI 3 tool.
   version: 1.0.0
   contact:
     name: Projects API
@@ -940,7 +940,7 @@ paths:
   /api/permissions:
     get:
       tags: [Permissions]
-      summary: List all permissions with group names
+      summary: List all permissions with principal names
       operationId: listPermissions
       security:
         - bearerAuth: []
@@ -956,12 +956,105 @@ paths:
                     - $ref: '#/components/schemas/Permission'
                     - type: object
                       properties:
+                        principalType:
+                          type: string
+                          enum: [USER, GROUP]
+                        principalId:
+                          type: string
+                        principalName:
+                          type: string
                         groupName:
                           type: string
         '401':
           description: Unauthorized
         '403':
           description: Forbidden
+
+  /api/permissions/catalog:
+    get:
+      tags: [Permissions]
+      summary: Catalog of asset classes and USER/GROUP principals
+      operationId: getPermissionCatalog
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Asset classes (only) plus users and groups for ACL editing
+
+  /api/permissions/acl:
+    get:
+      tags: [Permissions]
+      summary: Load Windows-style ACL for selected assets
+      operationId: getAssetAcl
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: resourceType
+          required: true
+          schema:
+            type: string
+            enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+        - in: query
+          name: allObjects
+          schema:
+            type: boolean
+        - in: query
+          name: resourceIds
+          schema:
+            type: string
+          description: Comma-separated asset ids
+      responses:
+        '200':
+          description: ACL entries for the selection
+    post:
+      tags: [Permissions]
+      summary: Apply Windows-style ACL to selected assets
+      operationId: applyAssetAcl
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resourceType, entries]
+              properties:
+                resourceType:
+                  type: string
+                  enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+                allObjects:
+                  type: boolean
+                objects:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      label:
+                        type: string
+                entries:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      principalType:
+                        type: string
+                        enum: [USER, GROUP]
+                      principalId:
+                        type: string
+                      scopes:
+                        type: array
+                        items:
+                          type: string
+                          enum: [READ, WRITE, CREATE, DELETE, ADMIN]
+      responses:
+        '200':
+          description: ACL applied
+        '400':
+          description: Validation error
 
   /api/groups/{groupId}/permissions:
     get:
@@ -1331,3 +1424,4 @@ paths:
           description: Response saved
         '400':
           description: Validation error
+

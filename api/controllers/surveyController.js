@@ -256,6 +256,7 @@ exports.listSurveys = async (req, res) => {
       .sort({ [sortField]: order === 'asc' ? 1 : -1 })
       .skip(skip)
       .limit(limit)
+      .populate('ownerId', 'username email')
       .populate('createdBy', 'username email')
       .populate('updatedBy', 'username email');
 
@@ -320,6 +321,7 @@ exports.createSurvey = async (req, res) => {
 exports.getSurveyById = async (req, res) => {
   try {
     const survey = await Survey.findById(req.params.id)
+      .populate('ownerId', 'username email')
       .populate('createdBy', 'username email')
       .populate('updatedBy', 'username email');
 
@@ -389,9 +391,15 @@ exports.submitSurveyResponse = async (req, res) => {
       return res.status(400).json({ message: validated.error });
     }
 
+    const answerPreview = validated.answers
+      .map((answer) => String(answer.value ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(', ');
+    const respondentName = req.user.username || 'user';
     const response = await SurveyResponse.create({
-      name: `Response: ${survey.name}`,
-      description: `Submitted response for survey ${survey._id}`,
+      name: `${respondentName} · ${survey.name}`,
+      description: answerPreview || `Submitted response for ${survey.name}`,
       kind: 'SURVEY_RESPONSE',
       surveyId: survey._id,
       answers: validated.answers,

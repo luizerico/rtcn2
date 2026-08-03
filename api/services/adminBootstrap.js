@@ -3,7 +3,11 @@ const User = require('../models/User');
 const Group = require('../models/Group');
 const Permission = require('../models/Permission');
 const { buildFullAdminPermissions } = require('../constants/rbac');
-const { replaceGroupPermissions, listGroupPermissions } = require('./rbacService');
+const {
+  replaceGroupPermissions,
+  listGroupPermissions,
+  migratePermissionPrincipals,
+} = require('./rbacService');
 
 /**
  * Drop abstract OBJECT/ASSET permission rows (permissions are concrete DB objects now).
@@ -43,6 +47,7 @@ async function ensureAdminBootstrap({
   }
 
   await migrateObjectToAsset(mongooseConnection);
+  await migratePermissionPrincipals();
 
   let adminGroup = await Group.findOne({ name: 'admin' });
   if (!adminGroup) {

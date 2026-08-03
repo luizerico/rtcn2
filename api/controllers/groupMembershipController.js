@@ -1,6 +1,6 @@
 const Group = require('../models/Group');
 const User = require('../models/User');
-const { RESOURCE_TYPES } = require('../constants/rbac');
+const { PERMISSION_RESOURCE_TYPES } = require('../constants/rbac');
 const {
   listGroupPermissions,
   replaceGroupClassPermissions,
@@ -87,9 +87,9 @@ exports.updateGroupPermissions = async (req, res) => {
     }
 
     const normalizedResourceType = String(resourceType || '').toUpperCase();
-    if (!RESOURCE_TYPES.includes(normalizedResourceType)) {
+    if (!PERMISSION_RESOURCE_TYPES.includes(normalizedResourceType)) {
       return res.status(400).json({
-        message: 'Invalid resource type. Choose a concrete class (USER, GROUP, SURVEY, …).',
+        message: `Invalid resource type. Permissions only apply to asset subclasses: ${PERMISSION_RESOURCE_TYPES.join(', ')}.`,
       });
     }
 

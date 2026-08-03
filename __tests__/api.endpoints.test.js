@@ -50,9 +50,9 @@ describe('API endpoints', () => {
     });
     secondaryUserId = secondary.body.user.id;
 
-    // Grant alice full RBAC so endpoint CRUD suites exercise authorized paths.
+    // Grant alice full asset RBAC and admin-group membership for identity routes.
     const adminGroup = await Group.create({
-      name: 'alice-admin',
+      name: 'admin',
       description: 'Test full-access group',
       members: [userId],
     });
@@ -320,29 +320,64 @@ describe('API endpoints', () => {
       expect(addMember.status).toBe(200);
       expect(addMember.body.group.members.map(String)).toContain(String(secondaryUserId));
 
+      const survey = await request(app)
+        .post('/api/surveys')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Ops survey',
+          questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+        });
+      expect(survey.status).toBe(201);
+
       const updatePermissions = await request(app)
         .post(`/api/groups/${groupId}/permissions`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           scopes: ['READ', 'WRITE'],
-          resourceType: 'USER',
+          resourceType: 'SURVEY',
           allObjects: false,
-          objects: [{ id: secondaryUserId, label: 'bob' }],
+          objects: [{ id: survey.body._id, label: 'Ops survey' }],
         });
       expect(updatePermissions.status).toBe(200);
       expect(updatePermissions.body.permissions).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             permission: 'READ',
-            target: 'bob',
-            resourceType: 'USER',
+            target: 'Ops survey',
+            resourceType: 'SURVEY',
             resourceId: expect.anything(),
           }),
           expect.objectContaining({
             permission: 'WRITE',
-            target: 'bob',
-            resourceType: 'USER',
+            target: 'Ops survey',
+            resourceType: 'SURVEY',
             resourceId: expect.anything(),
+          }),
+        ])
+      );
+
+      const userAcl = await request(app)
+        .post('/api/permissions/acl')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          resourceType: 'SURVEY',
+          allObjects: false,
+          objects: [{ id: survey.body._id, label: 'Ops survey' }],
+          entries: [
+            {
+              principalType: 'USER',
+              principalId: secondaryUserId,
+              scopes: ['READ'],
+            },
+          ],
+        });
+      expect(userAcl.status).toBe(200);
+      expect(userAcl.body.acl.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            principalType: 'USER',
+            principalId: String(secondaryUserId),
+            scopes: expect.arrayContaining(['READ']),
           }),
         ])
       );
@@ -377,8 +412,14 @@ describe('API endpoints', () => {
       const badPermissions = await request(app)
         .post(`/api/groups/${groupId}/permissions`)
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ scopes: [], resourceType: 'USER', allObjects: true });
+        .send({ scopes: [], resourceType: 'SURVEY', allObjects: true });
       expect(badPermissions.status).toBe(400);
+
+      const identityDenied = await request(app)
+        .post(`/api/groups/${groupId}/permissions`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ scopes: ['READ'], resourceType: 'USER', allObjects: true });
+      expect(identityDenied.status).toBe(400);
     });
   });
 

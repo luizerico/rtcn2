@@ -59,7 +59,7 @@ describe('RBAC admin full access', () => {
     viewerToken = viewerLogin.body.token;
   });
 
-  it('seeds full admin permissions for USER, GROUP, ASSET, and subclasses', async () => {
+  it('seeds full admin permissions for asset subclasses only', async () => {
     const me = await request(app)
       .get('/api/auth/me')
       .set('Authorization', `Bearer ${adminToken}`);

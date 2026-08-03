@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { apiDelete, apiGet, apiPost } from '@/lib/apiUtils';
-import AddMemberModal, { AddMemberPayload } from '@/components/ui/AddMemberModal';
+import EditMembersModal, { EditMembersPayload } from '@/components/ui/EditMembersModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 interface GroupRecord {
@@ -20,6 +20,8 @@ export default function AdminGroupsPage() {
   const [description, setDescription] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [memberModalOpen, setMemberModalOpen] = useState(false);
+
+  const selectedGroup = groups.find((group) => group._id === selectedGroupId) || null;
 
   const loadGroups = async () => {
     setLoading(true);
@@ -61,14 +63,16 @@ export default function AdminGroupsPage() {
     }
   };
 
-  const handleAddMember = async ({ userId }: AddMemberPayload) => {
+  const handleAddMember = async ({ userId }: EditMembersPayload) => {
     if (!selectedGroupId) return;
-    try {
-      await apiPost(`/groups/${selectedGroupId}/members`, { targetUserId: userId });
-      await loadGroups();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add member.');
-    }
+    await apiPost(`/groups/${selectedGroupId}/members`, { targetUserId: userId });
+    await loadGroups();
+  };
+
+  const handleRemoveMember = async ({ userId }: EditMembersPayload) => {
+    if (!selectedGroupId) return;
+    await apiDelete(`/groups/${selectedGroupId}/members`, { targetUserId: userId });
+    await loadGroups();
   };
 
   return (
@@ -154,7 +158,7 @@ export default function AdminGroupsPage() {
                       }}
                       className="text-[var(--accent)] hover:underline"
                     >
-                      Add member
+                      Edit members
                     </button>
                     <button
                       type="button"
@@ -171,11 +175,13 @@ export default function AdminGroupsPage() {
         )}
       </section>
 
-      <AddMemberModal
-        resourceType="group"
+      <EditMembersModal
         isOpen={memberModalOpen}
         onClose={() => setMemberModalOpen(false)}
+        groupName={selectedGroup?.name}
+        memberIds={selectedGroup?.members?.map(String) || []}
         onAddUser={handleAddMember}
+        onRemoveUser={handleRemoveMember}
       />
     </div>
   );
