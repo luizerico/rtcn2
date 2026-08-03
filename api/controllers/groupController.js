@@ -13,10 +13,7 @@ exports.getAllGroups = async (req, res) => {
 
 exports.createGroup = async (req, res) => {
   try {
-    const { name, description } = req.body;
-    if (!name) {
-      return res.status(400).json({ message: 'Group name is required.' });
-    }
+    const { name, description } = req.validated || req.body;
 
     const existing = await Group.findOne({ name });
     if (existing) {
