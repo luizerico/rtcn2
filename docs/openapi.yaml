@@ -1,10 +1,10 @@
-﻿openapi: 3.0.3
+openapi: 3.0.3
 info:
   title: Projects RBAC API
   description: |
     REST API for authentication, groups, membership, RBAC policies, and protected assets.
 
-    Import this file into Postman (**Import â†’ File**), Insomnia, Thunder Client, or any OpenAPI 3 tool.
+    Import this file into Postman (**Import → File**), Insomnia, Thunder Client, or any OpenAPI 3 tool.
   version: 1.0.0
   contact:
     name: Projects API
@@ -26,6 +26,7 @@ tags:
   - name: Permissions
   - name: Assets
   - name: Surveys
+  - name: Logs
 
 components:
   securitySchemes:
@@ -332,6 +333,82 @@ components:
                 type: string
               value:
                 description: Text, Yes/No, or multiple-choice option
+
+    ActionLog:
+      type: object
+      properties:
+        _id:
+          type: string
+        userId:
+          type: string
+          nullable: true
+        username:
+          type: string
+        action:
+          type: string
+          example: auth.login
+        resourceType:
+          type: string
+          example: AUTH
+        resourceId:
+          type: string
+          nullable: true
+        method:
+          type: string
+          example: POST
+        path:
+          type: string
+          example: /api/auth/login
+        statusCode:
+          type: integer
+          example: 200
+        success:
+          type: boolean
+        message:
+          type: string
+        ipAddress:
+          type: string
+        userAgent:
+          type: string
+        clientApp:
+          type: string
+        meta:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ActionLogListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionLog'
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+            hasPrev:
+              type: boolean
+            hasNext:
+              type: boolean
+        sort:
+          type: object
+          properties:
+            field:
+              type: string
+            order:
+              type: string
+              enum: [asc, desc]
 
 paths:
   /api/health:
@@ -1425,3 +1502,136 @@ paths:
         '400':
           description: Validation error
 
+  /api/logs:
+    get:
+      tags: [Logs]
+      summary: Search and filter action logs
+      description: |
+        Admin-only (`LOG:READ` via admin group membership). Filtering, search, sort, and
+        pagination are applied in the backend.
+      operationId: listActionLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Free-text search across username, action, path, message, resourceId
+        - in: query
+          name: username
+          schema:
+            type: string
+        - in: query
+          name: userId
+          schema:
+            type: string
+        - in: query
+          name: action
+          schema:
+            type: string
+            example: auth.login
+        - in: query
+          name: resourceType
+          schema:
+            type: string
+            example: USER
+        - in: query
+          name: resourceId
+          schema:
+            type: string
+        - in: query
+          name: method
+          schema:
+            type: string
+            enum: [POST, PUT, PATCH, DELETE]
+        - in: query
+          name: statusCode
+          schema:
+            type: integer
+        - in: query
+          name: success
+          schema:
+            type: boolean
+        - in: query
+          name: clientApp
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [createdAt, username, action, resourceType, method, statusCode, success]
+            default: createdAt
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Paginated action logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionLogListResponse'
+        '401':
+          description: Not authenticated
+        '403':
+          description: Forbidden
+
+  /api/logs/filters:
+    get:
+      tags: [Logs]
+      summary: Distinct filter values for the logs UI
+      operationId: getActionLogFilters
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Filter option lists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  actions:
+                    type: array
+                    items:
+                      type: string
+                  resourceTypes:
+                    type: array
+                    items:
+                      type: string
+                  sortableFields:
+                    type: array
+                    items:
+                      type: string
+        '401':
+          description: Not authenticated
+        '403':
+          description: Forbidden

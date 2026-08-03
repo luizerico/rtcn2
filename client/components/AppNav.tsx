@@ -14,6 +14,7 @@ const links = [
   { href: '/admin/groups', label: 'Groups', indent: true },
   { href: '/admin/permissions', label: 'Permissions', indent: true },
   { href: '/admin/sessions', label: 'Sessions', indent: true },
+  { href: '/admin/logs', label: 'Logs', indent: true },
 ];
 
 function NavLink({ href, label, indent }: { href: string; label: string; indent?: boolean }) {

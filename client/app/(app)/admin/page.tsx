@@ -23,6 +23,11 @@ const adminSections = [
     description: 'Review connected users and disconnect sessions stored in the shared auth database.',
   },
   {
+    href: '/admin/logs',
+    title: 'Action logs',
+    description: 'Search and filter user actions recorded in the database for audit and troubleshooting.',
+  },
+  {
     href: '/surveys',
     title: 'Surveys',
     description: 'Create Survey assets with questions and visualize SurveyResponse answers.',

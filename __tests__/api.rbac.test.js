@@ -186,6 +186,9 @@ describe('RBAC admin full access', () => {
     const groups = await request(app).get('/api/groups').set(auth);
     expect(groups.status).toBe(403);
 
+    const logs = await request(app).get('/api/logs').set(auth);
+    expect(logs.status).toBe(403);
+
     const assets = await request(app).get('/api/assets').set(auth);
     expect(assets.status).toBe(403);
 

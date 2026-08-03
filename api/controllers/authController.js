@@ -44,6 +44,8 @@ exports.registerUser = async (req, res) => {
       password: hashedPassword,
     });
 
+    req.actionLogContext = { userId: newUser._id, username: newUser.username };
+
     res.status(201).json({
       message: 'User registered successfully.',
       user: { id: newUser._id, username: newUser.username, email: newUser.email },
@@ -68,6 +70,9 @@ exports.loginUser = async (req, res) => {
     });
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
+      if (user) {
+        req.actionLogContext = { userId: user._id, username: user.username };
+      }
       return res.status(401).json({
         message: 'Invalid credentials.',
         code: 'INVALID_CREDENTIALS',
@@ -78,6 +83,8 @@ exports.loginUser = async (req, res) => {
       user,
       ...requestMeta(req),
     });
+
+    req.actionLogContext = { userId: user._id, username: user.username };
 
     res.status(200).json({
       message: 'Login successful.',
