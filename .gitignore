@@ -3,3 +3,9 @@
 .env
 build/
 *.log*
+
+# Python reports service
+reports/.venv/
+reports/**/__pycache__/
+reports/**/*.py[cod]
+reports/.pytest_cache/

@@ -98,6 +98,7 @@ docker compose up --build
 |---------|---------------------|---------|
 | MongoDB | `27178` | Database |
 | App | `3000` | Next.js UI + API |
+| Reports | `8000` | FastAPI GraphQL reports (`/graphql`) |
 
 ## Cloud deployment
 
@@ -165,9 +166,19 @@ server.js                 Unified Next.js + API entry
 api/                      Express routes mounted at /api/*
 client/app/(app)/         Home + Admin UI (with menu)
 client/app/(auth)/        Login / register
+reports/                  FastAPI + GraphQL reports service (separate container)
 docs/openapi.yaml         OpenAPI 3 specification
 __tests__/                Component + API tests
 ```
+
+## Reports GraphQL service
+
+Separate FastAPI container that reads the same MongoDB and exposes analytics at `/graphql`.
+
+- Health: [http://localhost:8000/health](http://localhost:8000/health)
+- GraphQL: [http://localhost:8000/graphql](http://localhost:8000/graphql)
+- Auth: send `Authorization: Bearer <token>` from the main app login
+- Details: [`reports/README.md`](reports/README.md)
 
 ## RBAC notes
 

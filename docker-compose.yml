@@ -39,6 +39,8 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD must be set}
       NEXT_PUBLIC_API_BASE_URL: /api
       CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
+      REPORTS_URL: ${REPORTS_URL:-http://reports:8000}
+      NEXT_PUBLIC_REPORTS_URL: ${NEXT_PUBLIC_REPORTS_URL:-http://localhost:8000}
     volumes:
       - ./:/app
     command: >
@@ -54,6 +56,39 @@ services:
         condition: service_healthy
     networks:
       - projects_network
+
+  reports:
+    build:
+      context: ./reports
+      dockerfile: Dockerfile
+    container_name: projects_reports
+    restart: unless-stopped
+    ports:
+      - "${REPORTS_HOST_PORT:-8000}:8000"
+    environment:
+      MONGO_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASS:-rootpassword}@mongodb:27017/${DB_NAME:-projects}?authSource=admin
+      MONGODB_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASS:-rootpassword}@mongodb:27017/${DB_NAME:-projects}?authSource=admin
+      DB_NAME: ${DB_NAME:-projects}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      REQUIRE_AUTH: ${REPORTS_REQUIRE_AUTH:-true}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - projects_network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 networks:
   projects_network:

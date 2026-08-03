@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -15,6 +15,7 @@ const links = [
   { href: '/admin/permissions', label: 'Permissions', indent: true },
   { href: '/admin/sessions', label: 'Sessions', indent: true },
   { href: '/admin/logs', label: 'Logs', indent: true },
+  { href: '/admin/reports', label: 'Reports', indent: true },
 ];
 
 function NavLink({

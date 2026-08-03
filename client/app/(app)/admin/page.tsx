@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 const adminSections = [
@@ -26,6 +26,11 @@ const adminSections = [
     href: '/admin/logs',
     title: 'Action logs',
     description: 'Search and filter user actions recorded in the database for audit and troubleshooting.',
+  },
+  {
+    href: '/admin/reports',
+    title: 'Reports sample',
+    description: 'Exercise the FastAPI GraphQL reports service with live platform analytics.',
   },
   {
     href: '/surveys',
