@@ -1,0 +1,59 @@
+name: Clarify issue 10 superseded
+
+on:
+  push:
+    branches:
+      - chore/close-issue-10
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  clarify-superseded:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comment that #10 is superseded by #17
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(cat <<'EOF'
+          ## Completed / superseded by #17
+
+          Issue #10 (registration and admin user creation skip password policy) is fully covered by the shared password policy work in **#17**.
+
+          Canonical fix:
+          - Branch: `fix/issue-17`
+          - SHA: `6eb9dc6fdce378e3826302c0d56386b31e575168`
+          - Adds `api/utils/passwordPolicy.js` (`assertPasswordPolicy`, min length 8)
+          - Wired into register, admin create user, reset, change-own, and admin change password
+          - OpenAPI + tests updated
+
+          `fix/issue-10` was a duplicate implementation of the same change and should not be merged alongside #17.
+
+          Closing / confirming #10 as completed via #17 (no additional code needed).
+          EOF
+          )"
+          body="$(printf '%s\n' "$body" | sed 's/^          //')"
+          gh issue comment 10 --repo luizerico/baseapp --body "$body"
+          # Ensure closed even if reopen happened
+          gh issue close 10 --repo luizerico/baseapp --reason completed || true
+          mkdir -p scripts
+          echo '{"issue":10,"state":"closed","outcome":"superseded_by_17","canonical_branch":"fix/issue-17","canonical_sha":"6eb9dc6fdce378e3826302c0d56386b31e575168","duplicate_branch":"fix/issue-10","duplicate_sha":"6a94bac6f4388cd9ab3b593e22dbe0eef381a2bf"}' > scripts/close-issue-10-result.json
+
+      - name: Commit close result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p scripts
+          git add scripts/close-issue-10-result.json
+          if git diff --cached --quiet; then
+            echo "No result file to commit"
+          else
+            git commit -m "Record #10 closed as superseded by #17"
+            git push
+          fi

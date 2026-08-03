@@ -24,10 +24,7 @@ exports.getUserById = async (req, res) => {
 
 exports.createUser = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: 'Username, email, and password are required.' });
-    }
+    const { username, email, password } = req.validated || req.body;
 
     const existing = await User.findOne({ $or: [{ username }, { email }] });
     if (existing) {
@@ -35,10 +32,12 @@ exports.createUser = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    // Admin-provisioned accounts are trusted and can sign in immediately.
     const user = await User.create({
       username,
       email,
       password: hashedPassword,
+      isVerified: true,
     });
 
     res.status(201).json({
