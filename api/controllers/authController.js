@@ -1,6 +1,7 @@
-const User = require('../models/User');
+﻿const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
 const {
   createSession,
   revokeSession,
@@ -26,13 +27,13 @@ function requestMeta(req) {
 exports.registerUser = async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) {
-    return res.status(400).json({ message: 'Please include all fields.' });
+    return sendError(res, 400, 'Please include all fields.', ERROR_CODES.VALIDATION);
   }
 
   try {
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(400).json({ message: 'User or Email already registered.' });
+      return sendError(res, 400, 'User or Email already registered.', ERROR_CODES.CONFLICT);
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -51,8 +52,7 @@ exports.registerUser = async (req, res) => {
       user: { id: newUser._id, username: newUser.username, email: newUser.email },
     });
   } catch (err) {
-    console.error('Registration Error:', err);
-    res.status(500).json({ message: 'Server error during registration.' });
+    return sendServerError(res, err, 'Server error during registration.');
   }
 };
 
@@ -61,7 +61,7 @@ exports.loginUser = async (req, res) => {
   const loginId = username || email;
 
   if (!loginId || !password) {
-    return res.status(400).json({ message: 'Please provide username and password.' });
+    return sendError(res, 400, 'Please provide username and password.', ERROR_CODES.VALIDATION);
   }
 
   try {
@@ -73,10 +73,7 @@ exports.loginUser = async (req, res) => {
       if (user) {
         req.actionLogContext = { userId: user._id, username: user.username };
       }
-      return res.status(401).json({
-        message: 'Invalid credentials.',
-        code: 'INVALID_CREDENTIALS',
-      });
+      return sendError(res, 401, 'Invalid credentials.', ERROR_CODES.INVALID_CREDENTIALS);
     }
 
     const { token, session } = await createSession({
@@ -94,8 +91,7 @@ exports.loginUser = async (req, res) => {
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err) {
-    console.error('Login Error:', err);
-    res.status(500).json({ message: 'Server error during login.' });
+    return sendServerError(res, err, 'Server error during login.');
   }
 };
 
@@ -106,7 +102,7 @@ exports.logoutUser = async (req, res) => {
     }
     res.status(200).json({ message: 'Logged out successfully.' });
   } catch (err) {
-    res.status(500).json({ message: 'Server error during logout.' });
+    return sendServerError(res, err, 'Server error during logout.');
   }
 };
 
@@ -114,13 +110,13 @@ exports.requestPasswordReset = async (req, res) => {
   const { email } = req.query;
 
   if (!email) {
-    return res.status(400).json({ message: 'Email is required.' });
+    return sendError(res, 400, 'Email is required.', ERROR_CODES.VALIDATION);
   }
 
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+      return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const resetToken = crypto.randomUUID();
@@ -139,8 +135,7 @@ exports.requestPasswordReset = async (req, res) => {
       ...(process.env.NODE_ENV !== 'production' ? { resetToken } : {}),
     });
   } catch (err) {
-    console.error('Password Reset Error:', err);
-    res.status(500).json({ message: 'Error requesting password reset.' });
+    return sendServerError(res, err, 'Error requesting password reset.');
   }
 };
 
@@ -149,7 +144,7 @@ exports.resetPassword = async (req, res) => {
   const { newPassword } = req.body;
 
   if (!newPassword) {
-    return res.status(400).json({ message: 'New password is required.' });
+    return sendError(res, 400, 'New password is required.', ERROR_CODES.VALIDATION);
   }
 
   try {
@@ -158,14 +153,14 @@ exports.resetPassword = async (req, res) => {
     );
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired password reset token.' });
+      return sendError(res, 400, 'Invalid or expired password reset token.', ERROR_CODES.VALIDATION);
     }
 
     if (user.tokenExpiry < new Date()) {
       await User.findByIdAndUpdate(user._id, {
         $set: { resetToken: null, tokenExpiry: null },
       });
-      return res.status(400).json({ message: 'Password reset link has expired.' });
+      return sendError(res, 400, 'Password reset link has expired.', ERROR_CODES.VALIDATION);
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -177,8 +172,7 @@ exports.resetPassword = async (req, res) => {
 
     res.status(200).json({ message: 'Password reset successful.' });
   } catch (err) {
-    console.error('Password Reset Error:', err);
-    res.status(500).json({ message: 'Server error during password reset.' });
+    return sendServerError(res, err, 'Server error during password reset.');
   }
 };
 
@@ -210,16 +204,16 @@ exports.getCurrentUser = async (req, res) => {
 exports.changeOwnPassword = async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) {
-    return res.status(400).json({ message: 'Current password and new password are required.' });
+    return sendError(res, 400, 'Current password and new password are required.', ERROR_CODES.VALIDATION);
   }
   if (String(newPassword).length < 8) {
-    return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+    return sendError(res, 400, 'New password must be at least 8 characters.', ERROR_CODES.VALIDATION);
   }
 
   try {
     const user = await User.findById(req.user._id);
     if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
-      return res.status(400).json({ message: 'Current password is incorrect.' });
+      return sendError(res, 400, 'Current password is incorrect.', ERROR_CODES.VALIDATION);
     }
 
     user.password = await bcrypt.hash(newPassword, 10);
@@ -231,7 +225,7 @@ exports.changeOwnPassword = async (req, res) => {
       code: 'PASSWORD_CHANGED',
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server error updating password.' });
+    return sendServerError(res, err, 'Server error updating password.');
   }
 };
 
@@ -243,21 +237,18 @@ exports.adminChangeUserPassword = async (req, res) => {
   const { id } = req.params;
 
   if (!newPassword || String(newPassword).length < 8) {
-    return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+    return sendError(res, 400, 'New password must be at least 8 characters.', ERROR_CODES.VALIDATION);
   }
 
   try {
     const canManage = await userHasPermission(req.user, 'USER:WRITE');
     if (!canManage) {
-      return res.status(403).json({
-        message: 'Forbidden: Insufficient permissions for USER:WRITE.',
-        code: 'FORBIDDEN',
-      });
+      return sendError(res, 403, 'Forbidden: Insufficient permissions for USER:WRITE.', ERROR_CODES.FORBIDDEN);
     }
 
     const user = await User.findById(id);
     if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+      return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
 
     user.password = await bcrypt.hash(newPassword, 10);
@@ -268,7 +259,7 @@ exports.adminChangeUserPassword = async (req, res) => {
       message: `Password updated for ${user.username}. Their active sessions were disconnected.`,
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server error updating user password.' });
+    return sendServerError(res, err, 'Server error updating user password.');
   }
 };
 
@@ -284,7 +275,7 @@ exports.listSessions = async (req, res) => {
       scope: canManage ? 'all' : 'self',
     });
   } catch (err) {
-    res.status(500).json({ message: 'Error listing sessions.' });
+    return sendServerError(res, err, 'Error listing sessions.');
   }
 };
 
@@ -295,17 +286,14 @@ exports.disconnectSession = async (req, res) => {
     const session = await Session.findOne({ sessionId });
 
     if (!session) {
-      return res.status(404).json({ message: 'Session not found.' });
+      return sendError(res, 404, 'Session not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const isOwn = String(session.userId) === String(req.user._id);
     const canManage = await userHasPermission(req.user, 'USER:WRITE');
 
     if (!isOwn && !canManage) {
-      return res.status(403).json({
-        message: 'Forbidden: you can only disconnect your own sessions.',
-        code: 'FORBIDDEN',
-      });
+      return sendError(res, 403, 'Forbidden: you can only disconnect your own sessions.', ERROR_CODES.FORBIDDEN);
     }
 
     await revokeSession(sessionId, isOwn ? 'user_disconnect' : 'admin_disconnect');
@@ -315,7 +303,7 @@ exports.disconnectSession = async (req, res) => {
       sessionId,
     });
   } catch (err) {
-    res.status(500).json({ message: 'Error disconnecting session.' });
+    return sendServerError(res, err, 'Error disconnecting session.');
   }
 };
 
@@ -337,3 +325,4 @@ exports.validateSession = async (req, res) => {
     },
   });
 };
+

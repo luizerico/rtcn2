@@ -3,7 +3,7 @@ const {
   listDistinctActions,
   listDistinctResourceTypes,
 } = require('../services/actionLogService');
-const { sendServerError } = require('../utils/httpErrors');
+const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
 
 exports.listActionLogs = async (req, res) => {
   try {

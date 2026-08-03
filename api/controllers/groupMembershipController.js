@@ -1,7 +1,7 @@
 const Group = require('../models/Group');
 const User = require('../models/User');
 const { PERMISSION_RESOURCE_TYPES } = require('../constants/rbac');
-const { sendServerError } = require('../utils/httpErrors');
+const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
 const {
   listGroupPermissions,
   replaceGroupClassPermissions,
@@ -11,12 +11,12 @@ exports.addMemberToGroup = async (req, res) => {
   try {
     const { targetUserId } = req.body;
     if (!targetUserId) {
-      return res.status(400).json({ message: 'Target User ID is required.' });
+      return sendError(res, 400, 'Target User ID is required.', ERROR_CODES.VALIDATION);
     }
 
     const user = await User.findById(targetUserId);
     if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+      return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const updatedGroup = await Group.findByIdAndUpdate(
@@ -26,7 +26,7 @@ exports.addMemberToGroup = async (req, res) => {
     );
 
     if (!updatedGroup) {
-      return res.status(404).json({ message: 'Group not found.' });
+      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
 
     res.status(200).json({
@@ -42,7 +42,7 @@ exports.removeMemberFromGroup = async (req, res) => {
   try {
     const { targetUserId } = req.body;
     if (!targetUserId) {
-      return res.status(400).json({ message: 'Target User ID is required.' });
+      return sendError(res, 400, 'Target User ID is required.', ERROR_CODES.VALIDATION);
     }
 
     const updatedGroup = await Group.findByIdAndUpdate(
@@ -52,7 +52,7 @@ exports.removeMemberFromGroup = async (req, res) => {
     );
 
     if (!updatedGroup) {
-      return res.status(404).json({ message: 'Group not found.' });
+      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
 
     res.status(200).json({
@@ -68,7 +68,7 @@ exports.getGroupPermissions = async (req, res) => {
   try {
     const group = await Group.findById(req.params.groupId);
     if (!group) {
-      return res.status(404).json({ message: 'Group not found.' });
+      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const permissions = await listGroupPermissions(group._id);
@@ -84,19 +84,17 @@ exports.updateGroupPermissions = async (req, res) => {
     const allowedScopes = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
 
     if (!Array.isArray(scopes) || scopes.length === 0) {
-      return res.status(400).json({ message: 'At least one permission scope is required.' });
+      return sendError(res, 400, 'At least one permission scope is required.', ERROR_CODES.VALIDATION);
     }
 
     const normalizedResourceType = String(resourceType || '').toUpperCase();
     if (!PERMISSION_RESOURCE_TYPES.includes(normalizedResourceType)) {
-      return res.status(400).json({
-        message: `Invalid resource type. Permissions only apply to asset subclasses: ${PERMISSION_RESOURCE_TYPES.join(', ')}.`,
-      });
+      return sendError(res, 400, `Invalid resource type. Permissions only apply to asset subclasses: ${PERMISSION_RESOURCE_TYPES.join(', ')}.`, ERROR_CODES.VALIDATION);
     }
 
     const invalidScopes = scopes.filter((scope) => !allowedScopes.includes(scope));
     if (invalidScopes.length > 0) {
-      return res.status(400).json({ message: `Invalid scopes: ${invalidScopes.join(', ')}` });
+      return sendError(res, 400, `Invalid scopes: ${invalidScopes.join(', ')}`, ERROR_CODES.VALIDATION);
     }
 
     const selectedObjects = Array.isArray(objects)
@@ -104,14 +102,12 @@ exports.updateGroupPermissions = async (req, res) => {
       : [];
 
     if (!allObjects && selectedObjects.length === 0) {
-      return res.status(400).json({
-        message: 'Select all objects of this class, or one or more existing database objects.',
-      });
+      return sendError(res, 400, 'Select all objects of this class, or one or more existing database objects.', ERROR_CODES.VALIDATION);
     }
 
     const group = await Group.findById(req.params.groupId);
     if (!group) {
-      return res.status(404).json({ message: 'Group not found.' });
+      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const permissions = await replaceGroupClassPermissions({

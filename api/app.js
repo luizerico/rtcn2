@@ -6,6 +6,7 @@ const surveyRoutes = require('./routes/surveyRoutes');
 const userRoutes = require('./routes/userRoutes');
 const actionLogRoutes = require('./routes/actionLogRoutes');
 const { actionLogMiddleware } = require('./middleware/actionLogMiddleware');
+const { errorHandler } = require('./utils/httpErrors');
 
 // Register Asset subclasses (discriminators) once for the API process.
 require('./models/assets');
@@ -36,10 +37,7 @@ function createApp({ fallback } = {}) {
     app.use(fallback);
   }
 
-  app.use((err, _req, res, _next) => {
-    console.error('Unhandled error:', err);
-    res.status(500).json({ message: 'Internal server error.' });
-  });
+  app.use(errorHandler);
 
   return app;
 }

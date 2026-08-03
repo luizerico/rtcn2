@@ -102,15 +102,41 @@ components:
         user:
           $ref: '#/components/schemas/UserSummary'
 
-    AuthError:
+    ApiError:
       type: object
+      description: Standard API error response used by controllers and auth middleware.
       properties:
         message:
           type: string
         code:
           type: string
-          enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, PASSWORD_CHANGED, CONFIG]
+          enum:
+            - NO_TOKEN
+            - EXPIRED
+            - REVOKED
+            - INVALID
+            - USER_NOT_FOUND
+            - FORBIDDEN
+            - INVALID_CREDENTIALS
+            - CONFIG
+            - VALIDATION
+            - NOT_FOUND
+            - CONFLICT
+            - INTERNAL
+        details:
+          type: object
+          additionalProperties: true
+          description: Optional structured context (e.g. username, hint). Never required by clients.
       required: [message, code]
+
+    AuthError:
+      allOf:
+        - $ref: '#/components/schemas/ApiError'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, PASSWORD_CHANGED, CONFIG]
 
     SessionRecord:
       type: object
