@@ -21,6 +21,7 @@ describe('RBAC admin full access', () => {
   let adminToken;
   let adminUser;
   let viewerToken;
+  let viewerUser;
 
   beforeAll(async () => {
     await connectTestDatabase();
@@ -49,6 +50,7 @@ describe('RBAC admin full access', () => {
     adminToken = adminLogin.body.token;
 
     const viewer = await seedUnprivilegedUser();
+    viewerUser = viewer.user;
     const viewerLogin = await request(app).post('/api/auth/login').send({
       username: viewer.user.username,
       password: viewer.password,
@@ -57,7 +59,7 @@ describe('RBAC admin full access', () => {
     viewerToken = viewerLogin.body.token;
   });
 
-  it('seeds full admin permissions for USER, GROUP, and OBJECT', async () => {
+  it('seeds full admin permissions for asset subclasses only', async () => {
     const me = await request(app)
       .get('/api/auth/me')
       .set('Authorization', `Bearer ${adminToken}`);
@@ -99,7 +101,7 @@ describe('RBAC admin full access', () => {
       );
     });
 
-    it('allows admin full access across users, groups, and objects', async () => {
+    it('allows admin full access across users, groups, and assets', async () => {
     const auth = { Authorization: `Bearer ${adminToken}` };
 
     const createUser = await request(app)
@@ -134,36 +136,37 @@ describe('RBAC admin full access', () => {
       .set(auth)
       .send({
         scopes: ['READ', 'WRITE', 'CREATE', 'DELETE'],
-        target: '*',
-        resourceType: 'OBJECT',
+        resourceType: 'DOCUMENT',
+        allObjects: true,
       });
     expect(setPermissions.status).toBe(200);
 
-    const createObject = await request(app)
-      .post('/api/objects')
+    const createAsset = await request(app)
+      .post('/api/assets')
       .set(auth)
       .send({
         name: 'Policy Document',
-        description: 'Admin-managed object',
-        resourceType: 'DOCUMENT',
+        description: 'Admin-managed asset',
+        kind: 'DOCUMENT',
       });
-    expect(createObject.status).toBe(201);
-    expect(String(createObject.body.ownerId)).toBe(String(adminUser._id));
+    expect(createAsset.status).toBe(201);
+    expect(String(createAsset.body.ownerId)).toBe(String(adminUser._id));
+    expect(String(createAsset.body.createdBy)).toBe(String(adminUser._id));
 
-    const listObjects = await request(app).get('/api/objects').set(auth);
-    expect(listObjects.status).toBe(200);
-    expect(listObjects.body).toHaveLength(1);
+    const listAssets = await request(app).get('/api/assets').set(auth);
+    expect(listAssets.status).toBe(200);
+    expect(listAssets.body).toHaveLength(1);
 
-    const updateObject = await request(app)
-      .put(`/api/objects/${createObject.body._id}`)
+    const updateAsset = await request(app)
+      .put(`/api/assets/${createAsset.body._id}`)
       .set(auth)
       .send({ description: 'Updated by admin' });
-    expect(updateObject.status).toBe(200);
+    expect(updateAsset.status).toBe(200);
 
-    const deleteObject = await request(app)
-      .delete(`/api/objects/${createObject.body._id}`)
+    const deleteAsset = await request(app)
+      .delete(`/api/assets/${createAsset.body._id}`)
       .set(auth);
-    expect(deleteObject.status).toBe(200);
+    expect(deleteAsset.status).toBe(200);
 
     const deleteGroup = await request(app).delete(`/api/groups/${groupId}`).set(auth);
     expect(deleteGroup.status).toBe(200);
@@ -183,14 +186,91 @@ describe('RBAC admin full access', () => {
     const groups = await request(app).get('/api/groups').set(auth);
     expect(groups.status).toBe(403);
 
-    const objects = await request(app).get('/api/objects').set(auth);
-    expect(objects.status).toBe(403);
+    const logs = await request(app).get('/api/logs').set(auth);
+    expect(logs.status).toBe(403);
 
-    const createObject = await request(app)
-      .post('/api/objects')
+    const assets = await request(app).get('/api/assets').set(auth);
+    expect(assets.status).toBe(403);
+
+    const createAsset = await request(app)
+      .post('/api/assets')
       .set(auth)
       .send({ name: 'Blocked' });
-    expect(createObject.status).toBe(403);
+    expect(createAsset.status).toBe(403);
+  });
+
+  it('limits a group to SURVEY objects without DOCUMENT access', async () => {
+    const Group = require('../api/models/Group');
+    const { replaceGroupPermissions } = require('../api/services/rbacService');
+
+    const surveyGroup = await Group.create({
+      name: 'survey-only',
+      description: 'Can manage surveys only',
+      members: [viewerUser._id],
+    });
+
+    await replaceGroupPermissions(surveyGroup._id, [
+      {
+        groupId: surveyGroup._id,
+        resourceType: 'SURVEY',
+        target: '*',
+        resourceId: null,
+        permission: 'READ',
+      },
+      {
+        groupId: surveyGroup._id,
+        resourceType: 'SURVEY',
+        target: '*',
+        resourceId: null,
+        permission: 'CREATE',
+      },
+      {
+        groupId: surveyGroup._id,
+        resourceType: 'SURVEY_RESPONSE',
+        target: '*',
+        resourceId: null,
+        permission: 'CREATE',
+      },
+      {
+        groupId: surveyGroup._id,
+        resourceType: 'SURVEY_RESPONSE',
+        target: '*',
+        resourceId: null,
+        permission: 'READ',
+      },
+    ]);
+
+    const login = await request(app).post('/api/auth/login').send({
+      username: 'viewer',
+      password: 'Password123!',
+    });
+    const auth = { Authorization: `Bearer ${login.body.token}` };
+
+    const assets = await request(app).get('/api/assets').set(auth);
+    expect(assets.status).toBe(200);
+    // May see surveys they can access, but not other asset kinds they were never granted.
+    expect(assets.body.every((row) => row.kind === 'SURVEY')).toBe(true);
+
+    const createDoc = await request(app)
+      .post('/api/assets')
+      .set(auth)
+      .send({ name: 'Secret doc', kind: 'DOCUMENT' });
+    expect(createDoc.status).toBe(403);
+
+    const createSurvey = await request(app)
+      .post('/api/surveys')
+      .set(auth)
+      .send({
+        name: 'Scoped survey',
+        questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+      });
+    expect(createSurvey.status).toBe(201);
+    expect(createSurvey.body.questions).toHaveLength(1);
+    expect(createSurvey.body.assetType).toBe('Survey');
+
+    const listSurveys = await request(app).get('/api/surveys').set(auth);
+    expect(listSurveys.status).toBe(200);
+    expect(listSurveys.body.items.some((s) => s.name === 'Scoped survey')).toBe(true);
   });
 
   it('keeps full permissions after re-running admin bootstrap', async () => {

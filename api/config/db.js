@@ -9,6 +9,14 @@ const connectDB = async () => {
     const mongoUri = resolveMongoUri();
     await mongoose.connect(mongoUri);
     console.log('MongoDB connected successfully.');
+
+    // Drop legacy permission indexes that conflict with user principals / same-named assets.
+    try {
+      const { migratePermissionPrincipals } = require('../services/rbacService');
+      await migratePermissionPrincipals();
+    } catch (error) {
+      console.warn('Permission migration on connect skipped:', error.message);
+    }
   } catch (err) {
     console.error('MongoDB connection failed:', err.message);
     if (/auth/i.test(err.message)) {

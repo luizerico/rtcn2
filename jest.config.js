@@ -3,7 +3,10 @@ module.exports = {
   projects: [
     {
       displayName: 'components',
-      testMatch: ['<rootDir>/__tests__/*Modal*.test.tsx'],
+      testMatch: [
+        '<rootDir>/__tests__/*Modal*.test.tsx',
+        '<rootDir>/__tests__/access.test.ts',
+      ],
       testEnvironment: 'jsdom',
       setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
       transform: {
@@ -24,7 +27,7 @@ module.exports = {
         '^react-dom/(.*)$': '<rootDir>/node_modules/react-dom/$1',
         '^react/(.*)$': '<rootDir>/node_modules/react/$1',
         '^@/components/ui/(.*)$': '<rootDir>/client/components/ui/$1',
-        '^@/(.*)$': '<rootDir>/$1',
+        '^@/(.*)$': '<rootDir>/client/$1',
       },
     },
     {

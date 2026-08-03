@@ -50,9 +50,9 @@ describe('API endpoints', () => {
     });
     secondaryUserId = secondary.body.user.id;
 
-    // Grant alice full RBAC so endpoint CRUD suites exercise authorized paths.
+    // Grant alice full asset RBAC and admin-group membership for identity routes.
     const adminGroup = await Group.create({
-      name: 'alice-admin',
+      name: 'admin',
       description: 'Test full-access group',
       members: [userId],
     });
@@ -320,19 +320,65 @@ describe('API endpoints', () => {
       expect(addMember.status).toBe(200);
       expect(addMember.body.group.members.map(String)).toContain(String(secondaryUserId));
 
+      const survey = await request(app)
+        .post('/api/surveys')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'Ops survey',
+          questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+        });
+      expect(survey.status).toBe(201);
+
       const updatePermissions = await request(app)
         .post(`/api/groups/${groupId}/permissions`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           scopes: ['READ', 'WRITE'],
-          target: 'User',
-          resourceType: 'USER',
+          resourceType: 'SURVEY',
+          allObjects: false,
+          objects: [{ id: survey.body._id, label: 'Ops survey' }],
         });
       expect(updatePermissions.status).toBe(200);
       expect(updatePermissions.body.permissions).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ permission: 'READ', target: 'User', resourceType: 'USER' }),
-          expect.objectContaining({ permission: 'WRITE', target: 'User', resourceType: 'USER' }),
+          expect.objectContaining({
+            permission: 'READ',
+            target: 'Ops survey',
+            resourceType: 'SURVEY',
+            resourceId: expect.anything(),
+          }),
+          expect.objectContaining({
+            permission: 'WRITE',
+            target: 'Ops survey',
+            resourceType: 'SURVEY',
+            resourceId: expect.anything(),
+          }),
+        ])
+      );
+
+      const userAcl = await request(app)
+        .post('/api/permissions/acl')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          resourceType: 'SURVEY',
+          allObjects: false,
+          objects: [{ id: survey.body._id, label: 'Ops survey' }],
+          entries: [
+            {
+              principalType: 'USER',
+              principalId: secondaryUserId,
+              scopes: ['READ'],
+            },
+          ],
+        });
+      expect(userAcl.status).toBe(200);
+      expect(userAcl.body.acl.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            principalType: 'USER',
+            principalId: String(secondaryUserId),
+            scopes: expect.arrayContaining(['READ']),
+          }),
         ])
       );
 
@@ -366,8 +412,14 @@ describe('API endpoints', () => {
       const badPermissions = await request(app)
         .post(`/api/groups/${groupId}/permissions`)
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ scopes: [], target: 'User' });
+        .send({ scopes: [], resourceType: 'SURVEY', allObjects: true });
       expect(badPermissions.status).toBe(400);
+
+      const identityDenied = await request(app)
+        .post(`/api/groups/${groupId}/permissions`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ scopes: ['READ'], resourceType: 'USER', allObjects: true });
+      expect(identityDenied.status).toBe(400);
     });
   });
 
@@ -397,76 +449,180 @@ describe('API endpoints', () => {
     });
   });
 
-  describe('Objects', () => {
+  describe('Assets', () => {
     it('requires auth', async () => {
-      const res = await request(app).get('/api/objects');
+      const res = await request(app).get('/api/assets');
       expect(res.status).toBe(401);
     });
 
     it('CRUD lifecycle works', async () => {
       const create = await request(app)
-        .post('/api/objects')
+        .post('/api/assets')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           name: 'Billing Doc',
           description: 'Invoices',
-          resourceType: 'DOCUMENT',
+          kind: 'DOCUMENT',
         });
       expect(create.status).toBe(201);
       expect(create.body.ownerId).toBe(String(userId));
+      expect(create.body.createdBy).toBe(String(userId));
+      expect(create.body.updatedBy).toBe(String(userId));
+      expect(create.body.createdAt).toBeDefined();
+      expect(create.body.updatedAt).toBeDefined();
 
       const list = await request(app)
-        .get('/api/objects')
+        .get('/api/assets')
         .set('Authorization', `Bearer ${authToken}`);
       expect(list.status).toBe(200);
       expect(list.body).toHaveLength(1);
 
-      const objectId = create.body._id;
+      const assetId = create.body._id;
 
       const getOne = await request(app)
-        .get(`/api/objects/${objectId}`)
+        .get(`/api/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`);
       expect(getOne.status).toBe(200);
 
       const update = await request(app)
-        .put(`/api/objects/${objectId}`)
+        .put(`/api/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({ description: 'Updated invoices' });
       expect(update.status).toBe(200);
       expect(update.body.description).toBe('Updated invoices');
+      expect(update.body.updatedBy).toBe(String(userId));
 
       const remove = await request(app)
-        .delete(`/api/objects/${objectId}`)
+        .delete(`/api/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`);
       expect(remove.status).toBe(200);
     });
 
     it('rejects create without name', async () => {
       const res = await request(app)
-        .post('/api/objects')
+        .post('/api/assets')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ description: 'missing name' });
       expect(res.status).toBe(400);
     });
+  });
 
-    it('returns 501 for unimplemented object policy endpoints', async () => {
+  describe('Surveys', () => {
+    it('creates a survey, accepts answers, and visualizes response summary', async () => {
       const create = await request(app)
-        .post('/api/objects')
+        .post('/api/surveys')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ name: 'Policy Object' });
-      const objectId = create.body._id;
+        .send({
+          name: 'Customer pulse',
+          description: 'Quick feedback',
+          questions: [
+            { prompt: 'How was the service?', type: 'text' },
+            { prompt: 'Would you recommend us?', type: 'yes_no' },
+            {
+              prompt: 'Favorite channel?',
+              type: 'multiple_choice',
+              options: ['Email', 'Chat', 'Phone'],
+            },
+          ],
+        });
+      expect(create.status).toBe(201);
+      expect(create.body.assetType).toBe('Survey');
+      expect(create.body.kind).toBe('SURVEY');
+      expect(create.body.questions).toHaveLength(3);
+      expect(create.body.createdBy).toBe(String(userId));
 
-      const members = await request(app)
-        .post(`/api/objects/${objectId}/members`)
-        .set('Authorization', `Bearer ${authToken}`)
-        .send({ targetUserId: secondaryUserId });
-      expect(members.status).toBe(501);
+      const surveyId = create.body._id;
+      const [textQ, yesNoQ, choiceQ] = create.body.questions;
 
-      const permissions = await request(app)
-        .post(`/api/objects/${objectId}/permissions`)
+      const submit = await request(app)
+        .post(`/api/surveys/${surveyId}/responses`)
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ scopes: ['READ'], target: 'User' });
-      expect(permissions.status).toBe(501);
+        .send({
+          answers: [
+            { questionId: textQ.questionId, value: 'Great support' },
+            { questionId: yesNoQ.questionId, value: 'Yes' },
+            { questionId: choiceQ.questionId, value: 'Chat' },
+          ],
+        });
+      expect(submit.status).toBe(201);
+      expect(submit.body.assetType).toBe('SurveyResponse');
+      expect(submit.body.kind).toBe('SURVEY_RESPONSE');
+      expect(submit.body.surveyId).toBe(surveyId);
+
+      const results = await request(app)
+        .get(`/api/surveys/${surveyId}/responses`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(results.status).toBe(200);
+      expect(results.body.responses).toHaveLength(1);
+      expect(results.body.summary.responseCount).toBe(1);
+      expect(results.body.summary.questions[1].counts.Yes).toBe(1);
+      expect(results.body.summary.questions[2].counts.Chat).toBe(1);
+    });
+
+    it('rejects surveys without questions', async () => {
+      const res = await request(app)
+        .post('/api/surveys')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'Empty', questions: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it('lists surveys with pagination, search, filter, and sort', async () => {
+      const created = [];
+      for (const name of ['Alpha searchmark', 'Beta other', 'Gamma searchmark']) {
+        const res = await request(app)
+          .post('/api/surveys')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({
+            name,
+            description: `${name} description`,
+            questions: [{ prompt: 'Q?', type: 'text' }],
+          });
+        expect(res.status).toBe(201);
+        created.push(res.body);
+      }
+
+      const listed = await request(app)
+        .get('/api/surveys')
+        .query({ search: 'searchmark', sort: 'name', order: 'asc', page: 1, limit: 10 })
+        .set('Authorization', `Bearer ${authToken}`);
+
+      expect(listed.status).toBe(200);
+      expect(listed.body).toMatchObject({
+        page: 1,
+        limit: 10,
+        sort: 'name',
+        order: 'asc',
+        search: 'searchmark',
+      });
+      expect(listed.body.total).toBeGreaterThanOrEqual(2);
+      expect(listed.body.items.every((s) => /searchmark/i.test(s.name))).toBe(true);
+      expect(listed.body.items.map((s) => s.name)).toEqual(
+        [...listed.body.items.map((s) => s.name)].sort((a, b) => a.localeCompare(b))
+      );
+
+      const pageOne = await request(app)
+        .get('/api/surveys')
+        .query({ search: 'searchmark', sort: 'name', order: 'asc', page: 1, limit: 1 })
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(pageOne.status).toBe(200);
+      expect(pageOne.body.items).toHaveLength(1);
+      expect(pageOne.body.totalPages).toBeGreaterThanOrEqual(2);
+
+      const filtered = await request(app)
+        .get('/api/surveys')
+        .query({ createdBy: String(userId), limit: 50 })
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(filtered.status).toBe(200);
+      expect(filtered.body.filters.createdBy).toBe(String(userId));
+      expect(filtered.body.items.length).toBeGreaterThanOrEqual(3);
+      expect(
+        filtered.body.items.every((s) => String(s.createdBy?._id || s.createdBy) === String(userId))
+      ).toBe(true);
+
+      created.forEach((survey) => {
+        expect(survey._id).toBeTruthy();
+      });
     });
   });
 });

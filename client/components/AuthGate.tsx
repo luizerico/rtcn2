@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { apiGet, ApiError, setAuthRedirectHandler } from '@/lib/apiUtils';
+import { ApiError, setAuthRedirectHandler } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
+import { useAccess } from '@/components/AccessProvider';
+import { clearAccessCache } from '@/lib/accessCache';
 
 const PUBLIC_PATHS = ['/login', '/register'];
 
@@ -15,10 +17,13 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { pushToast } = useToast();
+  const { ensure, clear } = useAccess();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     setAuthRedirectHandler(({ code, message }) => {
+      clearAccessCache();
+      clear();
       pushToast({
         tone: 'error',
         title: 'Session ended',
@@ -28,7 +33,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     });
 
     return () => setAuthRedirectHandler(null);
-  }, [router, pushToast]);
+  }, [router, pushToast, clear]);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +46,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
       const token = localStorage.getItem('authToken');
       if (!token) {
+        clearAccessCache();
+        clear();
         pushToast({
           tone: 'warning',
           title: 'Sign in required',
@@ -51,10 +58,10 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        await apiGet('/auth/me');
+        // Uses sessionStorage cache when fresh — avoids /auth/me on every navigation.
+        await ensure();
         if (!cancelled) setReady(true);
       } catch (err) {
-        // 401 already clears storage and redirects via setAuthRedirectHandler.
         if (err instanceof ApiError && err.status === 401) {
           return;
         }
@@ -70,13 +77,12 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       }
     }
 
-    setReady(false);
     verify();
 
     return () => {
       cancelled = true;
     };
-  }, [pathname, router, pushToast]);
+  }, [pathname, router, pushToast, ensure, clear]);
 
   if (!ready && !isPublicPath(pathname)) {
     return (

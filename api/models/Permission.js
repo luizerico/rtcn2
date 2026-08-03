@@ -1,18 +1,33 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
-const { RESOURCE_TYPES, ACTIONS } = require('../constants/rbac');
+const { RESOURCE_TYPES, ACTIONS, PRINCIPAL_TYPES } = require('../constants/rbac');
 
 /**
- * Standalone permissions collection.
- * Each row grants one action on a resource type/target to a group.
+ * ACL-style grant: one action for a USER or GROUP principal on an Asset subclass
+ * (target='*', resourceId=null) or one concrete asset (resourceId set).
+ * USER and GROUP are never resourceType values — they are principals only.
  */
 const permissionSchema = new Schema(
   {
+    principalType: {
+      type: String,
+      enum: PRINCIPAL_TYPES,
+      required: true,
+      index: true,
+    },
+    principalId: {
+      type: Schema.Types.ObjectId,
+      required: true,
+      index: true,
+    },
+    /** @deprecated Prefer principalType=GROUP + principalId. Kept for migration/compat. */
     groupId: {
       type: Schema.Types.ObjectId,
       ref: 'Group',
-      required: true,
+      required: false,
+      default: undefined,
       index: true,
+      sparse: true,
     },
     resourceType: {
       type: String,
@@ -23,6 +38,7 @@ const permissionSchema = new Schema(
       type: Schema.Types.ObjectId,
       required: false,
       default: null,
+      index: true,
     },
     target: {
       type: String,
@@ -39,7 +55,7 @@ const permissionSchema = new Schema(
 );
 
 permissionSchema.index(
-  { groupId: 1, resourceType: 1, target: 1, permission: 1 },
+  { principalType: 1, principalId: 1, resourceType: 1, resourceId: 1, permission: 1 },
   { unique: true }
 );
 

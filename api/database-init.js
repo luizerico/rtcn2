@@ -27,7 +27,9 @@ async function initializeAdmin() {
     console.log('Admin RBAC bootstrap complete.');
     console.log(`Admin user: ${adminUser.username} (${adminUser.email})`);
     console.log(`Admin group: ${adminGroup.name} with ${permissions.length} permissions`);
-    console.log('Admin has full USER/GROUP/OBJECT access (READ, WRITE, CREATE, DELETE, ADMIN).');
+    console.log(
+      'Admin group members can manage users/groups; asset permissions cover DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE.'
+    );
 
     await mongoose.connection.close();
   } catch (error) {

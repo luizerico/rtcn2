@@ -69,6 +69,11 @@ function handleUnauthorized(message: string, code?: string) {
   localStorage.removeItem('authToken');
   localStorage.removeItem('userUsername');
   localStorage.removeItem('sessionId');
+  try {
+    sessionStorage.removeItem('rbac_access_cache_v1');
+  } catch {
+    // ignore
+  }
   const reason = code || 'EXPIRED';
   if (authRedirectHandler) {
     authRedirectHandler({ code: reason, message });

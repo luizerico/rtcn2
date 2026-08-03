@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
 
 const menuItems = [
   {
@@ -27,9 +28,9 @@ export default function HomePage() {
   return (
     <div className="mx-auto max-w-5xl">
       <header className="mb-10 border-b border-[var(--border)] pb-6">
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-[var(--accent)]">Welcome</p>
+        <Breadcrumbs items={[{ label: 'Home' }]} />
         <h1 className="mt-2 text-4xl font-semibold tracking-tight text-[var(--foreground)]">
-          RBAC Control Center
+          LEMA Common Services
         </h1>
         <p className="mt-3 max-w-2xl text-base text-[var(--muted)]">
           Use the menu to administer identities and policies. Start with Admin, then drill into users,

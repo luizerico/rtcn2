@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Projects RBAC API
   description: |
-    REST API for authentication, groups, membership, RBAC policies, and protected objects.
+    REST API for authentication, groups, membership, RBAC policies, and protected assets.
 
     Import this file into Postman (**Import → File**), Insomnia, Thunder Client, or any OpenAPI 3 tool.
   version: 1.0.0
@@ -24,7 +24,9 @@ tags:
   - name: Users
   - name: Groups
   - name: Permissions
-  - name: Objects
+  - name: Assets
+  - name: Surveys
+  - name: Logs
 
 components:
   securitySchemes:
@@ -221,8 +223,8 @@ components:
           example: User
         resourceType:
           type: string
-          enum: [USER, GROUP, OBJECT]
-          default: OBJECT
+          enum: [USER, GROUP, ASSET, DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+          default: ASSET
 
     Permission:
       type: object
@@ -233,7 +235,7 @@ components:
           type: string
         resourceType:
           type: string
-          enum: [USER, GROUP, OBJECT]
+          enum: [USER, GROUP, ASSET, DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
         resourceId:
           type: string
           nullable: true
@@ -243,7 +245,7 @@ components:
           type: string
           enum: [READ, WRITE, CREATE, DELETE, ADMIN]
 
-    ObjectResource:
+    AssetResource:
       type: object
       properties:
         _id:
@@ -254,9 +256,16 @@ components:
           type: string
         ownerId:
           type: string
-        resourceType:
+        kind:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET]
+          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+        assetType:
+          type: string
+          enum: [Asset, Survey, SurveyResponse]
+        createdBy:
+          type: string
+        updatedBy:
+          type: string
         createdAt:
           type: string
           format: date-time
@@ -264,7 +273,7 @@ components:
           type: string
           format: date-time
 
-    CreateObjectRequest:
+    CreateAssetRequest:
       type: object
       required: [name]
       properties:
@@ -273,10 +282,133 @@ components:
           example: Billing Doc
         description:
           type: string
-        resourceType:
+        kind:
           type: string
           enum: [DOCUMENT, DASHBOARD, DATASET]
           default: DOCUMENT
+
+    SurveyQuestion:
+      type: object
+      required: [prompt, type]
+      properties:
+        questionId:
+          type: string
+        prompt:
+          type: string
+        type:
+          type: string
+          enum: [text, multiple_choice, yes_no]
+        options:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+          default: true
+
+    CreateSurveyRequest:
+      type: object
+      required: [name, questions]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SurveyQuestion'
+
+    SubmitSurveyResponseRequest:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items:
+            type: object
+            required: [questionId, value]
+            properties:
+              questionId:
+                type: string
+              value:
+                description: Text, Yes/No, or multiple-choice option
+
+    ActionLog:
+      type: object
+      properties:
+        _id:
+          type: string
+        userId:
+          type: string
+          nullable: true
+        username:
+          type: string
+        action:
+          type: string
+          example: auth.login
+        resourceType:
+          type: string
+          example: AUTH
+        resourceId:
+          type: string
+          nullable: true
+        method:
+          type: string
+          example: POST
+        path:
+          type: string
+          example: /api/auth/login
+        statusCode:
+          type: integer
+          example: 200
+        success:
+          type: boolean
+        message:
+          type: string
+        ipAddress:
+          type: string
+        userAgent:
+          type: string
+        clientApp:
+          type: string
+        meta:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ActionLogListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionLog'
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            limit:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+            hasPrev:
+              type: boolean
+            hasNext:
+              type: boolean
+        sort:
+          type: object
+          properties:
+            field:
+              type: string
+            order:
+              type: string
+              enum: [asc, desc]
 
 paths:
   /api/health:
@@ -885,7 +1017,7 @@ paths:
   /api/permissions:
     get:
       tags: [Permissions]
-      summary: List all permissions with group names
+      summary: List all permissions with principal names
       operationId: listPermissions
       security:
         - bearerAuth: []
@@ -901,12 +1033,105 @@ paths:
                     - $ref: '#/components/schemas/Permission'
                     - type: object
                       properties:
+                        principalType:
+                          type: string
+                          enum: [USER, GROUP]
+                        principalId:
+                          type: string
+                        principalName:
+                          type: string
                         groupName:
                           type: string
         '401':
           description: Unauthorized
         '403':
           description: Forbidden
+
+  /api/permissions/catalog:
+    get:
+      tags: [Permissions]
+      summary: Catalog of asset classes and USER/GROUP principals
+      operationId: getPermissionCatalog
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Asset classes (only) plus users and groups for ACL editing
+
+  /api/permissions/acl:
+    get:
+      tags: [Permissions]
+      summary: Load Windows-style ACL for selected assets
+      operationId: getAssetAcl
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: resourceType
+          required: true
+          schema:
+            type: string
+            enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+        - in: query
+          name: allObjects
+          schema:
+            type: boolean
+        - in: query
+          name: resourceIds
+          schema:
+            type: string
+          description: Comma-separated asset ids
+      responses:
+        '200':
+          description: ACL entries for the selection
+    post:
+      tags: [Permissions]
+      summary: Apply Windows-style ACL to selected assets
+      operationId: applyAssetAcl
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resourceType, entries]
+              properties:
+                resourceType:
+                  type: string
+                  enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+                allObjects:
+                  type: boolean
+                objects:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      label:
+                        type: string
+                entries:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      principalType:
+                        type: string
+                        enum: [USER, GROUP]
+                      principalId:
+                        type: string
+                      scopes:
+                        type: array
+                        items:
+                          type: string
+                          enum: [READ, WRITE, CREATE, DELETE, ADMIN]
+      responses:
+        '200':
+          description: ACL applied
+        '400':
+          description: Validation error
 
   /api/groups/{groupId}/permissions:
     get:
@@ -967,28 +1192,28 @@ paths:
         '404':
           description: Group not found
 
-  /api/objects:
+  /api/assets:
     get:
-      tags: [Objects]
-      summary: List objects
-      operationId: listObjects
+      tags: [Assets]
+      summary: List assets
+      operationId: listAssets
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: Object list
+          description: Asset list
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ObjectResource'
+                  $ref: '#/components/schemas/AssetResource'
         '401':
           description: Unauthorized
     post:
-      tags: [Objects]
-      summary: Create object
-      operationId: createObject
+      tags: [Assets]
+      summary: Create asset
+      operationId: createAsset
       security:
         - bearerAuth: []
       requestBody:
@@ -996,24 +1221,24 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateObjectRequest'
+              $ref: '#/components/schemas/CreateAssetRequest'
       responses:
         '201':
-          description: Object created
+          description: Asset created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ObjectResource'
+                $ref: '#/components/schemas/AssetResource'
         '400':
           description: Validation error
         '401':
           description: Unauthorized
 
-  /api/objects/{id}:
+  /api/assets/{id}:
     get:
-      tags: [Objects]
-      summary: Get object by ID
-      operationId: getObject
+      tags: [Assets]
+      summary: Get asset by ID
+      operationId: getAsset
       security:
         - bearerAuth: []
       parameters:
@@ -1024,19 +1249,19 @@ paths:
             type: string
       responses:
         '200':
-          description: Object found
+          description: Asset found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ObjectResource'
+                $ref: '#/components/schemas/AssetResource'
         '401':
           description: Unauthorized
         '404':
           description: Not found
     put:
-      tags: [Objects]
-      summary: Update object
-      operationId: updateObject
+      tags: [Assets]
+      summary: Update asset
+      operationId: updateAsset
       security:
         - bearerAuth: []
       parameters:
@@ -1050,18 +1275,18 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateObjectRequest'
+              $ref: '#/components/schemas/CreateAssetRequest'
       responses:
         '200':
-          description: Object updated
+          description: Asset updated
         '401':
           description: Unauthorized
         '404':
           description: Not found
     delete:
-      tags: [Objects]
-      summary: Delete object
-      operationId: deleteObject
+      tags: [Assets]
+      summary: Delete asset
+      operationId: deleteAsset
       security:
         - bearerAuth: []
       parameters:
@@ -1072,47 +1297,143 @@ paths:
             type: string
       responses:
         '200':
-          description: Object deleted
+          description: Asset deleted
         '401':
           description: Unauthorized
         '404':
           description: Not found
 
-  /api/objects/{objectId}/members:
-    post:
-      tags: [Objects]
-      summary: Add object member (not implemented)
-      operationId: addObjectMember
+  /api/surveys:
+    get:
+      tags: [Surveys]
+      summary: List surveys
+      operationId: listSurveys
       security:
         - bearerAuth: []
       parameters:
-        - in: path
-          name: objectId
-          required: true
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number (1-based)
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Page size
+        - in: query
+          name: search
           schema:
             type: string
+          description: Case-insensitive search on name and description
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Alias for search
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [name, createdAt, updatedAt, questionCount]
+            default: updatedAt
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: createdBy
+          schema:
+            type: string
+          description: Filter by creator user id
+      responses:
+        '200':
+          description: Paginated survey list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+                  total:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  sort:
+                    type: string
+                  order:
+                    type: string
+                  search:
+                    type: string
+                  filters:
+                    type: object
+                    properties:
+                      createdBy:
+                        type: string
+                        nullable: true
+        '401':
+          description: Unauthorized
+    post:
+      tags: [Surveys]
+      summary: Create a survey asset with questions
+      operationId: createSurvey
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MemberRequest'
+              $ref: '#/components/schemas/CreateSurveyRequest'
       responses:
-        '501':
-          description: Not implemented yet
+        '201':
+          description: Survey created
+        '400':
+          description: Validation error
         '401':
           description: Unauthorized
 
-  /api/objects/{objectId}/permissions:
-    post:
-      tags: [Objects]
-      summary: Update object permissions (not implemented)
-      operationId: updateObjectPermissions
+  /api/surveys/{id}:
+    get:
+      tags: [Surveys]
+      summary: Get survey by ID
+      operationId: getSurvey
       security:
         - bearerAuth: []
       parameters:
         - in: path
-          name: objectId
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Survey found
+        '404':
+          description: Not found
+    put:
+      tags: [Surveys]
+      summary: Update survey
+      operationId: updateSurvey
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
           required: true
           schema:
             type: string
@@ -1121,9 +1442,196 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdatePermissionsRequest'
+              $ref: '#/components/schemas/CreateSurveyRequest'
       responses:
-        '501':
-          description: Not implemented yet
+        '200':
+          description: Survey updated
+    delete:
+      tags: [Surveys]
+      summary: Delete survey and its responses
+      operationId: deleteSurvey
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+
+  /api/surveys/{id}/responses:
+    get:
+      tags: [Surveys]
+      summary: List responses and visualization summary
+      operationId: listSurveyResponses
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Responses and summary
+    post:
+      tags: [Surveys]
+      summary: Submit survey answers as a SurveyResponse asset
+      operationId: submitSurveyResponse
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitSurveyResponseRequest'
+      responses:
+        '201':
+          description: Response saved
+        '400':
+          description: Validation error
+
+  /api/logs:
+    get:
+      tags: [Logs]
+      summary: Search and filter action logs
+      description: |
+        Admin-only (`LOG:READ` via admin group membership). Filtering, search, sort, and
+        pagination are applied in the backend.
+      operationId: listActionLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Free-text search across username, action, path, message, resourceId
+        - in: query
+          name: username
+          schema:
+            type: string
+        - in: query
+          name: userId
+          schema:
+            type: string
+        - in: query
+          name: action
+          schema:
+            type: string
+            example: auth.login
+        - in: query
+          name: resourceType
+          schema:
+            type: string
+            example: USER
+        - in: query
+          name: resourceId
+          schema:
+            type: string
+        - in: query
+          name: method
+          schema:
+            type: string
+            enum: [POST, PUT, PATCH, DELETE]
+        - in: query
+          name: statusCode
+          schema:
+            type: integer
+        - in: query
+          name: success
+          schema:
+            type: boolean
+        - in: query
+          name: clientApp
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [createdAt, username, action, resourceType, method, statusCode, success]
+            default: createdAt
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Paginated action logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionLogListResponse'
         '401':
-          description: Unauthorized
+          description: Not authenticated
+        '403':
+          description: Forbidden
+
+  /api/logs/filters:
+    get:
+      tags: [Logs]
+      summary: Distinct filter values for the logs UI
+      operationId: getActionLogFilters
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Filter option lists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  actions:
+                    type: array
+                    items:
+                      type: string
+                  resourceTypes:
+                    type: array
+                    items:
+                      type: string
+                  sortableFields:
+                    type: array
+                    items:
+                      type: string
+        '401':
+          description: Not authenticated
+        '403':
+          description: Forbidden

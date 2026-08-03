@@ -10,7 +10,7 @@ alwaysApply: false
 - Prefer explicit props interfaces over `any`
 - Handle loading and error states on data pages
 - Prefer existing design tokens in `globals.css` (`--accent`, `--sidebar`, etc.)
-- Reuse `Modal`, `AddMemberModal`, `PermissionModal` before inventing new dialogs
+- Reuse `Modal`, `EditMembersModal`, `PermissionModal`, `Breadcrumbs` before inventing new dialogs/nav
 
 ```tsx
 // ✅ Typed API usage

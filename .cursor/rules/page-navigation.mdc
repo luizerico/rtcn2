@@ -1,0 +1,71 @@
+---
+description: Breadcrumbs for hierarchy; action forms use Cancel then Save
+globs: client/app/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Page navigation: Breadcrumbs / Cancel / Save
+
+Classify each App Router page as a **view** or **action** page.
+
+## Breadcrumbs (all app pages)
+
+- Place `Breadcrumbs` from `@/components/ui/Breadcrumbs` at the top of the page (above the title)
+- Trail must include every ancestor so users can return to previous pages (e.g. Home / Surveys / Create)
+- Last crumb is the current page (no link); earlier crumbs are links
+- Home is always the first crumb (`href: '/'`) for nested routes
+- Do not rely on browser back; do not use a separate "Return to …" control when breadcrumbs cover the parent path
+
+```tsx
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+
+<Breadcrumbs
+  items={[
+    { label: 'Home', href: '/' },
+    { label: 'Surveys', href: '/surveys' },
+    { label: 'Create' },
+  ]}
+/>
+```
+
+## View pages
+
+Read-only or browse surfaces (lists, detail/results, dashboards).
+
+- Breadcrumbs only for upward navigation
+- Do not put Save/Cancel on view pages
+
+## Action pages
+
+Create, edit, submit, or other mutating forms (`/new`, `/edit`, answer/submit flows).
+
+- Breadcrumbs in the header (same as view pages)
+- Form footer must include **Cancel** then **Save** (or Create / Submit), in that order
+- **Cancel** is first (bordered secondary); **Save** is second (primary accent)
+- **Cancel** navigates to the parent list/detail (same as the breadcrumb parent) and does not submit
+- For embedded create/edit forms on list pages, Cancel clears the form fields instead of navigating away
+
+```tsx
+<div className="flex flex-wrap gap-3">
+  <Link
+    href="/surveys"
+    className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
+  >
+    Cancel
+  </Link>
+  <button type="submit" disabled={saving} className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white ...">
+    {saving ? 'Saving…' : 'Save'}
+  </button>
+</div>
+```
+
+## Modals
+
+- Footer actions also use **Cancel** then primary confirm/save
+
+## Do not
+
+- Put Save before Cancel
+- Omit Cancel on action forms
+- Omit breadcrumbs on nested app pages
+- Use `router.back()` as the only way to leave an action page

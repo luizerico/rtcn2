@@ -1,19 +1,45 @@
-const RESOURCE_TYPES = ['USER', 'GROUP', 'OBJECT'];
-const ACTIONS = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
+const { ASSET_KINDS } = require('./assetTypes');
+
+/** Not permission targets — used only for admin route guards via admin-group membership. */
+const IDENTITY_RESOURCE_TYPES = ['USER', 'GROUP', 'LOG'];
+const PRINCIPAL_TYPES = ['USER', 'GROUP'];
 
 /**
- * Full admin policy matrix for a group (standalone Permission documents).
+ * Permissions apply only to Asset subclasses.
+ * USER and GROUP are not assets and are not stored as permission resource types.
  */
+const RESOURCE_TYPES = [...ASSET_KINDS];
+const PERMISSION_RESOURCE_TYPES = [...ASSET_KINDS];
+
+const ACTIONS = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
+
+const RESOURCE_TYPE_LABELS = {
+  DOCUMENT: 'Documents',
+  DASHBOARD: 'Dashboards',
+  DATASET: 'Datasets',
+  SURVEY: 'Surveys',
+  SURVEY_RESPONSE: 'Survey responses',
+};
+
+const ACTION_LABELS = {
+  ADMIN: 'Full control',
+  WRITE: 'Modify',
+  READ: 'Read',
+  CREATE: 'Create',
+  DELETE: 'Delete',
+};
+
 function buildFullAdminPermissions(groupId) {
   if (!groupId) {
     throw new Error('groupId is required to build admin permissions.');
   }
 
   const permissions = [];
-
   for (const resourceType of RESOURCE_TYPES) {
     for (const permission of ACTIONS) {
       permissions.push({
+        principalType: 'GROUP',
+        principalId: groupId,
         groupId,
         resourceType,
         target: '*',
@@ -22,7 +48,6 @@ function buildFullAdminPermissions(groupId) {
       });
     }
   }
-
   return permissions;
 }
 
@@ -35,32 +60,38 @@ function parsePermissionString(permission) {
   const resourceType = String(resourceTypeRaw || '').toUpperCase();
   const action = String(actionRaw || '').toUpperCase();
 
-  if (!RESOURCE_TYPES.includes(resourceType) || !ACTIONS.includes(action)) {
+  if (!ACTIONS.includes(action)) {
     return null;
   }
 
-  return { resourceType, action };
+  // Identity route guards (USER:*, GROUP:*) — not asset permission rows.
+  if (IDENTITY_RESOURCE_TYPES.includes(resourceType)) {
+    return { resourceType, action, identity: true };
+  }
+
+  if (!RESOURCE_TYPES.includes(resourceType)) {
+    return null;
+  }
+
+  return { resourceType, action, identity: false };
 }
 
 function actionIsAllowed(requiredAction, grantedActions) {
-  if (grantedActions.has('ADMIN')) {
+  if (grantedActions.has('ADMIN') || grantedActions.has(requiredAction)) {
     return true;
   }
-
-  if (grantedActions.has(requiredAction)) {
-    return true;
-  }
-
-  if (requiredAction === 'CREATE' && grantedActions.has('WRITE')) {
-    return true;
-  }
-
-  return false;
+  return requiredAction === 'CREATE' && grantedActions.has('WRITE');
 }
 
 module.exports = {
+  IDENTITY_RESOURCE_TYPES,
+  PRINCIPAL_TYPES,
   RESOURCE_TYPES,
+  PERMISSION_RESOURCE_TYPES,
   ACTIONS,
+  RESOURCE_TYPE_LABELS,
+  ACTION_LABELS,
+  ASSET_KINDS,
   buildFullAdminPermissions,
   parsePermissionString,
   actionIsAllowed,

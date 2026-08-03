@@ -1,8 +1,14 @@
 const express = require('express');
 const authRoutes = require('./routes/authRoutes');
 const groupRoutes = require('./routes/groupRoutes');
-const objectRoutes = require('./routes/objectRoutes');
+const assetRoutes = require('./routes/assetRoutes');
+const surveyRoutes = require('./routes/surveyRoutes');
 const userRoutes = require('./routes/userRoutes');
+const actionLogRoutes = require('./routes/actionLogRoutes');
+const { actionLogMiddleware } = require('./middleware/actionLogMiddleware');
+
+// Register Asset subclasses (discriminators) once for the API process.
+require('./models/assets');
 
 /**
  * Build the Express application with API routes.
@@ -12,6 +18,7 @@ function createApp({ fallback } = {}) {
   const app = express();
 
   app.use(express.json());
+  app.use(actionLogMiddleware);
 
   app.get('/api/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
@@ -20,8 +27,10 @@ function createApp({ fallback } = {}) {
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/groups', groupRoutes);
-  app.use('/api/objects', objectRoutes);
+  app.use('/api/assets', assetRoutes);
+  app.use('/api/surveys', surveyRoutes);
   app.use('/api/permissions', require('./routes/permissionRoutes'));
+  app.use('/api/logs', actionLogRoutes);
 
   if (typeof fallback === 'function') {
     app.use(fallback);

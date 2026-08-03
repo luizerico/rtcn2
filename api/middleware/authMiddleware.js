@@ -1,6 +1,11 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const { userHasPermission, listUserPermissions } = require('../services/rbacService');
+const {
+  userHasPermission,
+  listUserPermissions,
+  listAccessibleResources,
+  userIsAdminGroupMember,
+} = require('../services/rbacService');
 const {
   findActiveSession,
   touchSession,
@@ -14,9 +19,6 @@ function authError(res, status, code, message) {
   });
 }
 
-/**
- * Protect routes by verifying JWT and an active DB session.
- */
 const protect = async (req, res, next) => {
   let token;
 
@@ -83,7 +85,11 @@ const protect = async (req, res, next) => {
   }
 };
 
-const authorize = (permission) => {
+/**
+ * @param {string} permission e.g. SURVEY:READ
+ * @param {{ param?: string, allowAnyInstance?: boolean, classWideOnly?: boolean, attachAccessible?: boolean }} options
+ */
+const authorize = (permission, options = {}) => {
   return async (req, res, next) => {
     try {
       if (!req.user) {
@@ -94,14 +100,30 @@ const authorize = (permission) => {
         return res.status(500).json({ message: 'Authorization is misconfigured.', code: 'CONFIG' });
       }
 
-      const allowed = await userHasPermission(req.user, permission);
+      const checkOptions = {};
+      if (options.param) {
+        checkOptions.resourceId = req.params[options.param];
+      }
+      if (options.allowAnyInstance) {
+        checkOptions.allowAnyInstance = true;
+      }
+      if (options.classWideOnly) {
+        checkOptions.resourceId = undefined;
+        checkOptions.allowAnyInstance = false;
+      }
+
+      const allowed = await userHasPermission(req.user, permission, checkOptions);
       if (!allowed) {
         return res.status(403).json({
           message: `Forbidden: Insufficient permissions for ${permission}.`,
           code: 'FORBIDDEN',
           username: req.user.username,
-          hint: 'Log in as the seeded admin user (npm run db:init) or grant this permission to one of your groups.',
+          hint: 'Grant access to this class or specific database objects for one of your groups.',
         });
+      }
+
+      if (options.attachAccessible) {
+        req.accessibleResources = await listAccessibleResources(req.user, permission);
       }
 
       next();
@@ -118,6 +140,7 @@ const authorize = (permission) => {
 const attachPermissions = async (req, res, next) => {
   try {
     req.permissions = await listUserPermissions(req.user);
+    req.isAdmin = await userIsAdminGroupMember(req.user);
     next();
   } catch (error) {
     next(error);
