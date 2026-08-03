@@ -9,11 +9,8 @@ const {
   listUserSessions,
 } = require('../services/sessionService');
 const { userHasPermission } = require('../services/rbacService');
+const { sendEmail } = require('../services/emailService');
 
-const mockSendEmail = async (email, subject) => {
-  console.log(`[MOCK EMAIL SENT] To: ${email} | Subject: ${subject}`);
-  return true;
-};
 
 function requestMeta(req) {
   return {
@@ -120,12 +117,16 @@ exports.requestPasswordReset = async (req, res) => {
     user.tokenExpiry = expirationDate;
     await user.save();
 
-    const message = `Use this secure link to reset your password: ${process.env.CLIENT_URL || 'http://localhost:3000'}/reset/${resetToken}`;
-    await mockSendEmail(user.email, 'Password Reset Request', message);
+    const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset/${resetToken}`;
+    const text = `Use this secure link to reset your password: ${resetUrl}`;
+    await sendEmail({
+      to: user.email,
+      subject: 'Password Reset Request',
+      text,
+    });
 
     res.status(200).json({
       message: 'Password reset link sent successfully to your email.',
-      ...(process.env.NODE_ENV !== 'production' ? { resetToken } : {}),
     });
   } catch (err) {
     console.error('Password Reset Error:', err);
