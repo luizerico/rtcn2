@@ -45,25 +45,32 @@ function authorizeAssetById(action) {
   };
 }
 
-router.use(protect);
-
-router.get('/', authorizeAnyAssetKind('READ', { allowAnyInstance: true }), getAllAssets);
-
-router.post('/', async (req, res, next) => {
+/** Reject survey kinds early; only CREATE-check then next() for creatable kinds. */
+async function authorizeAssetCreate(req, res, next) {
   const kind = String(req.body.kind || 'DOCUMENT').toUpperCase();
-  if (['SURVEY', 'SURVEY_RESPONSE'].includes(kind)) {
+
+  // Surveys use /api/surveys — never fall through to createAsset without a CREATE check.
+  if (kind === 'SURVEY' || kind === 'SURVEY_RESPONSE') {
     return res.status(400).json({
       message: 'Use the surveys API to create Survey or SurveyResponse assets.',
     });
   }
+
   if (!ASSET_KINDS.includes(kind)) {
     return res.status(400).json({ message: 'Invalid asset kind.' });
   }
+
   if (!(await userHasPermission(req.user, `${kind}:CREATE`, {}))) {
     return forbid(res, `${kind}:CREATE`);
   }
   return next();
-}, createAsset);
+}
+
+router.use(protect);
+
+router.get('/', authorizeAnyAssetKind('READ', { allowAnyInstance: true }), getAllAssets);
+
+router.post('/', authorizeAssetCreate, createAsset);
 
 router.get('/:id', authorizeAssetById('READ'), getAssetById);
 router.put('/:id', authorizeAssetById('WRITE'), updateAsset);

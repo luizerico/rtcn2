@@ -506,12 +506,12 @@ describe('API endpoints', () => {
       expect(res.status).toBe(400);
     });
 
-    it('rejects survey kinds on asset create (route-level)', async () => {
+    it('rejects SURVEY kinds on asset create without falling through', async () => {
       for (const kind of ['SURVEY', 'SURVEY_RESPONSE']) {
         const res = await request(app)
           .post('/api/assets')
           .set('Authorization', `Bearer ${authToken}`)
-          .send({ name: `Should fail ${kind}`, kind });
+          .send({ name: `via-assets-${kind}`, kind });
         expect(res.status).toBe(400);
         expect(res.body.message).toMatch(/surveys API/i);
       }
