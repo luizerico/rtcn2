@@ -1,4 +1,6 @@
 const Group = require('../models/Group');
+const Permission = require('../models/Permission');
+const User = require('../models/User');
 
 exports.getAllGroups = async (req, res) => {
   try {
@@ -58,11 +60,21 @@ exports.updateGroup = async (req, res) => {
 
 exports.deleteGroup = async (req, res) => {
   try {
-    const group = await Group.findByIdAndDelete(req.params.id);
+    const groupId = req.params.id;
+    const group = await Group.findById(groupId);
 
     if (!group) {
       return res.status(404).json({ message: 'Group not found.' });
     }
+
+    // Remove ACL rows for this group (modern principal + legacy groupId).
+    await Permission.deleteMany({
+      $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
+    });
+    // Clear users that still point at this group as their role.
+    await User.updateMany({ roleId: groupId }, { $set: { roleId: null } });
+    await Group.findByIdAndDelete(groupId);
+
     res.status(200).json({ message: 'Group deleted successfully.' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting group', error: error.message });
