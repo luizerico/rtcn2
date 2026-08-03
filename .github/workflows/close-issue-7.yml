@@ -1,4 +1,4 @@
-﻿name: Close issues 7 and 13
+name: Close issues 7 and 13
 on:
   workflow_dispatch:
   push:
