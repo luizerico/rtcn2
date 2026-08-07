@@ -96,6 +96,11 @@ describe('API endpoints', () => {
     it('POST /api/auth/register rejects missing fields', async () => {
       const res = await request(app).post('/api/auth/register').send({ username: 'x' });
       expect(res.status).toBe(400);
+      expect(res.body).toEqual({
+        message: 'Please include all fields.',
+        code: 'VALIDATION',
+      });
+      expect(res.body.error).toBeUndefined();
     });
 
     it('POST /api/auth/register rejects passwords shorter than 8 characters', async () => {
@@ -115,6 +120,10 @@ describe('API endpoints', () => {
         password: 'Password123!',
       });
       expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({
+        message: 'User or Email already registered.',
+        code: 'CONFLICT',
+      });
     });
 
     it('POST /api/auth/register rejects passwords that fail shared policy', async () => {
@@ -133,6 +142,10 @@ describe('API endpoints', () => {
         password: 'wrong-password',
       });
       expect(res.status).toBe(401);
+      expect(res.body).toEqual({
+        message: 'Invalid credentials.',
+        code: 'INVALID_CREDENTIALS',
+      });
     });
 
     it('POST /api/auth/login rejects unverified accounts', async () => {
@@ -173,7 +186,13 @@ describe('API endpoints', () => {
 
       const noToken = await request(app).get('/api/auth/me');
       expect(noToken.status).toBe(401);
-      expect(noToken.body.code).toBe('NO_TOKEN');
+      expect(noToken.body).toEqual({
+        message: 'Authentication required: no session token provided.',
+        code: 'NO_TOKEN',
+      });
+      expect(noToken.body.error).toBeUndefined();
+      expect(noToken.body.hint).toBeUndefined();
+      expect(noToken.body.username).toBeUndefined();
     });
 
     it('lists sessions and disconnects them', async () => {

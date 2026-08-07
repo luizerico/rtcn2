@@ -189,21 +189,40 @@ describe('RBAC admin full access', () => {
 
     const users = await request(app).get('/api/users').set(auth);
     expect(users.status).toBe(403);
+    expect(users.body).toMatchObject({
+      message: 'Forbidden: Insufficient permissions for USER:READ.',
+      code: 'FORBIDDEN',
+      details: {
+        username: viewerUser.username,
+        hint: expect.any(String),
+      },
+    });
+    expect(users.body.error).toBeUndefined();
+    expect(users.body.username).toBeUndefined();
+    expect(users.body.hint).toBeUndefined();
 
     const groups = await request(app).get('/api/groups').set(auth);
     expect(groups.status).toBe(403);
+    expect(groups.body.code).toBe('FORBIDDEN');
 
     const logs = await request(app).get('/api/logs').set(auth);
     expect(logs.status).toBe(403);
+    expect(logs.body.code).toBe('FORBIDDEN');
 
     const assets = await request(app).get('/api/assets').set(auth);
     expect(assets.status).toBe(403);
+    expect(assets.body.code).toBe('FORBIDDEN');
 
     const createAsset = await request(app)
       .post('/api/assets')
       .set(auth)
       .send({ name: 'Blocked' });
     expect(createAsset.status).toBe(403);
+    expect(createAsset.body).toMatchObject({
+      code: 'FORBIDDEN',
+      message: expect.stringContaining('Forbidden'),
+    });
+    expect(createAsset.body.error).toBeUndefined();
   });
 
   it('limits a group to SURVEY objects without DOCUMENT access', async () => {

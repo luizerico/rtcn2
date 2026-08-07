@@ -11,7 +11,7 @@ exports.addMemberToGroup = async (req, res) => {
 
     const user = await User.findById(targetUserId);
     if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+      return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const updatedGroup = await Group.findByIdAndUpdate(
@@ -21,7 +21,7 @@ exports.addMemberToGroup = async (req, res) => {
     );
 
     if (!updatedGroup) {
-      return res.status(404).json({ message: 'Group not found.' });
+      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
 
     res.status(200).json({
@@ -44,7 +44,7 @@ exports.removeMemberFromGroup = async (req, res) => {
     );
 
     if (!updatedGroup) {
-      return res.status(404).json({ message: 'Group not found.' });
+      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
 
     res.status(200).json({
@@ -60,7 +60,7 @@ exports.getGroupPermissions = async (req, res) => {
   try {
     const group = await Group.findById(req.params.groupId);
     if (!group) {
-      return res.status(404).json({ message: 'Group not found.' });
+      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const permissions = await listGroupPermissions(group._id);
@@ -81,7 +81,7 @@ exports.updateGroupPermissions = async (req, res) => {
 
     const group = await Group.findById(req.params.groupId);
     if (!group) {
-      return res.status(404).json({ message: 'Group not found.' });
+      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const permissions = await replaceGroupClassPermissions({

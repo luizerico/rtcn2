@@ -1,6 +1,7 @@
-const User = require('../models/User');
+﻿const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
 const {
   createSession,
   revokeSession,
@@ -36,7 +37,7 @@ exports.registerUser = async (req, res) => {
   try {
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(400).json({ message: 'User or Email already registered.' });
+      return sendError(res, 400, 'User or Email already registered.', ERROR_CODES.CONFLICT);
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -126,7 +127,7 @@ exports.requestPasswordReset = async (req, res) => {
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+      return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const resetToken = crypto.randomUUID();
@@ -168,14 +169,14 @@ exports.resetPassword = async (req, res) => {
     );
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired password reset token.' });
+      return sendError(res, 400, 'Invalid or expired password reset token.', ERROR_CODES.VALIDATION);
     }
 
     if (user.tokenExpiry < new Date()) {
       await User.findByIdAndUpdate(user._id, {
         $set: { resetToken: null, tokenExpiry: null },
       });
-      return res.status(400).json({ message: 'Password reset link has expired.' });
+      return sendError(res, 400, 'Password reset link has expired.', ERROR_CODES.VALIDATION);
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -223,7 +224,7 @@ exports.changeOwnPassword = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
-      return res.status(400).json({ message: 'Current password is incorrect.' });
+      return sendError(res, 400, 'Current password is incorrect.', ERROR_CODES.VALIDATION);
     }
 
     user.password = await bcrypt.hash(passwordCheck.password, 10);
@@ -256,7 +257,7 @@ exports.adminChangeUserPassword = async (req, res) => {
 
     const user = await User.findById(id);
     if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+      return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
 
     user.password = await bcrypt.hash(passwordCheck.password, 10);
@@ -294,7 +295,7 @@ exports.disconnectSession = async (req, res) => {
     const session = await Session.findOne({ sessionId });
 
     if (!session) {
-      return res.status(404).json({ message: 'Session not found.' });
+      return sendError(res, 404, 'Session not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const isOwn = String(session.userId) === String(req.user._id);
@@ -335,3 +336,4 @@ exports.validateSession = async (req, res) => {
     },
   });
 };
+

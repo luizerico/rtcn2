@@ -23,7 +23,7 @@ const protect = async (req, res, next) => {
   if (typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ')) {
     token = req.headers.authorization.slice(7);
   } else {
-    return authError(res, 401, 'NO_TOKEN', 'Authentication required: no session token provided.');
+    return authError(res, 401, ERROR_CODES.NO_TOKEN, 'Authentication required: no session token provided.');
   }
 
   try {
@@ -38,40 +38,40 @@ const protect = async (req, res, next) => {
       decoded = jwt.verify(token, secret);
     } catch (error) {
       if (error.name === 'TokenExpiredError') {
-        return authError(res, 401, 'EXPIRED', 'Your session has expired. Please sign in again.');
+        return authError(res, 401, ERROR_CODES.EXPIRED, 'Your session has expired. Please sign in again.');
       }
-      return authError(res, 401, 'INVALID', 'Authentication failed: invalid session token.');
+      return authError(res, 401, ERROR_CODES.INVALID, 'Authentication failed: invalid session token.');
     }
 
     if (!decoded.sid) {
-      return authError(res, 401, 'INVALID', 'Authentication failed: session id missing from token.');
+      return authError(res, 401, ERROR_CODES.INVALID, 'Authentication failed: session id missing from token.');
     }
 
     const session = await findActiveSession(decoded.sid);
     if (!session) {
-      return authError(res, 401, 'INVALID', 'Authentication failed: session not found.');
+      return authError(res, 401, ERROR_CODES.INVALID, 'Authentication failed: session not found.');
     }
 
     if (session.revokedAt) {
       return authError(
         res,
         401,
-        'REVOKED',
+        ERROR_CODES.REVOKED,
         `Your session was disconnected${session.revokeReason ? ` (${session.revokeReason})` : ''}. Please sign in again.`
       );
     }
 
     if (session.expiresAt.getTime() <= Date.now()) {
-      return authError(res, 401, 'EXPIRED', 'Your session has expired. Please sign in again.');
+      return authError(res, 401, ERROR_CODES.EXPIRED, 'Your session has expired. Please sign in again.');
     }
 
     if (session.tokenHash !== hashToken(token)) {
-      return authError(res, 401, 'INVALID', 'Authentication failed: token does not match session.');
+      return authError(res, 401, ERROR_CODES.INVALID, 'Authentication failed: token does not match session.');
     }
 
     req.user = await User.findById(decoded.id).select('-password');
     if (!req.user) {
-      return authError(res, 401, 'USER_NOT_FOUND', 'Authentication failed: user no longer exists.');
+      return authError(res, 401, ERROR_CODES.USER_NOT_FOUND, 'Authentication failed: user no longer exists.');
     }
 
     if (!req.user.isVerified) {
@@ -88,7 +88,7 @@ const protect = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Token Verification Error:', error.message);
-    return authError(res, 401, 'INVALID', 'Authentication failed: token invalid or expired.');
+    return authError(res, 401, ERROR_CODES.INVALID, 'Authentication failed: token invalid or expired.');
   }
 };
 
@@ -100,7 +100,7 @@ const authorize = (permission, options = {}) => {
   return async (req, res, next) => {
     try {
       if (!req.user) {
-        return authError(res, 401, 'NO_TOKEN', 'Authorization required.');
+        return authError(res, 401, ERROR_CODES.NO_TOKEN, 'Authorization required.');
       }
 
       if (!permission || typeof permission !== 'string') {
