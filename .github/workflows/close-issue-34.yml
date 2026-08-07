@@ -1,0 +1,55 @@
+name: Close issue 34
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/issue-34
+    paths:
+      - .github/workflows/close-issue-34.yml
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comment and close issue #34
+        id: close
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BODY=$(cat <<'EOF'
+          Fixed in `fix/issue-34` (`acaf393`).
+
+          Authorization hot path now queries `principalType`/`principalId` only. Legacy `groupId` `$or` clauses were removed from `principalQueryForUser` and `listGroupPermissions`.
+
+          Safe migration kept: `migratePermissionPrincipals` still runs on DB connect (bulk backfill + drop irreparable rows).
+
+          Tests: `__tests__/api.rbac.test.js` (9 passed).
+          EOF
+          )
+          gh issue comment 34 --repo "${{ github.repository }}" --body "$BODY"
+          gh issue close 34 --repo "${{ github.repository }}" --reason completed
+          mkdir -p scripts
+          STATE=$(gh issue view 34 --repo "${{ github.repository }}" --json state,closedAt,url -q .)
+          printf '%s\n' "$STATE" > scripts/close-issue-34-result.json
+
+      - name: Commit close result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p scripts
+          git add scripts/close-issue-34-result.json
+          if git diff --cached --quiet; then
+            echo "No result file to commit"
+          else
+            git commit -m "Record issue #34 close result"
+            git push
+          fi

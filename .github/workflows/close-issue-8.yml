@@ -1,0 +1,58 @@
+name: Close issue 8
+
+on:
+  push:
+    branches:
+      - chore/close-issue-8
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  close-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comment and close #8
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(cat <<'EOF'
+          ## Fixed on `fix/issue-8`
+
+          Controllers no longer leak internal exception messages to clients:
+
+          - Shared `api/utils/httpErrors.js` helper for stable `message` + `code` responses
+          - Controllers log server-side and omit raw `error.message` from JSON
+          - Regression coverage in `__tests__/api.httpErrors.test.js`
+
+          Commit: 8ae9cd8453a5478570f9533f62c115012f0cf89a (`fix/issue-8`)
+          EOF
+          )"
+          gh issue comment 8 --repo "${{ github.repository }}" --body "$body"
+          gh issue close 8 --repo "${{ github.repository }}" --reason completed
+
+      - name: Record close result
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p scripts
+          cat > scripts/close-issue-8-result.json <<EOF
+          {
+            "issue": 8,
+            "state": "closed",
+            "fixBranch": "fix/issue-8",
+            "fixSha": "8ae9cd8453a5478570f9533f62c115012f0cf89a",
+            "closedBy": "${{ github.run_id }}",
+            "closedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/close-issue-8-result.json
+          git commit --trailer "Co-authored-by: Cursor <cursoragent@cursor.com>" -m "Record close of issue #8." || true
+          git push origin HEAD:chore/close-issue-8 || true

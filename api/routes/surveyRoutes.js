@@ -25,7 +25,7 @@ router.delete('/:id', authorize('SURVEY:DELETE', { param: 'id' }), deleteSurvey)
 
 router.get(
   '/:id/responses',
-  authorize('SURVEY_RESPONSE:READ', { allowAnyInstance: true }),
+  authorize('SURVEY_RESPONSE:READ', { allowAnyInstance: true, attachAccessible: true }),
   listSurveyResponses
 );
 router.post(

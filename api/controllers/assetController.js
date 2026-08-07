@@ -77,17 +77,8 @@ exports.getAllAssets = async (req, res) => {
 
 exports.createAsset = async (req, res) => {
   try {
-    const { name, description, kind } = req.body;
-    if (!name) {
-      return res.status(400).json({ message: 'Asset name is required.' });
-    }
-
+    const { name, description, kind } = req.validated || req.body;
     const normalizedKind = String(kind || 'DOCUMENT').toUpperCase();
-    if (['SURVEY', 'SURVEY_RESPONSE'].includes(normalizedKind)) {
-      return res.status(400).json({
-        message: 'Use the surveys API to create Survey or SurveyResponse assets.',
-      });
-    }
 
     if (!kindToDiscriminator(normalizedKind)) {
       return res.status(400).json({ message: 'Invalid asset kind.' });
