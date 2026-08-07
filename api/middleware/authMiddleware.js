@@ -11,10 +11,14 @@ const {
   touchSession,
   hashToken,
 } = require('../services/sessionService');
-const { sendError } = require('../utils/httpErrors');
+const { sendError, ERROR_CODES } = require('../utils/httpErrors');
 
 function authError(res, status, code, message, extras = {}) {
-  return sendError(res, status, message, { code, ...extras });
+  const options = { code };
+  if (extras && Object.keys(extras).length > 0) {
+    options.details = extras;
+  }
+  return sendError(res, status, message, options);
 }
 
 const protect = async (req, res, next) => {

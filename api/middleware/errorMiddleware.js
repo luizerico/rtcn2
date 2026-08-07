@@ -15,7 +15,7 @@ function errorHandler(err, _req, res, next) {
     }
     return sendError(res, status, err.message || 'Request failed.', {
       code: err.code,
-      ...(err.details || {}),
+      details: err.details,
     });
   }
 

@@ -11,7 +11,7 @@ class ValidationError extends Error {
     super(message);
     this.name = 'ValidationError';
     this.statusCode = 400;
-    this.code = 'VALIDATION_ERROR';
+    this.code = 'VALIDATION';
     this.details = details;
   }
 }
