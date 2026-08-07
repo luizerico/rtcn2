@@ -23,6 +23,11 @@ function requestMeta(req) {
 exports.registerUser = async (req, res) => {
   const { username, email, password } = req.validated || req.body;
 
+  const passwordCheck = assertPasswordPolicy(password);
+  if (!passwordCheck.ok) {
+    return res.status(400).json({ message: passwordCheck.message });
+  }
+
   try {
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
@@ -30,7 +35,7 @@ exports.registerUser = async (req, res) => {
     }
 
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(passwordCheck.password, salt);
 
     const newUser = await User.create({
       username,
@@ -170,7 +175,7 @@ exports.resetPassword = async (req, res) => {
     }
 
     const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
+    user.password = await bcrypt.hash(passwordCheck.password, salt);
     user.resetToken = null;
     user.tokenExpiry = null;
     await user.save();
@@ -218,7 +223,7 @@ exports.changeOwnPassword = async (req, res) => {
       return res.status(400).json({ message: 'Current password is incorrect.' });
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
+    user.password = await bcrypt.hash(passwordCheck.password, 10);
     await user.save();
     await revokeAllUserSessions(user._id, 'password_changed');
 
@@ -252,7 +257,7 @@ exports.adminChangeUserPassword = async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
+    user.password = await bcrypt.hash(passwordCheck.password, 10);
     await user.save();
     await revokeAllUserSessions(user._id, 'admin_password_reset');
 

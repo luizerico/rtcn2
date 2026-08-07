@@ -172,6 +172,7 @@ components:
         newPassword:
           type: string
           format: password
+          minLength: 8
 
     Group:
       type: object

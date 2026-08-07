@@ -98,6 +98,16 @@ describe('API endpoints', () => {
       expect(res.status).toBe(400);
     });
 
+    it('POST /api/auth/register rejects passwords shorter than 8 characters', async () => {
+      const res = await request(app).post('/api/auth/register').send({
+        username: 'shortpwd',
+        email: 'shortpwd@example.com',
+        password: 'short',
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/at least 8 characters/i);
+    });
+
     it('POST /api/auth/register rejects duplicate users', async () => {
       const res = await request(app).post('/api/auth/register').send({
         username: 'alice',
@@ -288,6 +298,19 @@ describe('API endpoints', () => {
         .post(`/api/auth/reset-password/${resetToken}`)
         .send({});
       expect(res.status).toBe(400);
+    });
+
+    it('POST /api/auth/reset-password/:token rejects short passwords', async () => {
+      const forgot = await request(app)
+        .get('/api/auth/forgot-password')
+        .query({ email: 'alice@example.com' });
+      expect(forgot.status).toBe(200);
+
+      const res = await request(app)
+        .post(`/api/auth/reset-password/${forgot.body.resetToken}`)
+        .send({ newPassword: 'short' });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/at least 8 characters/i);
     });
   });
 
@@ -558,6 +581,19 @@ describe('API endpoints', () => {
       });
       expect(allowLogin.status).toBe(200);
       expect(allowLogin.body.token).toBeDefined();
+    });
+
+    it('rejects create user with short password', async () => {
+      const res = await request(app)
+        .post('/api/users')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          username: 'dave',
+          email: 'dave@example.com',
+          password: 'short',
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/at least 8 characters/i);
     });
   });
 
