@@ -53,12 +53,29 @@ exports.createUser = async (req, res) => {
   }
 };
 
+/** Intentional admin-writable fields only (no password/roleId/reset tokens). */
+const USER_UPDATE_ALLOWED = ['username', 'email', 'isVerified'];
+
 exports.updateUser = async (req, res) => {
   try {
-    const updates = { ...req.body };
-    delete updates.password;
-    delete updates.resetToken;
-    delete updates.tokenExpiry;
+    const updates = {};
+    for (const key of USER_UPDATE_ALLOWED) {
+      if (!Object.prototype.hasOwnProperty.call(req.body, key)) continue;
+      if (key === 'isVerified') {
+        if (typeof req.body.isVerified !== 'boolean') {
+          return res.status(400).json({ message: 'isVerified must be a boolean.' });
+        }
+        updates.isVerified = req.body.isVerified;
+        continue;
+      }
+      updates[key] = req.body[key];
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        message: `No updatable fields provided. Allowed: ${USER_UPDATE_ALLOWED.join(', ')}.`,
+      });
+    }
 
     const user = await User.findByIdAndUpdate(req.params.id, updates, {
       returnDocument: 'after',

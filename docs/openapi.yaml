@@ -53,6 +53,9 @@ components:
         email:
           type: string
           format: email
+        isVerified:
+          type: boolean
+          description: When false, login and session use are rejected (NOT_VERIFIED).
 
     RegisterRequest:
       type: object
@@ -778,6 +781,10 @@ paths:
     put:
       tags: [Users]
       summary: Update user
+      description: |
+        Whitelisted fields only: `username`, `email`, `isVerified`.
+        Setting `isVerified` is how admins grant or revoke sign-in for self-registered accounts.
+        Password, roleId, and reset tokens cannot be set here.
       operationId: updateUser
       security:
         - bearerAuth: []
@@ -787,9 +794,25 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                isVerified:
+                  type: boolean
       responses:
         '200':
           description: User updated
+        '400':
+          description: No allowed fields or invalid isVerified type
         '401':
           description: Unauthorized
         '404':
