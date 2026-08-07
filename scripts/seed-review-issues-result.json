@@ -1,0 +1,371 @@
+[
+  {
+    "section": 1,
+    "category": "Security",
+    "title": "Reports GraphQL accepts any signed JWT without session or RBAC checks",
+    "severity": "Critical",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/2",
+    "number": 2
+  },
+  {
+    "section": 2,
+    "category": "Security",
+    "title": "Survey response listing is effectively an IDOR under allowAnyInstance",
+    "severity": "High",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/3",
+    "number": 3
+  },
+  {
+    "section": 3,
+    "category": "Security",
+    "title": "Password-reset flow enumerates users and stores usable tokens insecurely",
+    "severity": "High",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/4",
+    "number": 4
+  },
+  {
+    "section": 4,
+    "category": "Security",
+    "title": "Session bearer tokens live in localStorage",
+    "severity": "High",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/5",
+    "number": 5
+  },
+  {
+    "section": 5,
+    "category": "Security",
+    "title": "Mass assignment on user and group updates",
+    "severity": "High",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/6",
+    "number": 6
+  },
+  {
+    "section": 6,
+    "category": "Security",
+    "title": "No rate limiting or baseline HTTP security middleware on the API",
+    "severity": "High",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/7",
+    "number": 7
+  },
+  {
+    "section": 7,
+    "category": "Security",
+    "title": "Controllers leak internal exception messages to clients",
+    "severity": "Medium",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/8",
+    "number": 8
+  },
+  {
+    "section": 8,
+    "category": "Security",
+    "title": "Client access cache can retain elevated grants for five minutes",
+    "severity": "Medium",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/9",
+    "number": 9
+  },
+  {
+    "section": 9,
+    "category": "Security",
+    "title": "Registration and admin user creation skip password policy",
+    "severity": "Medium",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/10",
+    "number": 10
+  },
+  {
+    "section": 10,
+    "category": "Security",
+    "title": "isVerified is never enforced at login",
+    "severity": "Low",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/11",
+    "number": 11
+  },
+  {
+    "section": 11,
+    "category": "Security",
+    "title": "Asset POST briefly skips authorization for survey kinds",
+    "severity": "Low",
+    "md": "REVIEW_SECURITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/12",
+    "number": 12
+  },
+  {
+    "section": 1,
+    "category": "Improvements",
+    "title": "Add rate limiting and security headers at the Express edge",
+    "severity": "High",
+    "md": "REVIEW_IMPROVEMENTS.md",
+    "url": "https://github.com/luizerico/baseapp/issues/13",
+    "number": 13
+  },
+  {
+    "section": 2,
+    "category": "Improvements",
+    "title": "Align reports auth with Express session validation",
+    "severity": "High",
+    "md": "REVIEW_IMPROVEMENTS.md",
+    "url": "https://github.com/luizerico/baseapp/issues/14",
+    "number": 14
+  },
+  {
+    "section": 3,
+    "category": "Improvements",
+    "title": "Scope survey-response APIs the same way as survey lists",
+    "severity": "High",
+    "md": "REVIEW_IMPROVEMENTS.md",
+    "url": "https://github.com/luizerico/baseapp/issues/15",
+    "number": 15
+  },
+  {
+    "section": 4,
+    "category": "Improvements",
+    "title": "Throttle touchSession writes on every authenticated request",
+    "severity": "Medium",
+    "md": "REVIEW_IMPROVEMENTS.md",
+    "url": "https://github.com/luizerico/baseapp/issues/16",
+    "number": 16
+  },
+  {
+    "section": 5,
+    "category": "Improvements",
+    "title": "Introduce a shared password policy helper",
+    "severity": "Medium",
+    "md": "REVIEW_IMPROVEMENTS.md",
+    "url": "https://github.com/luizerico/baseapp/issues/17",
+    "number": 17
+  },
+  {
+    "section": 6,
+    "category": "Improvements",
+    "title": "Prefer cookie-based session delivery for the browser app",
+    "severity": "Medium",
+    "md": "REVIEW_IMPROVEMENTS.md",
+    "url": "https://github.com/luizerico/baseapp/issues/18",
+    "number": 18
+  },
+  {
+    "section": 7,
+    "category": "Improvements",
+    "title": "Centralize API error responses",
+    "severity": "Medium",
+    "md": "REVIEW_IMPROVEMENTS.md",
+    "url": "https://github.com/luizerico/baseapp/issues/19",
+    "number": 19
+  },
+  {
+    "section": 8,
+    "category": "Improvements",
+    "title": "Add client-side admin route guards (defense in depth)",
+    "severity": "Medium",
+    "md": "REVIEW_IMPROVEMENTS.md",
+    "url": "https://github.com/luizerico/baseapp/issues/20",
+    "number": 20
+  },
+  {
+    "section": 9,
+    "category": "Improvements",
+    "title": "Extract shared list-query parsing",
+    "severity": "Low",
+    "md": "REVIEW_IMPROVEMENTS.md",
+    "url": "https://github.com/luizerico/baseapp/issues/21",
+    "number": 21
+  },
+  {
+    "section": 10,
+    "category": "Improvements",
+    "title": "Close the dead auth path on asset create",
+    "severity": "Low",
+    "md": "REVIEW_IMPROVEMENTS.md",
+    "url": "https://github.com/luizerico/baseapp/issues/22",
+    "number": 22
+  },
+  {
+    "section": 1,
+    "category": "Readability",
+    "title": "rbacService.js mixes ACL core with presentation/catalog concerns",
+    "severity": "High",
+    "md": "REVIEW_READABILITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/23",
+    "number": 23
+  },
+  {
+    "section": 2,
+    "category": "Readability",
+    "title": "PermissionModal.tsx is a monolith UI + data layer",
+    "severity": "High",
+    "md": "REVIEW_READABILITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/24",
+    "number": 24
+  },
+  {
+    "section": 3,
+    "category": "Readability",
+    "title": "Identity authorize(USER:…) signatures are misleading",
+    "severity": "High",
+    "md": "REVIEW_READABILITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/25",
+    "number": 25
+  },
+  {
+    "section": 4,
+    "category": "Readability",
+    "title": "Asset create middleware has a confusing authorize-by-falling-through path",
+    "severity": "Medium",
+    "md": "REVIEW_READABILITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/26",
+    "number": 26
+  },
+  {
+    "section": 5,
+    "category": "Readability",
+    "title": "Client and server duplicate RBAC evaluation rules",
+    "severity": "Medium",
+    "md": "REVIEW_READABILITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/27",
+    "number": 27
+  },
+  {
+    "section": 6,
+    "category": "Readability",
+    "title": "Duplicated requestMeta helpers",
+    "severity": "Medium",
+    "md": "REVIEW_READABILITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/28",
+    "number": 28
+  },
+  {
+    "section": 7,
+    "category": "Readability",
+    "title": "Inconsistent API error JSON shapes",
+    "severity": "Medium",
+    "md": "REVIEW_READABILITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/29",
+    "number": 29
+  },
+  {
+    "section": 8,
+    "category": "Readability",
+    "title": "roleId naming vs group membership model",
+    "severity": "Medium",
+    "md": "REVIEW_READABILITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/30",
+    "number": 30
+  },
+  {
+    "section": 9,
+    "category": "Readability",
+    "title": "Large inline GraphQL document in the client helper",
+    "severity": "Low",
+    "md": "REVIEW_READABILITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/31",
+    "number": 31
+  },
+  {
+    "section": 10,
+    "category": "Readability",
+    "title": "Leftover structural comments in models",
+    "severity": "Low",
+    "md": "REVIEW_READABILITY.md",
+    "url": "https://github.com/luizerico/baseapp/issues/32",
+    "number": 32
+  },
+  {
+    "section": 1,
+    "category": "Maintenance",
+    "title": "Two overlapping permission-write APIs",
+    "severity": "High",
+    "md": "REVIEW_MAINTENANCE.md",
+    "url": "https://github.com/luizerico/baseapp/issues/33",
+    "number": 33
+  },
+  {
+    "section": 2,
+    "category": "Maintenance",
+    "title": "Legacy principal queries remain on every authorization hot path",
+    "severity": "High",
+    "md": "REVIEW_MAINTENANCE.md",
+    "url": "https://github.com/luizerico/baseapp/issues/34",
+    "number": 34
+  },
+  {
+    "section": 3,
+    "category": "Maintenance",
+    "title": "Deleting groups does not clean related permissions",
+    "severity": "High",
+    "md": "REVIEW_MAINTENANCE.md",
+    "url": "https://github.com/luizerico/baseapp/issues/35",
+    "number": 35
+  },
+  {
+    "section": 4,
+    "category": "Maintenance",
+    "title": "Missing automated coverage for high-risk authz paths",
+    "severity": "High",
+    "md": "REVIEW_MAINTENANCE.md",
+    "url": "https://github.com/luizerico/baseapp/issues/36",
+    "number": 36
+  },
+  {
+    "section": 5,
+    "category": "Maintenance",
+    "title": "isVerified is dead weight in the domain model",
+    "severity": "Medium",
+    "md": "REVIEW_MAINTENANCE.md",
+    "url": "https://github.com/luizerico/baseapp/issues/37",
+    "number": 37
+  },
+  {
+    "section": 6,
+    "category": "Maintenance",
+    "title": "No shared request-validation layer",
+    "severity": "Medium",
+    "md": "REVIEW_MAINTENANCE.md",
+    "url": "https://github.com/luizerico/baseapp/issues/38",
+    "number": 38
+  },
+  {
+    "section": 7,
+    "category": "Maintenance",
+    "title": "Password reset depends on a mock email logger",
+    "severity": "Medium",
+    "md": "REVIEW_MAINTENANCE.md",
+    "url": "https://github.com/luizerico/baseapp/issues/39",
+    "number": 39
+  },
+  {
+    "section": 8,
+    "category": "Maintenance",
+    "title": "Example config encourages week-long JWTs",
+    "severity": "Medium",
+    "md": "REVIEW_MAINTENANCE.md",
+    "url": "https://github.com/luizerico/baseapp/issues/40",
+    "number": 40
+  },
+  {
+    "section": 9,
+    "category": "Maintenance",
+    "title": "Reports service sits outside the main Jest verification loop",
+    "severity": "Medium",
+    "md": "REVIEW_MAINTENANCE.md",
+    "url": "https://github.com/luizerico/baseapp/issues/41",
+    "number": 41
+  },
+  {
+    "section": 10,
+    "category": "Maintenance",
+    "title": "Access-cache fingerprint embeds token fragments",
+    "severity": "Low",
+    "md": "REVIEW_MAINTENANCE.md",
+    "url": "https://github.com/luizerico/baseapp/issues/42",
+    "number": 42
+  }
+]

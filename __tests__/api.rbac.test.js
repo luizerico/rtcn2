@@ -15,6 +15,13 @@ const {
   seedUnprivilegedUser,
 } = require('./helpers/apiTestUtils');
 const { ACTIONS, RESOURCE_TYPES } = require('../api/constants/rbac');
+const Permission = require('../api/models/Permission');
+const Group = require('../api/models/Group');
+const {
+  principalQueryForUser,
+  migratePermissionPrincipals,
+  userHasPermission,
+} = require('../api/services/rbacService');
 
 describe('RBAC admin full access', () => {
   let app;
@@ -311,4 +318,68 @@ describe('RBAC admin full access', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(listUsers.status).toBe(200);
   });
+  it('builds hot-path queries without legacy groupId $or clauses', () => {
+    const userOnly = principalQueryForUser('user-1', []);
+    expect(userOnly).toEqual({ principalType: 'USER', principalId: 'user-1' });
+    expect(JSON.stringify(userOnly)).not.toMatch(/"groupId"/);
+
+    const withGroups = principalQueryForUser('user-1', ['g1', 'g2']);
+    expect(withGroups).toEqual({
+      $or: [
+        { principalType: 'USER', principalId: 'user-1' },
+        { principalType: 'GROUP', principalId: { $in: ['g1', 'g2'] } },
+      ],
+    });
+    expect(JSON.stringify(withGroups)).not.toMatch(/"groupId"/);
+  });
+
+  it('backfills legacy groupId-only rows so authz works without legacy filters', async () => {
+    const group = await Group.create({ name: 'legacy-survey-readers', description: 'legacy' });
+    await Group.updateOne({ _id: group._id }, { $addToSet: { members: viewerUser._id } });
+
+    await Permission.collection.insertOne({
+      groupId: group._id,
+      resourceType: 'SURVEY',
+      target: '*',
+      resourceId: null,
+      permission: 'READ',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const before = await userHasPermission(viewerUser, 'SURVEY:READ');
+    expect(before).toBe(false);
+
+    const result = await migratePermissionPrincipals();
+    expect(result.updated).toBeGreaterThanOrEqual(1);
+
+    const normalized = await Permission.findOne({
+      principalType: 'GROUP',
+      principalId: group._id,
+      resourceType: 'SURVEY',
+      permission: 'READ',
+    });
+    expect(normalized).toBeTruthy();
+
+    const after = await userHasPermission(viewerUser, 'SURVEY:READ');
+    expect(after).toBe(true);
+  });
+
+  it('deletes irreparable legacy rows with no groupId to promote', async () => {
+    const insert = await Permission.collection.insertOne({
+      resourceType: 'DOCUMENT',
+      target: '*',
+      resourceId: null,
+      permission: 'READ',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await migratePermissionPrincipals();
+    expect(result.deleted).toBeGreaterThanOrEqual(1);
+
+    const gone = await Permission.collection.findOne({ _id: insert.insertedId });
+    expect(gone).toBeNull();
+  });
+
 });

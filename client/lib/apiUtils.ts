@@ -111,7 +111,10 @@ async function request<T>(method: string, endpoint: string, bodyData?: object): 
 
   if (!res.ok) {
     const parsed = await parseError(res);
-    if (res.status === 401) {
+    if (
+      res.status === 401 ||
+      (res.status === 403 && parsed.code === 'NOT_VERIFIED')
+    ) {
       handleUnauthorized(parsed.message, parsed.code);
     }
     throw new ApiError(parsed.message, res.status, parsed.code);

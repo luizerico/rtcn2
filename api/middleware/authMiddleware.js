@@ -11,10 +11,10 @@ const {
   touchSession,
   hashToken,
 } = require('../services/sessionService');
-const { sendError, ERROR_CODES } = require('../utils/httpErrors');
+const { sendError } = require('../utils/httpErrors');
 
-function authError(res, status, code, message, details) {
-  return sendError(res, status, message, code, details);
+function authError(res, status, code, message, extras = {}) {
+  return sendError(res, status, message, { code, ...extras });
 }
 
 const protect = async (req, res, next) => {
@@ -30,7 +30,7 @@ const protect = async (req, res, next) => {
     const secret = process.env.JWT_SECRET;
     if (!secret) {
       console.error('JWT_SECRET is not configured.');
-      return authError(res, 500, ERROR_CODES.CONFIG, 'Server authentication is misconfigured.');
+      return authError(res, 500, 'CONFIG', 'Server authentication is misconfigured.');
     }
 
     let decoded;
@@ -74,6 +74,15 @@ const protect = async (req, res, next) => {
       return authError(res, 401, ERROR_CODES.USER_NOT_FOUND, 'Authentication failed: user no longer exists.');
     }
 
+    if (!req.user.isVerified) {
+      return authError(
+        res,
+        403,
+        'NOT_VERIFIED',
+        'Account is not verified. An administrator must set isVerified before you can use this session.'
+      );
+    }
+
     req.session = session;
     await touchSession(session);
     next();
@@ -95,7 +104,7 @@ const authorize = (permission, options = {}) => {
       }
 
       if (!permission || typeof permission !== 'string') {
-        return authError(res, 500, ERROR_CODES.CONFIG, 'Authorization is misconfigured.');
+        return authError(res, 500, 'CONFIG', 'Authorization is misconfigured.');
       }
 
       const checkOptions = {};
@@ -112,16 +121,10 @@ const authorize = (permission, options = {}) => {
 
       const allowed = await userHasPermission(req.user, permission, checkOptions);
       if (!allowed) {
-        return authError(
-          res,
-          403,
-          ERROR_CODES.FORBIDDEN,
-          `Forbidden: Insufficient permissions for ${permission}.`,
-          {
-            username: req.user.username,
-            hint: 'Grant access to this class or specific database objects for one of your groups.',
-          }
-        );
+        return authError(res, 403, 'FORBIDDEN', `Forbidden: Insufficient permissions for ${permission}.`, {
+          username: req.user.username,
+          hint: 'Grant access to this class or specific database objects for one of your groups.',
+        });
       }
 
       if (options.attachAccessible) {
@@ -131,12 +134,7 @@ const authorize = (permission, options = {}) => {
       next();
     } catch (error) {
       console.error('Authorization Error:', error.message);
-      return authError(
-        res,
-        403,
-        ERROR_CODES.FORBIDDEN,
-        `Forbidden: Insufficient permissions for ${permission}.`
-      );
+      return authError(res, 403, 'FORBIDDEN', `Forbidden: Insufficient permissions for ${permission}.`);
     }
   };
 };

@@ -1,7 +1,5 @@
 const Group = require('../models/Group');
 const User = require('../models/User');
-const { PERMISSION_RESOURCE_TYPES } = require('../constants/rbac');
-const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
 const {
   listGroupPermissions,
   replaceGroupClassPermissions,
@@ -9,10 +7,7 @@ const {
 
 exports.addMemberToGroup = async (req, res) => {
   try {
-    const { targetUserId } = req.body;
-    if (!targetUserId) {
-      return sendError(res, 400, 'Target User ID is required.', ERROR_CODES.VALIDATION);
-    }
+    const targetUserId = req.validated?.targetUserId || req.body.targetUserId;
 
     const user = await User.findById(targetUserId);
     if (!user) {
@@ -40,10 +35,7 @@ exports.addMemberToGroup = async (req, res) => {
 
 exports.removeMemberFromGroup = async (req, res) => {
   try {
-    const { targetUserId } = req.body;
-    if (!targetUserId) {
-      return sendError(res, 400, 'Target User ID is required.', ERROR_CODES.VALIDATION);
-    }
+    const targetUserId = req.validated?.targetUserId || req.body.targetUserId;
 
     const updatedGroup = await Group.findByIdAndUpdate(
       req.params.groupId,
@@ -80,30 +72,12 @@ exports.getGroupPermissions = async (req, res) => {
 
 exports.updateGroupPermissions = async (req, res) => {
   try {
-    const { scopes, resourceType, allObjects = false, objects = [] } = req.body;
-    const allowedScopes = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
-
-    if (!Array.isArray(scopes) || scopes.length === 0) {
-      return sendError(res, 400, 'At least one permission scope is required.', ERROR_CODES.VALIDATION);
-    }
-
-    const normalizedResourceType = String(resourceType || '').toUpperCase();
-    if (!PERMISSION_RESOURCE_TYPES.includes(normalizedResourceType)) {
-      return sendError(res, 400, `Invalid resource type. Permissions only apply to asset subclasses: ${PERMISSION_RESOURCE_TYPES.join(', ')}.`, ERROR_CODES.VALIDATION);
-    }
-
-    const invalidScopes = scopes.filter((scope) => !allowedScopes.includes(scope));
-    if (invalidScopes.length > 0) {
-      return sendError(res, 400, `Invalid scopes: ${invalidScopes.join(', ')}`, ERROR_CODES.VALIDATION);
-    }
-
-    const selectedObjects = Array.isArray(objects)
-      ? objects.filter((o) => o && (o.id || o.resourceId))
-      : [];
-
-    if (!allObjects && selectedObjects.length === 0) {
-      return sendError(res, 400, 'Select all objects of this class, or one or more existing database objects.', ERROR_CODES.VALIDATION);
-    }
+    const {
+      scopes,
+      resourceType,
+      allObjects = false,
+      objects = [],
+    } = req.validated || req.body;
 
     const group = await Group.findById(req.params.groupId);
     if (!group) {
@@ -112,10 +86,10 @@ exports.updateGroupPermissions = async (req, res) => {
 
     const permissions = await replaceGroupClassPermissions({
       groupId: group._id,
-      resourceType: normalizedResourceType,
+      resourceType: String(resourceType || '').toUpperCase(),
       scopes,
       allObjects: Boolean(allObjects),
-      objects: selectedObjects,
+      objects: Array.isArray(objects) ? objects.filter((o) => o && (o.id || o.resourceId)) : [],
     });
 
     res.status(200).json({

@@ -1,9 +1,5 @@
-const {
-  listAllPermissions,
-  listPermissionCatalog,
-  listAssetAcl,
-  replaceAssetAcl,
-} = require('../services/rbacService');
+const { listAllPermissions, listPermissionCatalog } = require('../services/rbacCatalog');
+const { listAssetAcl, replaceAssetAcl } = require('../services/rbacService');
 const { PERMISSION_RESOURCE_TYPES } = require('../constants/rbac');
 const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
 

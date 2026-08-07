@@ -1,11 +1,10 @@
 const {
-  sendServerError,
-  sendError,
-  buildErrorBody,
-  ERROR_CODES,
-  errorHandler,
   HttpError,
+  sendError,
+  sendServerError,
+  asyncHandler,
 } = require('../api/utils/httpErrors');
+const { errorHandler } = require('../api/middleware/errorMiddleware');
 
 describe('httpErrors helpers', () => {
   let res;
@@ -16,7 +15,7 @@ describe('httpErrors helpers', () => {
   beforeEach(() => {
     jsonMock = jest.fn();
     statusMock = jest.fn(() => ({ json: jsonMock }));
-    res = { status: statusMock };
+    res = { status: statusMock, headersSent: false };
     consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -24,7 +23,13 @@ describe('httpErrors helpers', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('sendServerError returns message+code without leaking exception details', () => {
+  it('sendError returns message and optional code without internals', () => {
+    sendError(res, 400, 'Bad input.', { code: 'BAD_REQUEST' });
+    expect(statusMock).toHaveBeenCalledWith(400);
+    expect(jsonMock).toHaveBeenCalledWith({ message: 'Bad input.', code: 'BAD_REQUEST' });
+  });
+
+  it('sendServerError logs the exception and omits details from the body', () => {
     const error = new Error('E11000 duplicate key at path "users.email" /data/db/wiredTiger');
     sendServerError(res, error, 'Error fetching users');
 
@@ -41,7 +46,7 @@ describe('httpErrors helpers', () => {
     expect(body).not.toHaveProperty('stack');
   });
 
-  it('sendServerError allows custom status and code while still omitting internals', () => {
+  it('sendServerError allows custom status and code', () => {
     const error = new Error('secret path C:\\Projects\\secrets.env');
     sendServerError(res, error, 'Error applying asset ACL', { status: 500, code: 'ACL_FAILED' });
 
@@ -52,39 +57,37 @@ describe('httpErrors helpers', () => {
     expect(JSON.stringify(jsonMock.mock.calls[0][0])).not.toMatch(/secrets\.env|secret path/i);
   });
 
-  it('sendError standardizes intentional client errors with optional details', () => {
-    expect(buildErrorBody('Nope', ERROR_CODES.VALIDATION)).toEqual({
-      message: 'Nope',
-      code: 'VALIDATION',
-    });
-
-    sendError(res, 403, 'Forbidden', ERROR_CODES.FORBIDDEN, {
-      username: 'alice',
-      hint: 'Grant access',
-    });
-    expect(statusMock).toHaveBeenCalledWith(403);
-    expect(jsonMock).toHaveBeenCalledWith({
-      message: 'Forbidden',
-      code: 'FORBIDDEN',
-      details: { username: 'alice', hint: 'Grant access' },
-    });
+  it('HttpError carries status and code', () => {
+    const err = new HttpError(404, 'Missing.', { code: 'NOT_FOUND' });
+    expect(err.status).toBe(404);
+    expect(err.code).toBe('NOT_FOUND');
+    expect(err.isOperational).toBe(true);
   });
 
-  it('errorHandler formats HttpError and unknown failures', () => {
-    errorHandler(new HttpError(400, 'Bad input', ERROR_CODES.VALIDATION, { field: 'name' }), {}, res, () => {});
-    expect(jsonMock).toHaveBeenCalledWith({
-      message: 'Bad input',
-      code: 'VALIDATION',
-      details: { field: 'name' },
-    });
-
-    jsonMock.mockClear();
-    statusMock.mockClear();
-    errorHandler(new Error('boom'), {}, res, () => {});
-    expect(statusMock).toHaveBeenCalledWith(500);
-    expect(jsonMock).toHaveBeenCalledWith({
-      message: 'Internal server error.',
+  it('errorHandler formats HttpError without leaking cause', () => {
+    const err = new HttpError(500, 'Error fetching users', {
       code: 'INTERNAL',
+      cause: new Error('ECONNREFUSED mongodb://secret'),
     });
+    errorHandler(err, {}, res, () => {});
+    expect(statusMock).toHaveBeenCalledWith(500);
+    expect(jsonMock).toHaveBeenCalledWith({ message: 'Error fetching users', code: 'INTERNAL' });
+    expect(JSON.stringify(jsonMock.mock.calls[0][0])).not.toMatch(/mongodb|ECONNREFUSED|secret/i);
+  });
+
+  it('errorHandler hides unexpected exception messages', () => {
+    errorHandler(new Error('Cast to ObjectId failed for value "x"'), {}, res, () => {});
+    expect(statusMock).toHaveBeenCalledWith(500);
+    expect(jsonMock).toHaveBeenCalledWith({ message: 'Internal server error.', code: 'INTERNAL' });
+  });
+
+  it('asyncHandler forwards rejections to next', async () => {
+    const boom = new HttpError(400, 'Nope', { code: 'BAD_REQUEST' });
+    const handler = asyncHandler(async () => {
+      throw boom;
+    });
+    const next = jest.fn();
+    await handler({}, {}, next);
+    expect(next).toHaveBeenCalledWith(boom);
   });
 });

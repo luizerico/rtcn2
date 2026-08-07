@@ -9,6 +9,8 @@ const {
   deleteAsset,
 } = require('../controllers/assetController');
 const { protect } = require('../middleware/authMiddleware');
+const { validate } = require('../middleware/validate');
+const { createAssetBody, paramObjectId } = require('../validation/schemas');
 const { userHasPermission } = require('../services/rbacService');
 const { Asset } = require('../models/Asset');
 const { ASSET_KINDS } = require('../constants/rbac');
@@ -52,22 +54,26 @@ router.use(protect);
 
 router.get('/', authorizeAnyAssetKind('READ', { allowAnyInstance: true }), getAllAssets);
 
-router.post('/', async (req, res, next) => {
-  const kind = String(req.body.kind || 'DOCUMENT').toUpperCase();
-  if (['SURVEY', 'SURVEY_RESPONSE'].includes(kind)) {
+router.post(
+  '/',
+  validate(createAssetBody),
+  async (req, res, next) => {
+    const kind = req.validated?.kind || String(req.body.kind || 'DOCUMENT').toUpperCase();
+    if (!(await userHasPermission(req.user, `${kind}:CREATE`, {}))) {
+      return forbid(res, `${kind}:CREATE`);
+    }
     return next();
-  }
-  if (!ASSET_KINDS.includes(kind)) {
-    return sendError(res, 400, 'Invalid asset kind.', ERROR_CODES.VALIDATION);
-  }
-  if (!(await userHasPermission(req.user, `${kind}:CREATE`, {}))) {
-    return forbid(res, `${kind}:CREATE`);
-  }
-  return next();
-}, createAsset);
+  },
+  createAsset
+);
 
-router.get('/:id', authorizeAssetById('READ'), getAssetById);
-router.put('/:id', authorizeAssetById('WRITE'), updateAsset);
-router.delete('/:id', authorizeAssetById('DELETE'), deleteAsset);
+router.get('/:id', validate(paramObjectId('id', 'Asset id')), authorizeAssetById('READ'), getAssetById);
+router.put('/:id', validate(paramObjectId('id', 'Asset id')), authorizeAssetById('WRITE'), updateAsset);
+router.delete(
+  '/:id',
+  validate(paramObjectId('id', 'Asset id')),
+  authorizeAssetById('DELETE'),
+  deleteAsset
+);
 
 module.exports = router;

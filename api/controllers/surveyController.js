@@ -423,7 +423,21 @@ exports.listSurveyResponses = async (req, res) => {
     }
 
     const questions = await loadSurveyQuestions(survey._id);
-    const responses = await SurveyResponse.find({ surveyId: survey._id })
+    const filter = { surveyId: survey._id };
+
+    const access = req.accessibleResources;
+    if (access && !access.all) {
+      if (!access.ids.length) {
+        return res.status(200).json({
+          survey: serializeSurvey(survey, questions),
+          responses: [],
+          summary: buildResponseSummary(survey, questions, []),
+        });
+      }
+      filter._id = { $in: access.ids };
+    }
+
+    const responses = await SurveyResponse.find(filter)
       .sort({ createdAt: -1 })
       .populate('createdBy', 'username email')
       .populate('updatedBy', 'username email');
