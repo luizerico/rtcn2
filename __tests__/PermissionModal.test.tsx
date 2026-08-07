@@ -81,9 +81,9 @@ describe('PermissionModal Component', () => {
     await waitFor(() => expect(screen.getByText('Pulse')).toBeInTheDocument());
     fireEvent.click(screen.getByLabelText(/pulse/i));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /add user/i })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: /create user/i })).not.toBeDisabled()
     );
-    fireEvent.click(screen.getByRole('button', { name: /add user/i }));
+    fireEvent.click(screen.getByRole('button', { name: /create user/i }));
     fireEvent.click(await screen.findByRole('button', { name: /^alice$/i }));
     await screen.findByRole('option', { name: /alice/i });
     fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
@@ -104,6 +104,9 @@ describe('PermissionModal Component', () => {
           ],
         })
       );
+      expect(
+        apiPost.mock.calls.every(([url]) => !/\/groups\/.+\/permissions/.test(String(url)))
+      ).toBe(true);
     });
     expect(mockOnClose).toHaveBeenCalled();
     expect(mockOnApplied).toHaveBeenCalled();

@@ -193,6 +193,11 @@ function buildPermissionDocs({ principalType, principalId, resourceType, scopes,
   return docs;
 }
 
+/**
+ * @deprecated Prefer replaceAssetAcl (POST /api/permissions/acl). This helper only
+ * mutates one GROUP principal for the selected assets; it no longer wipes that
+ * group's unrelated instance/class grants for the same resource type.
+ */
 async function replaceGroupClassPermissions({
   groupId,
   resourceType,
@@ -200,14 +205,29 @@ async function replaceGroupClassPermissions({
   allObjects = false,
   objects = [],
 }) {
-  await Permission.deleteMany({
+  const objectIds = (objects || [])
+    .map((object) => object.id || object.resourceId)
+    .filter(Boolean)
+    .map(String);
+
+  if (!allObjects && !objectIds.length) {
+    throw new Error('Select at least one asset, or choose all objects of this type.');
+  }
+
+  // Selection-scoped delete for this group only — never wipe sibling grants.
+  const deleteFilter = {
     resourceType,
-    $or: [
-      { principalType: 'GROUP', principalId: groupId },
-      { groupId },
-    ],
-  });
-  if (!scopes.length) return [];
+    $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
+  };
+  if (allObjects) {
+    deleteFilter.resourceId = null;
+    deleteFilter.target = '*';
+  } else {
+    deleteFilter.resourceId = { $in: objectIds };
+  }
+
+  await Permission.deleteMany(deleteFilter);
+  if (!scopes.length) return listGroupPermissions(groupId);
 
   const docs = buildPermissionDocs({
     principalType: 'GROUP',

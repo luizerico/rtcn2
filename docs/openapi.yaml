@@ -232,21 +232,74 @@ components:
 
     UpdatePermissionsRequest:
       type: object
-      required: [scopes, target]
+      description: >
+        Deprecated request body for POST /api/groups/{groupId}/permissions.
+        Prefer ApplyAssetAclRequest via POST /api/permissions/acl.
+      required: [scopes, resourceType]
       properties:
         scopes:
           type: array
           items:
             type: string
-            enum: [READ, WRITE, DELETE, ADMIN]
+            enum: [READ, WRITE, CREATE, DELETE, ADMIN]
           example: [READ, WRITE]
-        target:
-          type: string
-          example: User
         resourceType:
           type: string
-          enum: [USER, GROUP, ASSET, DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
-          default: ASSET
+          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+        allObjects:
+          type: boolean
+          description: When true, grants class-wide (*) access for this group only.
+        objects:
+          type: array
+          description: Required when allObjects is false. Only these asset ids are replaced for this group.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+
+    ApplyAssetAclRequest:
+      type: object
+      description: >
+        Canonical permission-write payload. Replaces the full ACL for the selected
+        assets (or class-wide *), for every principal in entries.
+      required: [resourceType, entries]
+      properties:
+        resourceType:
+          type: string
+          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+        allObjects:
+          type: boolean
+          description: When true, replaces class-wide (*) ACL rows for this resource type.
+        objects:
+          type: array
+          description: Asset selection when allObjects is false. Delete scope is limited to these ids.
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              name:
+                type: string
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              principalType:
+                type: string
+                enum: [USER, GROUP]
+              principalId:
+                type: string
+              scopes:
+                type: array
+                items:
+                  type: string
+                  enum: [READ, WRITE, CREATE, DELETE, ADMIN]
 
     Permission:
       type: object
@@ -1142,7 +1195,12 @@ paths:
           description: ACL entries for the selection
     post:
       tags: [Permissions]
-      summary: Apply Windows-style ACL to selected assets
+      summary: Apply Windows-style ACL to selected assets (canonical permission write)
+      description: >
+        Canonical permission-write API used by PermissionModal. Replaces the ACL for
+        the selected assets (or class-wide *) with the provided principal entries.
+        Delete scope is limited to the selection — either resourceId null/target *
+        when allObjects is true, or the listed object ids.
       operationId: applyAssetAcl
       security:
         - bearerAuth: []
@@ -1151,38 +1209,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [resourceType, entries]
-              properties:
-                resourceType:
-                  type: string
-                  enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
-                allObjects:
-                  type: boolean
-                objects:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                      label:
-                        type: string
-                entries:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      principalType:
-                        type: string
-                        enum: [USER, GROUP]
-                      principalId:
-                        type: string
-                      scopes:
-                        type: array
-                        items:
-                          type: string
-                          enum: [READ, WRITE, CREATE, DELETE, ADMIN]
+              $ref: '#/components/schemas/ApplyAssetAclRequest'
       responses:
         '200':
           description: ACL applied
@@ -1222,7 +1249,13 @@ paths:
           description: Group not found
     post:
       tags: [Groups]
-      summary: Update group permissions
+      summary: Update group permissions (deprecated)
+      description: >
+        Deprecated. Use POST /api/permissions/acl instead. This endpoint only
+        replaces this group's grants for the selected assets (or class-wide *);
+        it does not wipe unrelated instance grants for the same resource type.
+        Responses include Deprecation and Link headers pointing at the successor.
+      deprecated: true
       operationId: updateGroupPermissions
       security:
         - bearerAuth: []
@@ -1240,7 +1273,19 @@ paths:
               $ref: '#/components/schemas/UpdatePermissionsRequest'
       responses:
         '200':
-          description: Permissions updated in the permissions collection
+          description: Permissions updated (deprecated path)
+          headers:
+            Deprecation:
+              schema:
+                type: string
+                example: 'true'
+            Link:
+              schema:
+                type: string
+                example: '</api/permissions/acl>; rel="successor-version"'
+            Warning:
+              schema:
+                type: string
         '400':
           description: Validation error
         '401':
