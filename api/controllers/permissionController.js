@@ -1,16 +1,13 @@
-const {
-  listAllPermissions,
-  listPermissionCatalog,
-  listAssetAcl,
-  replaceAssetAcl,
-} = require('../services/rbacService');
+const { listAllPermissions, listPermissionCatalog } = require('../services/rbacCatalog');
+const { listAssetAcl, replaceAssetAcl } = require('../services/rbacService');
 const { PERMISSION_RESOURCE_TYPES } = require('../constants/rbac');
+const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
 
 exports.listPermissions = async (_req, res) => {
   try {
     res.status(200).json(await listAllPermissions());
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching permissions', error: error.message });
+    return sendServerError(res, error, 'Error fetching permissions');
   }
 };
 
@@ -18,7 +15,7 @@ exports.getPermissionCatalog = async (_req, res) => {
   try {
     res.status(200).json(await listPermissionCatalog());
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching permission catalog', error: error.message });
+    return sendServerError(res, error, 'Error fetching permission catalog');
   }
 };
 
@@ -26,9 +23,7 @@ exports.getAssetAcl = async (req, res) => {
   try {
     const resourceType = String(req.query.resourceType || '').toUpperCase();
     if (!PERMISSION_RESOURCE_TYPES.includes(resourceType)) {
-      return res.status(400).json({
-        message: `resourceType must be an asset subclass: ${PERMISSION_RESOURCE_TYPES.join(', ')}`,
-      });
+      return sendError(res, 400, `resourceType must be an asset subclass: ${PERMISSION_RESOURCE_TYPES.join(', ')}`, ERROR_CODES.VALIDATION);
     }
 
     const allObjects = String(req.query.allObjects || '') === 'true';
@@ -40,7 +35,7 @@ exports.getAssetAcl = async (req, res) => {
     const acl = await listAssetAcl({ resourceType, allObjects, objectIds });
     res.status(200).json(acl);
   } catch (error) {
-    res.status(500).json({ message: 'Error loading asset ACL', error: error.message });
+    return sendServerError(res, error, 'Error loading asset ACL');
   }
 };
 
@@ -52,15 +47,11 @@ exports.applyAssetAcl = async (req, res) => {
     const entries = Array.isArray(req.body.entries) ? req.body.entries : [];
 
     if (!PERMISSION_RESOURCE_TYPES.includes(resourceType)) {
-      return res.status(400).json({
-        message: `Permissions only apply to asset subclasses: ${PERMISSION_RESOURCE_TYPES.join(', ')}`,
-      });
+      return sendError(res, 400, `Permissions only apply to asset subclasses: ${PERMISSION_RESOURCE_TYPES.join(', ')}`, ERROR_CODES.VALIDATION);
     }
 
     if (!allObjects && objects.length === 0) {
-      return res.status(400).json({
-        message: 'Select at least one asset, or choose all objects of this type.',
-      });
+      return sendError(res, 400, 'Select at least one asset, or choose all objects of this type.', ERROR_CODES.VALIDATION);
     }
 
     const acl = await replaceAssetAcl({
@@ -75,6 +66,6 @@ exports.applyAssetAcl = async (req, res) => {
       acl,
     });
   } catch (error) {
-    res.status(400).json({ message: error.message || 'Error applying asset ACL' });
+    return sendServerError(res, error, 'Error applying asset ACL');
   }
 };

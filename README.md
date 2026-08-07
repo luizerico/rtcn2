@@ -122,6 +122,20 @@ npm start
 - Require strong `JWT_SECRET` / `ADMIN_PASSWORD`
 - Restrict MongoDB network access
 - Rotate the seeded admin password after first login
+- Configure real email delivery in production (`EMAIL_PROVIDER=smtp` or `module`); the console sender is for local/test only and never returns reset tokens in HTTP responses
+
+### Email (password reset)
+
+Password reset uses a pluggable sender in `api/services/emailService.js`:
+
+| `EMAIL_PROVIDER` | Behavior |
+|------------------|----------|
+| `console` (default in development/test) | Logs the message; safe for local/CI |
+| `memory` | Captures messages in-process (tests) |
+| `smtp` | Nodemailer SMTP (`SMTP_*` + `EMAIL_FROM`; requires `nodemailer`) |
+| `module` | Loads `EMAIL_SENDER_MODULE` exporting `send(message)` |
+
+Production must set `smtp` or `module` — the console default is rejected so reset links are not silently logged.
 
 ## API testing
 
@@ -183,10 +197,19 @@ Separate FastAPI container that reads the same MongoDB and exposes analytics at 
 ## RBAC notes
 
 - Permissions live in the **`permissions`** collection (not embedded on groups).
-- Each permission row links a **group** to a resource action (`READ`, `WRITE`, `CREATE`, `DELETE`, `ADMIN`) for `USER`, `GROUP`, or `ASSET`.
+- Each permission row links a **USER or GROUP** principal to a resource action (`READ`, `WRITE`, `CREATE`, `DELETE`, `ADMIN`) for asset subclasses (`DOCUMENT`, `DASHBOARD`, `DATASET`, `SURVEY`, `SURVEY_RESPONSE`).
+- **Canonical write API:** `POST /api/permissions/acl` (Windows-style ACL apply used by PermissionModal). Delete scope is limited to the selected assets or class-wide `*`.
+- **Deprecated:** `POST /api/groups/{groupId}/permissions` — prefer the ACL endpoint; the group path only mutates that group’s grants for the selection and returns `Deprecation` / `Link` headers.
 - `authorize('RESOURCE:ACTION')` resolves the caller’s groups (`roleId` + membership) and loads matching permission rows.
 - `ADMIN` on a resource type grants every action; `WRITE` also covers `CREATE`.
 - `npm run db:init` upserts the **admin** group and writes the full permission matrix into `permissions`.
+
+## Account verification
+
+- `User.isVerified` must be `true` to sign in (`POST /api/auth/login`) and to use an existing session.
+- Self-registration creates unverified users; an admin must set `isVerified` (for example `PUT /api/users/{id}`) before they can log in.
+- Admin-created users (`POST /api/users`) and the bootstrap admin are verified automatically.
+- There is no email-verification flow yet; verification is admin-managed.
 
 - **Two terminals still?** Use root `npm run dev` only — not `client` and `api` separately.
 - **`JWT_SECRET is not configured`**: set it in `.env`.

@@ -47,16 +47,36 @@ async function parseError(res: Response): Promise<{ message: string; code?: stri
   try {
     const errorData = (await res.json()) as {
       message?: string;
+      code?: string;
+      details?: {
+        hint?: string;
+        username?: string;
+        [key: string]: unknown;
+      };
+      // Legacy top-level fields (pre-standardization).
       hint?: string;
       username?: string;
-      code?: string;
     };
+    const details = errorData.details && typeof errorData.details === 'object' ? errorData.details : {};
+    const username =
+      typeof details.username === 'string'
+        ? details.username
+        : typeof errorData.username === 'string'
+          ? errorData.username
+          : undefined;
+    const hint =
+      typeof details.hint === 'string'
+        ? details.hint
+        : typeof errorData.hint === 'string'
+          ? errorData.hint
+          : undefined;
+
     const parts = [errorData.message || `API request failed with status ${res.status}`];
-    if (errorData.username) {
-      parts.push(`(user: ${errorData.username})`);
+    if (username) {
+      parts.push(`(user: ${username})`);
     }
-    if (errorData.hint) {
-      parts.push(errorData.hint);
+    if (hint) {
+      parts.push(hint);
     }
     return { message: parts.join(' '), code: errorData.code };
   } catch {
@@ -91,7 +111,10 @@ async function request<T>(method: string, endpoint: string, bodyData?: object): 
 
   if (!res.ok) {
     const parsed = await parseError(res);
-    if (res.status === 401) {
+    if (
+      res.status === 401 ||
+      (res.status === 403 && parsed.code === 'NOT_VERIFIED')
+    ) {
       handleUnauthorized(parsed.message, parsed.code);
     }
     throw new ApiError(parsed.message, res.status, parsed.code);

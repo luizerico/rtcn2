@@ -20,7 +20,7 @@ const permissionSchema = new Schema(
       required: true,
       index: true,
     },
-    /** @deprecated Prefer principalType=GROUP + principalId. Kept for migration/compat. */
+    /** @deprecated Denormalized GROUP hint; not used on authz hot path after migratePermissionPrincipals. Prefer principalType=GROUP + principalId. */
     groupId: {
       type: Schema.Types.ObjectId,
       ref: 'Group',
