@@ -36,6 +36,10 @@ const REASON_COPY: Record<string, { title: string; message: string }> = {
     title: 'Access denied',
     message: 'You are signed in but lack permission for that page. Use an authorized account.',
   },
+  NOT_VERIFIED: {
+    title: 'Account not verified',
+    message: 'An administrator must verify this account before you can sign in.',
+  },
 };
 
 function LoginForm() {

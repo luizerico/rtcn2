@@ -25,10 +25,7 @@ exports.getUserById = async (req, res) => {
 
 exports.createUser = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: 'Username, email, and password are required.' });
-    }
+    const { username, email, password } = req.validated || req.body;
 
     const passwordCheck = assertPasswordPolicy(password);
     if (!passwordCheck.ok) {
@@ -40,11 +37,13 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ message: 'User or email already exists.' });
     }
 
-    const hashedPassword = await bcrypt.hash(passwordCheck.password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    // Admin-provisioned accounts are trusted and can sign in immediately.
     const user = await User.create({
       username,
       email,
       password: hashedPassword,
+      isVerified: true,
     });
 
     res.status(201).json({
@@ -60,12 +59,29 @@ exports.createUser = async (req, res) => {
   }
 };
 
+/** Intentional admin-writable fields only (no password/roleId/reset tokens). */
+const USER_UPDATE_ALLOWED = ['username', 'email', 'isVerified'];
+
 exports.updateUser = async (req, res) => {
   try {
-    const updates = { ...req.body };
-    delete updates.password;
-    delete updates.resetToken;
-    delete updates.tokenExpiry;
+    const updates = {};
+    for (const key of USER_UPDATE_ALLOWED) {
+      if (!Object.prototype.hasOwnProperty.call(req.body, key)) continue;
+      if (key === 'isVerified') {
+        if (typeof req.body.isVerified !== 'boolean') {
+          return res.status(400).json({ message: 'isVerified must be a boolean.' });
+        }
+        updates.isVerified = req.body.isVerified;
+        continue;
+      }
+      updates[key] = req.body[key];
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        message: `No updatable fields provided. Allowed: ${USER_UPDATE_ALLOWED.join(', ')}.`,
+      });
+    }
 
     const user = await User.findByIdAndUpdate(req.params.id, updates, {
       returnDocument: 'after',
