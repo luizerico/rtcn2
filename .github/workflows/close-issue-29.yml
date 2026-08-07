@@ -1,0 +1,41 @@
+name: Close issue 29
+
+on:
+  push:
+    branches:
+      - chore/close-issue-29
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  comment-and-close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment and close issue #29
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BODY=$(cat <<'EOF'
+          ## Fixed on `fix/issue-29`
+
+          Built on `#8` (`sendServerError` / sanitized 500s) and finished the remaining shape gaps from #29:
+
+          - Shared helper now exposes `sendError` + `sendServerError` with stable `{ message, code, details? }`
+          - Auth middleware / 4xx controller paths include `code`; forbidden `hint`/`username` moved under `details`
+          - Client `apiUtils.parseError` and OpenAPI `ApiError` updated accordingly
+          - Not superseded by #8 alone (4xx/auth still needed alignment) or incomplete #19 WIP
+
+          Commit: 6f743653e891962cbca6cdbe1f5f2f2d4dde8cc7
+          Branch: https://github.com/luizerico/baseapp/tree/fix/issue-29
+          Base: origin/fix/issue-8 (`8ae9cd8453a5478570f9533f62c115012f0cf89a`)
+          EOF
+          )
+          gh issue comment 29 --repo luizerico/baseapp --body "$BODY"
+          STATE=$(gh issue view 29 --repo luizerico/baseapp --json state -q .state)
+          if [ "$STATE" != "CLOSED" ]; then
+            gh issue close 29 --repo luizerico/baseapp --reason completed
+          fi

@@ -1,6 +1,7 @@
-const User = require('../models/User');
+﻿const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
 const {
   createSession,
   revokeSession,
@@ -9,11 +10,8 @@ const {
   listUserSessions,
 } = require('../services/sessionService');
 const { userHasPermission } = require('../services/rbacService');
+const { sendEmail } = require('../services/emailService');
 
-const mockSendEmail = async (email, subject) => {
-  console.log(`[MOCK EMAIL SENT] To: ${email} | Subject: ${subject}`);
-  return true;
-};
 
 function requestMeta(req) {
   return {
@@ -24,19 +22,26 @@ function requestMeta(req) {
 }
 
 exports.registerUser = async (req, res) => {
-  const { username, email, password } = req.body;
-  if (!username || !email || !password) {
-    return res.status(400).json({ message: 'Please include all fields.' });
+  const { username, email, password } = req.validated || req.body;
+
+  const passwordCheck = assertPasswordPolicy(password);
+  if (!passwordCheck.ok) {
+    return res.status(400).json({ message: passwordCheck.message });
+  }
+
+  const passwordPolicy = assertPasswordPolicy(password);
+  if (!passwordPolicy.ok) {
+    return res.status(400).json({ message: passwordPolicy.message });
   }
 
   try {
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(400).json({ message: 'User or Email already registered.' });
+      return sendError(res, 400, 'User or Email already registered.', ERROR_CODES.CONFLICT);
     }
 
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(passwordCheck.password, salt);
 
     const newUser = await User.create({
       username,
@@ -47,22 +52,23 @@ exports.registerUser = async (req, res) => {
     req.actionLogContext = { userId: newUser._id, username: newUser.username };
 
     res.status(201).json({
-      message: 'User registered successfully.',
-      user: { id: newUser._id, username: newUser.username, email: newUser.email },
+      message:
+        'User registered successfully. An administrator must verify the account before sign-in.',
+      user: {
+        id: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        isVerified: newUser.isVerified,
+      },
     });
   } catch (err) {
-    console.error('Registration Error:', err);
-    res.status(500).json({ message: 'Server error during registration.' });
+    return sendServerError(res, err, 'Server error during registration.');
   }
 };
 
 exports.loginUser = async (req, res) => {
-  const { username, email, password } = req.body;
-  const loginId = username || email;
-
-  if (!loginId || !password) {
-    return res.status(400).json({ message: 'Please provide username and password.' });
-  }
+  const loginId = req.validated?.loginId || req.body.username || req.body.email;
+  const password = req.validated?.password || req.body.password;
 
   try {
     const user = await User.findOne({
@@ -73,9 +79,15 @@ exports.loginUser = async (req, res) => {
       if (user) {
         req.actionLogContext = { userId: user._id, username: user.username };
       }
-      return res.status(401).json({
-        message: 'Invalid credentials.',
-        code: 'INVALID_CREDENTIALS',
+      return sendError(res, 401, 'Invalid credentials.', { code: 'INVALID_CREDENTIALS' });
+    }
+
+    if (!user.isVerified) {
+      req.actionLogContext = { userId: user._id, username: user.username };
+      return res.status(403).json({
+        message:
+          'Account is not verified. An administrator must set isVerified before you can sign in.',
+        code: 'NOT_VERIFIED',
       });
     }
 
@@ -94,8 +106,7 @@ exports.loginUser = async (req, res) => {
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err) {
-    console.error('Login Error:', err);
-    res.status(500).json({ message: 'Server error during login.' });
+    return sendServerError(res, err, 'Server error during login.');
   }
 };
 
@@ -106,21 +117,17 @@ exports.logoutUser = async (req, res) => {
     }
     res.status(200).json({ message: 'Logged out successfully.' });
   } catch (err) {
-    res.status(500).json({ message: 'Server error during logout.' });
+    return sendServerError(res, err, 'Server error during logout.');
   }
 };
 
 exports.requestPasswordReset = async (req, res) => {
-  const { email } = req.query;
-
-  if (!email) {
-    return res.status(400).json({ message: 'Email is required.' });
-  }
+  const email = req.validated?.email || req.query.email;
 
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+      return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const resetToken = crypto.randomUUID();
@@ -131,25 +138,29 @@ exports.requestPasswordReset = async (req, res) => {
     user.tokenExpiry = expirationDate;
     await user.save();
 
-    const message = `Use this secure link to reset your password: ${process.env.CLIENT_URL || 'http://localhost:3000'}/reset/${resetToken}`;
-    await mockSendEmail(user.email, 'Password Reset Request', message);
+    const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset/${resetToken}`;
+    const text = `Use this secure link to reset your password: ${resetUrl}`;
+    await sendEmail({
+      to: user.email,
+      subject: 'Password Reset Request',
+      text,
+    });
 
     res.status(200).json({
       message: 'Password reset link sent successfully to your email.',
-      ...(process.env.NODE_ENV !== 'production' ? { resetToken } : {}),
     });
   } catch (err) {
-    console.error('Password Reset Error:', err);
-    res.status(500).json({ message: 'Error requesting password reset.' });
+    return sendServerError(res, err, 'Error requesting password reset.');
   }
 };
 
 exports.resetPassword = async (req, res) => {
-  const { token } = req.params;
-  const { newPassword } = req.body;
+  const token = req.validated?.token || req.params.token;
+  const newPassword = req.validated?.newPassword || req.body.newPassword;
 
-  if (!newPassword) {
-    return res.status(400).json({ message: 'New password is required.' });
+  const passwordPolicy = assertPasswordPolicy(newPassword, { label: 'New password' });
+  if (!passwordPolicy.ok) {
+    return res.status(400).json({ message: passwordPolicy.message });
   }
 
   try {
@@ -158,18 +169,18 @@ exports.resetPassword = async (req, res) => {
     );
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired password reset token.' });
+      return sendError(res, 400, 'Invalid or expired password reset token.', ERROR_CODES.VALIDATION);
     }
 
     if (user.tokenExpiry < new Date()) {
       await User.findByIdAndUpdate(user._id, {
         $set: { resetToken: null, tokenExpiry: null },
       });
-      return res.status(400).json({ message: 'Password reset link has expired.' });
+      return sendError(res, 400, 'Password reset link has expired.', ERROR_CODES.VALIDATION);
     }
 
     const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
+    user.password = await bcrypt.hash(passwordCheck.password, salt);
     user.resetToken = null;
     user.tokenExpiry = null;
     await user.save();
@@ -177,8 +188,7 @@ exports.resetPassword = async (req, res) => {
 
     res.status(200).json({ message: 'Password reset successful.' });
   } catch (err) {
-    console.error('Password Reset Error:', err);
-    res.status(500).json({ message: 'Server error during password reset.' });
+    return sendServerError(res, err, 'Server error during password reset.');
   }
 };
 
@@ -208,21 +218,16 @@ exports.getCurrentUser = async (req, res) => {
  * Change password for the authenticated user.
  */
 exports.changeOwnPassword = async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) {
-    return res.status(400).json({ message: 'Current password and new password are required.' });
-  }
-  if (String(newPassword).length < 8) {
-    return res.status(400).json({ message: 'New password must be at least 8 characters.' });
-  }
+  const currentPassword = req.validated?.currentPassword || req.body.currentPassword;
+  const newPassword = req.validated?.newPassword || req.body.newPassword;
 
   try {
     const user = await User.findById(req.user._id);
     if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
-      return res.status(400).json({ message: 'Current password is incorrect.' });
+      return sendError(res, 400, 'Current password is incorrect.', ERROR_CODES.VALIDATION);
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
+    user.password = await bcrypt.hash(passwordCheck.password, 10);
     await user.save();
     await revokeAllUserSessions(user._id, 'password_changed');
 
@@ -231,7 +236,7 @@ exports.changeOwnPassword = async (req, res) => {
       code: 'PASSWORD_CHANGED',
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server error updating password.' });
+    return sendServerError(res, err, 'Server error updating password.');
   }
 };
 
@@ -239,28 +244,23 @@ exports.changeOwnPassword = async (req, res) => {
  * Admin password update for another user.
  */
 exports.adminChangeUserPassword = async (req, res) => {
-  const { newPassword } = req.body;
-  const { id } = req.params;
-
-  if (!newPassword || String(newPassword).length < 8) {
-    return res.status(400).json({ message: 'New password must be at least 8 characters.' });
-  }
+  const newPassword = req.validated?.newPassword || req.body.newPassword;
+  const id = req.validated?.id || req.params.id;
 
   try {
     const canManage = await userHasPermission(req.user, 'USER:WRITE');
     if (!canManage) {
-      return res.status(403).json({
-        message: 'Forbidden: Insufficient permissions for USER:WRITE.',
+      return sendError(res, 403, 'Forbidden: Insufficient permissions for USER:WRITE.', {
         code: 'FORBIDDEN',
       });
     }
 
     const user = await User.findById(id);
     if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+      return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
+    user.password = await bcrypt.hash(passwordCheck.password, 10);
     await user.save();
     await revokeAllUserSessions(user._id, 'admin_password_reset');
 
@@ -268,7 +268,7 @@ exports.adminChangeUserPassword = async (req, res) => {
       message: `Password updated for ${user.username}. Their active sessions were disconnected.`,
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server error updating user password.' });
+    return sendServerError(res, err, 'Server error updating user password.');
   }
 };
 
@@ -284,7 +284,7 @@ exports.listSessions = async (req, res) => {
       scope: canManage ? 'all' : 'self',
     });
   } catch (err) {
-    res.status(500).json({ message: 'Error listing sessions.' });
+    return sendServerError(res, err, 'Error listing sessions.');
   }
 };
 
@@ -295,15 +295,14 @@ exports.disconnectSession = async (req, res) => {
     const session = await Session.findOne({ sessionId });
 
     if (!session) {
-      return res.status(404).json({ message: 'Session not found.' });
+      return sendError(res, 404, 'Session not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const isOwn = String(session.userId) === String(req.user._id);
     const canManage = await userHasPermission(req.user, 'USER:WRITE');
 
     if (!isOwn && !canManage) {
-      return res.status(403).json({
-        message: 'Forbidden: you can only disconnect your own sessions.',
+      return sendError(res, 403, 'Forbidden: you can only disconnect your own sessions.', {
         code: 'FORBIDDEN',
       });
     }
@@ -315,7 +314,7 @@ exports.disconnectSession = async (req, res) => {
       sessionId,
     });
   } catch (err) {
-    res.status(500).json({ message: 'Error disconnecting session.' });
+    return sendServerError(res, err, 'Error disconnecting session.');
   }
 };
 
@@ -337,3 +336,4 @@ exports.validateSession = async (req, res) => {
     },
   });
 };
+

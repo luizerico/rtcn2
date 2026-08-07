@@ -4,6 +4,7 @@ const Survey = require('../models/assets/Survey');
 const SurveyResponse = require('../models/assets/SurveyResponse');
 const Question = require('../models/Question');
 const { QUESTION_TYPES } = require('../constants/assetTypes');
+const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
 // Ensure all asset discriminators are registered.
 require('../models/assets');
 
@@ -243,7 +244,7 @@ exports.listSurveys = async (req, res) => {
 
     if (createdBy) {
       if (!mongoose.isValidObjectId(createdBy)) {
-        return res.status(400).json({ message: 'Invalid createdBy filter.' });
+        return sendError(res, 400, 'Invalid createdBy filter.', ERROR_CODES.VALIDATION);
       }
       filter.createdBy = createdBy;
     }
@@ -280,7 +281,7 @@ exports.listSurveys = async (req, res) => {
       filters: { createdBy: createdBy || null },
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error listing surveys', error: error.message });
+    return sendServerError(res, error, 'Error listing surveys');
   }
 };
 
@@ -288,12 +289,12 @@ exports.createSurvey = async (req, res) => {
   try {
     const { name, description, questions: rawQuestions } = req.body;
     if (!name || !String(name).trim()) {
-      return res.status(400).json({ message: 'Survey name is required.' });
+      return sendError(res, 400, 'Survey name is required.', ERROR_CODES.VALIDATION);
     }
 
     const normalized = normalizeQuestions(rawQuestions);
     if (normalized.error) {
-      return res.status(400).json({ message: normalized.error });
+      return sendError(res, 400, normalized.error, ERROR_CODES.VALIDATION);
     }
 
     const survey = await Survey.create({
@@ -314,7 +315,7 @@ exports.createSurvey = async (req, res) => {
 
     res.status(201).json(serializeSurvey(survey, questions));
   } catch (error) {
-    res.status(500).json({ message: 'Error creating survey', error: error.message });
+    return sendServerError(res, error, 'Error creating survey');
   }
 };
 
@@ -326,13 +327,13 @@ exports.getSurveyById = async (req, res) => {
       .populate('updatedBy', 'username email');
 
     if (!survey) {
-      return res.status(404).json({ message: 'Survey not found.' });
+      return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const questions = await loadSurveyQuestions(survey._id);
     res.status(200).json(serializeSurvey(survey, questions));
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching survey', error: error.message });
+    return sendServerError(res, error, 'Error fetching survey');
   }
 };
 
@@ -340,7 +341,7 @@ exports.updateSurvey = async (req, res) => {
   try {
     const survey = await Survey.findById(req.params.id);
     if (!survey) {
-      return res.status(404).json({ message: 'Survey not found.' });
+      return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
 
     if (req.body.name !== undefined) survey.name = String(req.body.name).trim();
@@ -350,7 +351,7 @@ exports.updateSurvey = async (req, res) => {
     if (req.body.questions !== undefined) {
       const normalized = normalizeQuestions(req.body.questions);
       if (normalized.error) {
-        return res.status(400).json({ message: normalized.error });
+        return sendError(res, 400, normalized.error, ERROR_CODES.VALIDATION);
       }
       questions = await replaceSurveyQuestions(survey._id, normalized.questions, req.user._id);
       survey.questionCount = questions.length;
@@ -360,7 +361,7 @@ exports.updateSurvey = async (req, res) => {
     await survey.save();
     res.status(200).json(serializeSurvey(survey, questions));
   } catch (error) {
-    res.status(500).json({ message: 'Error updating survey', error: error.message });
+    return sendServerError(res, error, 'Error updating survey');
   }
 };
 
@@ -368,13 +369,13 @@ exports.deleteSurvey = async (req, res) => {
   try {
     const survey = await Survey.findByIdAndDelete(req.params.id);
     if (!survey) {
-      return res.status(404).json({ message: 'Survey not found.' });
+      return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
     await Question.deleteMany({ surveyId: survey._id });
     await SurveyResponse.deleteMany({ surveyId: survey._id });
     res.status(200).json({ message: 'Survey, questions, and related responses deleted.' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting survey', error: error.message });
+    return sendServerError(res, error, 'Error deleting survey');
   }
 };
 
@@ -382,13 +383,13 @@ exports.submitSurveyResponse = async (req, res) => {
   try {
     const survey = await Survey.findById(req.params.id);
     if (!survey) {
-      return res.status(404).json({ message: 'Survey not found.' });
+      return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const questions = await loadSurveyQuestions(survey._id);
     const validated = validateAnswers(questions, req.body.answers);
     if (validated.error) {
-      return res.status(400).json({ message: validated.error });
+      return sendError(res, 400, validated.error, ERROR_CODES.VALIDATION);
     }
 
     const answerPreview = validated.answers
@@ -410,7 +411,7 @@ exports.submitSurveyResponse = async (req, res) => {
 
     res.status(201).json(response);
   } catch (error) {
-    res.status(500).json({ message: 'Error submitting survey response', error: error.message });
+    return sendServerError(res, error, 'Error submitting survey response');
   }
 };
 
@@ -418,11 +419,25 @@ exports.listSurveyResponses = async (req, res) => {
   try {
     const survey = await Survey.findById(req.params.id);
     if (!survey) {
-      return res.status(404).json({ message: 'Survey not found.' });
+      return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const questions = await loadSurveyQuestions(survey._id);
-    const responses = await SurveyResponse.find({ surveyId: survey._id })
+    const filter = { surveyId: survey._id };
+
+    const access = req.accessibleResources;
+    if (access && !access.all) {
+      if (!access.ids.length) {
+        return res.status(200).json({
+          survey: serializeSurvey(survey, questions),
+          responses: [],
+          summary: buildResponseSummary(survey, questions, []),
+        });
+      }
+      filter._id = { $in: access.ids };
+    }
+
+    const responses = await SurveyResponse.find(filter)
       .sort({ createdAt: -1 })
       .populate('createdBy', 'username email')
       .populate('updatedBy', 'username email');
@@ -433,6 +448,6 @@ exports.listSurveyResponses = async (req, res) => {
       summary: buildResponseSummary(survey, questions, responses),
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error listing survey responses', error: error.message });
+    return sendServerError(res, error, 'Error listing survey responses');
   }
 };

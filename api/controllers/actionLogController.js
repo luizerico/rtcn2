@@ -3,12 +3,17 @@ const {
   listDistinctActions,
   listDistinctResourceTypes,
 } = require('../services/actionLogService');
+const { collectValidationError } = require('../validation');
 
 exports.listActionLogs = async (req, res) => {
   try {
     const result = await queryActionLogs(req.query);
     res.status(200).json(result);
   } catch (error) {
+    const handled = collectValidationError(error);
+    if (handled) {
+      return res.status(handled.status).json(handled.body);
+    }
     res.status(500).json({ message: 'Error fetching action logs', error: error.message });
   }
 };
@@ -33,6 +38,6 @@ exports.getActionLogFilters = async (_req, res) => {
       ],
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching log filter options', error: error.message });
+    return sendServerError(res, error, 'Error fetching log filter options');
   }
 };

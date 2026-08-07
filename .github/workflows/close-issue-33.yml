@@ -3,43 +3,54 @@ name: Close issue 33
 on:
   push:
     branches:
-      - fix/issue-33
-    paths:
-      - .github/workflows/close-issue-33.yml
+      - chore/close-issue-33
   workflow_dispatch:
 
 permissions:
   issues: write
-  contents: read
+  contents: write
 
 jobs:
-  close:
+  close-issue:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Comment and close #33
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const body = [
-              'Fixed on `fix/issue-33` (`a01f261e821d0355a489f3d5a2df829c53562efb`).',
-              '',
-              'Group permission write path is deprecated; ACL write is the canonical API.',
-              'PermissionModal uses the ACL endpoint. OpenAPI/README and tests updated.',
-              '',
-              'Tests: api.endpoints (27), PermissionModal (3), api.rbac (6) - all passed.',
-            ].join('\n');
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(cat <<'EOF'
+          ## Fixed on `fix/issue-33`
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: 33,
-              body,
-            });
+          Consolidated overlapping permission-write APIs:
 
-            await github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: 33,
-              state: 'closed',
-              state_reason: 'completed',
-            });
+          - Canonical write path: `POST /api/permissions/acl` (used by PermissionModal)
+          - Deprecated `POST /api/groups/{groupId}/permissions` with `Deprecation` / `Link` / `Warning` headers and OpenAPI `deprecated: true`
+          - Narrowed deprecated group write delete scope so sibling instance grants for the same resource type are no longer wiped
+          - Updated README, OpenAPI, and tests (UI never calls the group write path; sibling-grant regression covered)
+
+          Branch: `fix/issue-33`
+          Commit: `a01f261e821d0355a489f3d5a2df829c53562efb`
+          Compare: https://github.com/luizerico/baseapp/compare/base_platform...fix/issue-33
+          EOF
+          )"
+          body="$(printf '%s\n' "$body" | sed 's/^          //')"
+          gh issue comment 33 --repo luizerico/baseapp --body "$body"
+          gh issue close 33 --repo luizerico/baseapp --reason completed
+          mkdir -p scripts
+          echo '{"issue":33,"state":"closed","branch":"fix/issue-33","sha":"a01f261e821d0355a489f3d5a2df829c53562efb"}' > scripts/close-issue-33-result.json
+
+      - name: Commit close result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p scripts
+          git add scripts/close-issue-33-result.json
+          if git diff --cached --quiet; then
+            echo "No result file to commit"
+          else
+            git commit --trailer "Co-authored-by: Cursor <cursoragent@cursor.com>" -m "Record close of issue #33"
+            git push
+          fi

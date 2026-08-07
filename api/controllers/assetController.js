@@ -5,6 +5,7 @@ const {
   DatasetAsset,
 } = require('../models/assets');
 const { kindToDiscriminator } = require('../constants/assetTypes');
+const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
 
 function auditFields(userId, existing) {
   if (existing) {
@@ -70,26 +71,17 @@ exports.getAllAssets = async (req, res) => {
 
     res.status(200).json(assets);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching assets', error: error.message });
+    return sendServerError(res, error, 'Error fetching assets');
   }
 };
 
 exports.createAsset = async (req, res) => {
   try {
-    const { name, description, kind } = req.body;
-    if (!name) {
-      return res.status(400).json({ message: 'Asset name is required.' });
-    }
-
+    const { name, description, kind } = req.validated || req.body;
     const normalizedKind = String(kind || 'DOCUMENT').toUpperCase();
-    if (['SURVEY', 'SURVEY_RESPONSE'].includes(normalizedKind)) {
-      return res.status(400).json({
-        message: 'Use the surveys API to create Survey or SurveyResponse assets.',
-      });
-    }
 
     if (!kindToDiscriminator(normalizedKind)) {
-      return res.status(400).json({ message: 'Invalid asset kind.' });
+      return sendError(res, 400, 'Invalid asset kind.', ERROR_CODES.VALIDATION);
     }
 
     const Model = modelForKind(normalizedKind);
@@ -102,7 +94,7 @@ exports.createAsset = async (req, res) => {
 
     res.status(201).json(asset);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating asset', error: error.message });
+    return sendServerError(res, error, 'Error creating asset');
   }
 };
 
@@ -114,11 +106,11 @@ exports.getAssetById = async (req, res) => {
       .populate('ownerId', 'username email');
 
     if (!asset) {
-      return res.status(404).json({ message: 'Asset not found.' });
+      return sendError(res, 404, 'Asset not found.', ERROR_CODES.NOT_FOUND);
     }
     res.status(200).json(asset);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching asset', error: error.message });
+    return sendServerError(res, error, 'Error fetching asset');
   }
 };
 
@@ -133,10 +125,10 @@ exports.updateAsset = async (req, res) => {
     if (kind !== undefined) {
       const normalizedKind = String(kind).toUpperCase();
       if (['SURVEY', 'SURVEY_RESPONSE'].includes(normalizedKind)) {
-        return res.status(400).json({ message: 'Cannot change asset kind to a survey type here.' });
+        return sendError(res, 400, 'Cannot change asset kind to a survey type here.', ERROR_CODES.VALIDATION);
       }
       if (!kindToDiscriminator(normalizedKind)) {
-        return res.status(400).json({ message: 'Invalid asset kind.' });
+        return sendError(res, 400, 'Invalid asset kind.', ERROR_CODES.VALIDATION);
       }
       updates.kind = normalizedKind;
       updates.assetType = kindToDiscriminator(normalizedKind);
@@ -148,11 +140,11 @@ exports.updateAsset = async (req, res) => {
     });
 
     if (!updated) {
-      return res.status(404).json({ message: 'Asset not found.' });
+      return sendError(res, 404, 'Asset not found.', ERROR_CODES.NOT_FOUND);
     }
     res.status(200).json(updated);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating asset', error: error.message });
+    return sendServerError(res, error, 'Error updating asset');
   }
 };
 
@@ -160,10 +152,10 @@ exports.deleteAsset = async (req, res) => {
   try {
     const asset = await Asset.findByIdAndDelete(req.params.id);
     if (!asset) {
-      return res.status(404).json({ message: 'Asset not found.' });
+      return sendError(res, 404, 'Asset not found.', ERROR_CODES.NOT_FOUND);
     }
     res.status(200).json({ message: 'Asset deleted successfully.' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting asset', error: error.message });
+    return sendServerError(res, error, 'Error deleting asset');
   }
 };

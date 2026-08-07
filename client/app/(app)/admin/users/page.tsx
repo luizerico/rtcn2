@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { apiDelete, apiGet } from '@/lib/apiUtils';
+import { apiDelete, apiGet, apiPut } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import CreateUserModal from '@/components/ui/CreateUserModal';
@@ -26,6 +26,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -55,6 +56,27 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleToggleVerified = async (user: UserRecord) => {
+    setError(null);
+    setVerifyingId(user._id);
+    const next = !user.isVerified;
+    try {
+      await apiPut(`/users/${user._id}`, { isVerified: next });
+      pushToast({
+        tone: 'success',
+        title: next ? 'User verified' : 'Verification revoked',
+        message: next
+          ? `${user.username} can sign in.`
+          : `${user.username} can no longer sign in until verified again.`,
+      });
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update verification.');
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
@@ -68,7 +90,9 @@ export default function AdminUsersPage() {
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="mt-2 text-3xl font-semibold">User management</h1>
-            <p className="mt-2 text-[var(--muted)]">Create accounts and review registered users.</p>
+            <p className="mt-2 text-[var(--muted)]">
+              Create accounts and verify users before they can sign in.
+            </p>
           </div>
           <AccessPrimaryButton allowed={canCreate} onClick={() => setCreateOpen(true)}>
             Create user
@@ -102,8 +126,23 @@ export default function AdminUsersPage() {
                 <tr key={user._id} className="border-b border-[var(--border)] last:border-0">
                   <td className="px-4 py-3 font-medium">{user.username}</td>
                   <td className="px-4 py-3">{user.email}</td>
-                  <td className="px-4 py-3">{user.isVerified ? 'Yes' : 'No'}</td>
+                  <td className="px-4 py-3">
+                    <span className={user.isVerified ? 'text-emerald-700' : 'text-[var(--muted)]'}>
+                      {user.isVerified ? 'Yes' : 'No'}
+                    </span>
+                  </td>
                   <td className="space-x-3 px-4 py-3 text-right">
+                    <AccessTextButton
+                      allowed={canWrite}
+                      onClick={() => handleToggleVerified(user)}
+                      disabled={verifyingId === user._id}
+                    >
+                      {verifyingId === user._id
+                        ? 'Updating…'
+                        : user.isVerified
+                          ? 'Revoke verify'
+                          : 'Verify'}
+                    </AccessTextButton>
                     <AccessLink allowed={canWrite} href={`/account?userId=${user._id}`}>
                       Password
                     </AccessLink>
@@ -126,7 +165,11 @@ export default function AdminUsersPage() {
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={({ username }) => {
-          pushToast({ tone: 'success', title: 'User created', message: `${username} was added.` });
+          pushToast({
+            tone: 'success',
+            title: 'User created',
+            message: `${username} was added and verified for sign-in.`,
+          });
           void loadUsers();
         }}
       />

@@ -1,0 +1,40 @@
+name: Close issue 38
+
+on:
+  push:
+    branches:
+      - chore/close-issue-38
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  close-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comment and close #38
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body="$(cat <<'EOF'
+          ## Fixed on `fix/issue-38`
+
+          Added a lightweight shared request-validation layer (no Zod/Joi dependency):
+
+          - `api/validation/` — helpers for required fields, ObjectIds, passwords (min 8), emails, enums, pagination caps
+          - `api/middleware/validate.js` — Express middleware storing results on `req.validated`
+          - Route schemas wired for auth, users, groups/membership, assets, and action-log list queries
+          - Controllers updated to prefer validated payloads; OpenAPI register password `minLength: 8`
+          - Tests in `__tests__/api.validation.test.js` (full API suite green)
+
+          **Branch:** https://github.com/luizerico/baseapp/tree/fix/issue-38
+          **Commit:** cf0cb16907331192ffbc3c67f7d09e2f6a63f229
+          EOF
+          )"
+          gh issue comment 38 --body "$body"
+          gh issue close 38 --reason completed
