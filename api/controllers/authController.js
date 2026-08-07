@@ -9,11 +9,8 @@ const {
   listUserSessions,
 } = require('../services/sessionService');
 const { userHasPermission } = require('../services/rbacService');
+const { sendEmail } = require('../services/emailService');
 
-const mockSendEmail = async (email, subject) => {
-  console.log(`[MOCK EMAIL SENT] To: ${email} | Subject: ${subject}`);
-  return true;
-};
 
 function requestMeta(req) {
   return {
@@ -24,10 +21,7 @@ function requestMeta(req) {
 }
 
 exports.registerUser = async (req, res) => {
-  const { username, email, password } = req.body;
-  if (!username || !email || !password) {
-    return res.status(400).json({ message: 'Please include all fields.' });
-  }
+  const { username, email, password } = req.validated || req.body;
 
   try {
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
@@ -63,12 +57,8 @@ exports.registerUser = async (req, res) => {
 };
 
 exports.loginUser = async (req, res) => {
-  const { username, email, password } = req.body;
-  const loginId = username || email;
-
-  if (!loginId || !password) {
-    return res.status(400).json({ message: 'Please provide username and password.' });
-  }
+  const loginId = req.validated?.loginId || req.body.username || req.body.email;
+  const password = req.validated?.password || req.body.password;
 
   try {
     const user = await User.findOne({
@@ -89,7 +79,7 @@ exports.loginUser = async (req, res) => {
       req.actionLogContext = { userId: user._id, username: user.username };
       return res.status(403).json({
         message:
-          'Account is not verified. An administrator must verify the account before you can sign in.',
+          'Account is not verified. An administrator must set isVerified before you can sign in.',
         code: 'NOT_VERIFIED',
       });
     }
@@ -126,11 +116,7 @@ exports.logoutUser = async (req, res) => {
 };
 
 exports.requestPasswordReset = async (req, res) => {
-  const { email } = req.query;
-
-  if (!email) {
-    return res.status(400).json({ message: 'Email is required.' });
-  }
+  const email = req.validated?.email || req.query.email;
 
   try {
     const user = await User.findOne({ email });
@@ -146,12 +132,16 @@ exports.requestPasswordReset = async (req, res) => {
     user.tokenExpiry = expirationDate;
     await user.save();
 
-    const message = `Use this secure link to reset your password: ${process.env.CLIENT_URL || 'http://localhost:3000'}/reset/${resetToken}`;
-    await mockSendEmail(user.email, 'Password Reset Request', message);
+    const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset/${resetToken}`;
+    const text = `Use this secure link to reset your password: ${resetUrl}`;
+    await sendEmail({
+      to: user.email,
+      subject: 'Password Reset Request',
+      text,
+    });
 
     res.status(200).json({
       message: 'Password reset link sent successfully to your email.',
-      ...(process.env.NODE_ENV !== 'production' ? { resetToken } : {}),
     });
   } catch (err) {
     console.error('Password Reset Error:', err);
@@ -160,12 +150,8 @@ exports.requestPasswordReset = async (req, res) => {
 };
 
 exports.resetPassword = async (req, res) => {
-  const { token } = req.params;
-  const { newPassword } = req.body;
-
-  if (!newPassword) {
-    return res.status(400).json({ message: 'New password is required.' });
-  }
+  const token = req.validated?.token || req.params.token;
+  const newPassword = req.validated?.newPassword || req.body.newPassword;
 
   try {
     const user = await User.findOne({ resetToken: token }).select(
@@ -223,13 +209,8 @@ exports.getCurrentUser = async (req, res) => {
  * Change password for the authenticated user.
  */
 exports.changeOwnPassword = async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) {
-    return res.status(400).json({ message: 'Current password and new password are required.' });
-  }
-  if (String(newPassword).length < 8) {
-    return res.status(400).json({ message: 'New password must be at least 8 characters.' });
-  }
+  const currentPassword = req.validated?.currentPassword || req.body.currentPassword;
+  const newPassword = req.validated?.newPassword || req.body.newPassword;
 
   try {
     const user = await User.findById(req.user._id);
@@ -254,12 +235,8 @@ exports.changeOwnPassword = async (req, res) => {
  * Admin password update for another user.
  */
 exports.adminChangeUserPassword = async (req, res) => {
-  const { newPassword } = req.body;
-  const { id } = req.params;
-
-  if (!newPassword || String(newPassword).length < 8) {
-    return res.status(400).json({ message: 'New password must be at least 8 characters.' });
-  }
+  const newPassword = req.validated?.newPassword || req.body.newPassword;
+  const id = req.validated?.id || req.params.id;
 
   try {
     const canManage = await userHasPermission(req.user, 'USER:WRITE');

@@ -11,8 +11,8 @@ const userSchema = new Schema({
         ref: 'Group', // Assuming a default role group exists
         default: null 
     },
-    // Login/session require true. Self-register defaults false until an admin
-    // verifies; admin create and bootstrap set true. No email-verification flow yet.
+    // Login requires true. Self-register defaults false until an admin verifies;
+    // admin create and bootstrap set true. No email-verification flow yet.
     isVerified: { type: Boolean, default: false },
     resetToken: { type: String, default: null },
     tokenExpiry: { type: Date, default: null }

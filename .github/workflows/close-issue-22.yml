@@ -1,0 +1,77 @@
+name: Close issue 22 and reconcile notes
+
+on:
+  push:
+    branches:
+      - chore/close-issue-22
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  close-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Comment/close #22 and note #12/#26 reconciliation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          body22="$(cat <<'EOF'
+          ## Fixed on `fix/issue-22`
+
+          Closed the dead auth path on asset create by adopting the clearer product behavior:
+
+          - Named `authorizeAssetCreate` on `POST /api/assets`
+          - `SURVEY` / `SURVEY_RESPONSE` → **400** (“Use the surveys API…”) — no `next()` fall-through
+          - Other kinds still require `${kind}:CREATE` before `createAsset`
+          - Coverage in `__tests__/api.endpoints.test.js`
+
+          **Reconciliation:** Prefer #26’s 400-for-survey-kinds over #12’s always-run-CREATE (which could 403 unprivileged callers or authorize then hit controller 400). Surveys stay on `/api/surveys`.
+
+          Commit: 023a4537806bc7404fad2047128338081eeb32c4
+          EOF
+          )"
+          body22="$(printf '%s\n' "$body22" | sed 's/^          //')"
+          gh issue comment 22 --repo luizerico/baseapp --body "$body22"
+          gh issue close 22 --repo luizerico/baseapp --reason completed || true
+
+          body12="$(cat <<'EOF'
+          ## Reconciliation note (see #22)
+
+          `#12` removed the `next()` bypass so `${kind}:CREATE` always ran. That closed the dead path, but for survey kinds the better product behavior is an immediate **400** pointing at `/api/surveys` (not 403 / authorize-then-controller-400).
+
+          Canonical fix: `fix/issue-22` @ `023a4537806bc7404fad2047128338081eeb32c4` — `authorizeAssetCreate` rejects `SURVEY` / `SURVEY_RESPONSE` with 400 before any CREATE check. Aligns with #26; supersedes the #12 authorize-always approach for these kinds.
+          EOF
+          )"
+          body12="$(printf '%s\n' "$body12" | sed 's/^          //')"
+          gh issue comment 12 --repo luizerico/baseapp --body "$body12"
+
+          body26="$(cat <<'EOF'
+          ## Reconciliation note (see #22)
+
+          `#26`’s `authorizeAssetCreate` (400 for survey kinds → surveys API) is the chosen product behavior. `fix/issue-22` @ `023a4537806bc7404fad2047128338081eeb32c4` mirrors that approach as the canonical close for #22, and documents why it wins over #12’s always-run-CREATE for `SURVEY` / `SURVEY_RESPONSE`.
+          EOF
+          )"
+          body26="$(printf '%s\n' "$body26" | sed 's/^          //')"
+          gh issue comment 26 --repo luizerico/baseapp --body "$body26"
+
+          mkdir -p scripts
+          echo '{"issue":22,"state":"closed","branch":"fix/issue-22","sha":"023a4537806bc7404fad2047128338081eeb32c4","reconciled_with":[12,26]}' > scripts/close-issue-22-result.json
+
+      - name: Commit close result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p scripts
+          git add scripts/close-issue-22-result.json
+          if git diff --cached --quiet; then
+            echo "No result file to commit"
+          else
+            git commit -m "Record close of issue #22"
+            git push
+          fi

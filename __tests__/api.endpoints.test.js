@@ -9,6 +9,7 @@ const mongoose = require('mongoose');
 const request = require('supertest');
 const User = require('../api/models/User');
 const Group = require('../api/models/Group');
+const Permission = require('../api/models/Permission');
 const { buildFullAdminPermissions } = require('../api/constants/rbac');
 const { replaceGroupPermissions } = require('../api/services/rbacService');
 const {
@@ -17,12 +18,18 @@ const {
   clearDatabase,
   createTestApp,
 } = require('./helpers/apiTestUtils');
+const {
+  createMemoryEmailSender,
+  setEmailSender,
+  resetEmailSender,
+} = require('../api/services/emailService');
 
 describe('API endpoints', () => {
   let app;
   let authToken;
   let userId;
   let secondaryUserId;
+  let mailer;
 
   beforeAll(async () => {
     await connectTestDatabase();
@@ -30,10 +37,13 @@ describe('API endpoints', () => {
   }, 120000);
 
   afterAll(async () => {
+    resetEmailSender();
     await disconnectTestDatabase();
   });
 
   beforeEach(async () => {
+    mailer = createMemoryEmailSender();
+    setEmailSender(mailer);
     await clearDatabase();
 
     const registerRes = await request(app).post('/api/auth/register').send({
@@ -72,6 +82,13 @@ describe('API endpoints', () => {
       const res = await request(app).get('/api/health');
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ status: 'ok' });
+    });
+
+    it('sets baseline security headers', async () => {
+      const res = await request(app).get('/api/health');
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      expect(res.headers['x-frame-options']).toBe('SAMEORIGIN');
+      expect(res.headers['referrer-policy']).toBeDefined();
     });
   });
 
@@ -232,10 +249,16 @@ describe('API endpoints', () => {
         .get('/api/auth/forgot-password')
         .query({ email: 'alice@example.com' });
       expect(forgot.status).toBe(200);
-      expect(forgot.body.resetToken).toBeDefined();
+      expect(forgot.body.resetToken).toBeUndefined();
+      expect(mailer.messages).toHaveLength(1);
+      expect(mailer.last().to).toBe('alice@example.com');
+      expect(mailer.last().subject).toBe('Password Reset Request');
+
+      const resetToken = mailer.extractResetToken();
+      expect(resetToken).toBeTruthy();
 
       const reset = await request(app)
-        .post(`/api/auth/reset-password/${forgot.body.resetToken}`)
+        .post(`/api/auth/reset-password/${resetToken}`)
         .send({ newPassword: 'NewPassword123!' });
       expect(reset.status).toBe(200);
 
@@ -256,9 +279,13 @@ describe('API endpoints', () => {
       const forgot = await request(app)
         .get('/api/auth/forgot-password')
         .query({ email: 'alice@example.com' });
+      expect(forgot.status).toBe(200);
+
+      const resetToken = mailer.extractResetToken();
+      expect(resetToken).toBeTruthy();
 
       const res = await request(app)
-        .post(`/api/auth/reset-password/${forgot.body.resetToken}`)
+        .post(`/api/auth/reset-password/${resetToken}`)
         .send({});
       expect(res.status).toBe(400);
     });
@@ -308,6 +335,45 @@ describe('API endpoints', () => {
         .get(`/api/groups/${groupId}`)
         .set('Authorization', `Bearer ${authToken}`);
       expect(missing.status).toBe(404);
+    });
+
+    it('deletes related permissions and clears roleId on group delete', async () => {
+      const create = await request(app)
+        .post('/api/groups')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'temp-editors', description: 'Temporary group' });
+      expect(create.status).toBe(201);
+      const groupId = create.body._id;
+
+      await User.findByIdAndUpdate(secondaryUserId, { roleId: groupId });
+
+      const setPermissions = await request(app)
+        .post(`/api/groups/${groupId}/permissions`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          scopes: ['READ', 'WRITE'],
+          resourceType: 'DOCUMENT',
+          allObjects: true,
+        });
+      expect(setPermissions.status).toBe(200);
+
+      const before = await Permission.countDocuments({
+        $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
+      });
+      expect(before).toBeGreaterThan(0);
+
+      const remove = await request(app)
+        .delete(`/api/groups/${groupId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(remove.status).toBe(200);
+
+      const after = await Permission.countDocuments({
+        $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
+      });
+      expect(after).toBe(0);
+
+      const secondary = await User.findById(secondaryUserId);
+      expect(secondary.roleId).toBeNull();
     });
 
     it('rejects create without name', async () => {
@@ -550,6 +616,17 @@ describe('API endpoints', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send({ description: 'missing name' });
       expect(res.status).toBe(400);
+    });
+
+    it('rejects SURVEY kinds on asset create without falling through', async () => {
+      for (const kind of ['SURVEY', 'SURVEY_RESPONSE']) {
+        const res = await request(app)
+          .post('/api/assets')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({ name: `via-assets-${kind}`, kind });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/surveys API/i);
+      }
     });
   });
 

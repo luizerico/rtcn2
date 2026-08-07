@@ -71,6 +71,7 @@ components:
         password:
           type: string
           format: password
+          minLength: 8
           example: Password123!
 
     LoginRequest:
@@ -435,6 +436,9 @@ paths:
     post:
       tags: [Auth]
       summary: Register a user
+      description: |
+        Creates an unverified account (`isVerified: false`). The user cannot sign in until an
+        administrator sets `isVerified` to true.
       operationId: registerUser
       requestBody:
         required: true
@@ -444,7 +448,7 @@ paths:
               $ref: '#/components/schemas/RegisterRequest'
       responses:
         '201':
-          description: User registered
+          description: User registered (unverified; cannot sign in yet)
           content:
             application/json:
               schema:
@@ -471,7 +475,7 @@ paths:
         or by reading the `sessions` collection.
 
         Login requires `user.isVerified === true`. Self-registered users default to unverified
-        until an administrator verifies them (Admin Users UI or `PUT /api/users/{id}`).
+        until an administrator sets `isVerified` (for example via `PUT /api/users/{id}`).
         Admin-created users and the bootstrap admin are verified automatically.
       operationId: loginUser
       requestBody:
@@ -667,15 +671,14 @@ paths:
             format: email
       responses:
         '200':
-          description: Reset email sent (resetToken included only in non-production)
+          description: Reset email sent (token is delivered via the configured email sender only)
           content:
             application/json:
               schema:
                 type: object
+                required: [message]
                 properties:
                   message:
-                    type: string
-                  resetToken:
                     type: string
         '400':
           description: Missing email
@@ -736,6 +739,8 @@ paths:
     post:
       tags: [Users]
       summary: Create user
+      description: |
+        Admin-provisioned users are created with `isVerified: true` so they can sign in immediately.
       operationId: createUser
       security:
         - bearerAuth: []
@@ -747,7 +752,7 @@ paths:
               $ref: '#/components/schemas/RegisterRequest'
       responses:
         '201':
-          description: User created
+          description: User created (verified)
         '400':
           description: Validation error
         '401':

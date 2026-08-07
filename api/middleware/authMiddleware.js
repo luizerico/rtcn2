@@ -81,7 +81,7 @@ const protect = async (req, res, next) => {
         res,
         403,
         'NOT_VERIFIED',
-        'Account is not verified. An administrator must verify the account before you can use this session.'
+        'Account is not verified. An administrator must set isVerified before you can use this session.'
       );
     }
 
