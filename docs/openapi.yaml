@@ -144,6 +144,13 @@ components:
           type: string
           format: date-time
 
+    PasswordValue:
+      type: string
+      format: password
+      minLength: 8
+      description: Shared password policy — at least 8 characters (register, create, reset, and change).
+      example: Password123!
+
     ChangePasswordRequest:
       type: object
       required: [currentPassword, newPassword]
@@ -152,18 +159,14 @@ components:
           type: string
           format: password
         newPassword:
-          type: string
-          format: password
-          minLength: 8
+          $ref: '#/components/schemas/PasswordValue'
 
     AdminChangePasswordRequest:
       type: object
       required: [newPassword]
       properties:
         newPassword:
-          type: string
-          format: password
-          minLength: 8
+          $ref: '#/components/schemas/PasswordValue'
 
     ResetPasswordRequest:
       type: object

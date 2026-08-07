@@ -117,6 +117,16 @@ describe('API endpoints', () => {
       expect(res.status).toBe(400);
     });
 
+    it('POST /api/auth/register rejects passwords that fail shared policy', async () => {
+      const res = await request(app).post('/api/auth/register').send({
+        username: 'weakuser',
+        email: 'weak@example.com',
+        password: 'short',
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/at least 8 characters/i);
+    });
+
     it('POST /api/auth/login rejects invalid credentials', async () => {
       const res = await request(app).post('/api/auth/login').send({
         username: 'alice',

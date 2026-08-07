@@ -28,6 +28,11 @@ exports.registerUser = async (req, res) => {
     return res.status(400).json({ message: passwordCheck.message });
   }
 
+  const passwordPolicy = assertPasswordPolicy(password);
+  if (!passwordPolicy.ok) {
+    return res.status(400).json({ message: passwordPolicy.message });
+  }
+
   try {
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
@@ -157,6 +162,11 @@ exports.requestPasswordReset = async (req, res) => {
 exports.resetPassword = async (req, res) => {
   const token = req.validated?.token || req.params.token;
   const newPassword = req.validated?.newPassword || req.body.newPassword;
+
+  const passwordPolicy = assertPasswordPolicy(newPassword, { label: 'New password' });
+  if (!passwordPolicy.ok) {
+    return res.status(400).json({ message: passwordPolicy.message });
+  }
 
   try {
     const user = await User.findOne({ resetToken: token }).select(
