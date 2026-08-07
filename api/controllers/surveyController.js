@@ -4,6 +4,7 @@ const Survey = require('../models/assets/Survey');
 const SurveyResponse = require('../models/assets/SurveyResponse');
 const Question = require('../models/Question');
 const { QUESTION_TYPES } = require('../constants/assetTypes');
+const { sendServerError } = require('../utils/httpErrors');
 // Ensure all asset discriminators are registered.
 require('../models/assets');
 
@@ -280,7 +281,7 @@ exports.listSurveys = async (req, res) => {
       filters: { createdBy: createdBy || null },
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error listing surveys', error: error.message });
+    return sendServerError(res, error, 'Error listing surveys');
   }
 };
 
@@ -314,7 +315,7 @@ exports.createSurvey = async (req, res) => {
 
     res.status(201).json(serializeSurvey(survey, questions));
   } catch (error) {
-    res.status(500).json({ message: 'Error creating survey', error: error.message });
+    return sendServerError(res, error, 'Error creating survey');
   }
 };
 
@@ -332,7 +333,7 @@ exports.getSurveyById = async (req, res) => {
     const questions = await loadSurveyQuestions(survey._id);
     res.status(200).json(serializeSurvey(survey, questions));
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching survey', error: error.message });
+    return sendServerError(res, error, 'Error fetching survey');
   }
 };
 
@@ -360,7 +361,7 @@ exports.updateSurvey = async (req, res) => {
     await survey.save();
     res.status(200).json(serializeSurvey(survey, questions));
   } catch (error) {
-    res.status(500).json({ message: 'Error updating survey', error: error.message });
+    return sendServerError(res, error, 'Error updating survey');
   }
 };
 
@@ -374,7 +375,7 @@ exports.deleteSurvey = async (req, res) => {
     await SurveyResponse.deleteMany({ surveyId: survey._id });
     res.status(200).json({ message: 'Survey, questions, and related responses deleted.' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting survey', error: error.message });
+    return sendServerError(res, error, 'Error deleting survey');
   }
 };
 
@@ -410,7 +411,7 @@ exports.submitSurveyResponse = async (req, res) => {
 
     res.status(201).json(response);
   } catch (error) {
-    res.status(500).json({ message: 'Error submitting survey response', error: error.message });
+    return sendServerError(res, error, 'Error submitting survey response');
   }
 };
 
@@ -447,6 +448,6 @@ exports.listSurveyResponses = async (req, res) => {
       summary: buildResponseSummary(survey, questions, responses),
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error listing survey responses', error: error.message });
+    return sendServerError(res, error, 'Error listing survey responses');
   }
 };

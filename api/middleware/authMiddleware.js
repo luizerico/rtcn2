@@ -11,12 +11,10 @@ const {
   touchSession,
   hashToken,
 } = require('../services/sessionService');
+const { sendError } = require('../utils/httpErrors');
 
-function authError(res, status, code, message) {
-  return res.status(status).json({
-    message,
-    code,
-  });
+function authError(res, status, code, message, extras = {}) {
+  return sendError(res, status, message, { code, ...extras });
 }
 
 const protect = async (req, res, next) => {
@@ -32,7 +30,7 @@ const protect = async (req, res, next) => {
     const secret = process.env.JWT_SECRET;
     if (!secret) {
       console.error('JWT_SECRET is not configured.');
-      return res.status(500).json({ message: 'Server authentication is misconfigured.', code: 'CONFIG' });
+      return authError(res, 500, 'CONFIG', 'Server authentication is misconfigured.');
     }
 
     let decoded;
@@ -106,7 +104,7 @@ const authorize = (permission, options = {}) => {
       }
 
       if (!permission || typeof permission !== 'string') {
-        return res.status(500).json({ message: 'Authorization is misconfigured.', code: 'CONFIG' });
+        return authError(res, 500, 'CONFIG', 'Authorization is misconfigured.');
       }
 
       const checkOptions = {};
@@ -123,9 +121,7 @@ const authorize = (permission, options = {}) => {
 
       const allowed = await userHasPermission(req.user, permission, checkOptions);
       if (!allowed) {
-        return res.status(403).json({
-          message: `Forbidden: Insufficient permissions for ${permission}.`,
-          code: 'FORBIDDEN',
+        return authError(res, 403, 'FORBIDDEN', `Forbidden: Insufficient permissions for ${permission}.`, {
           username: req.user.username,
           hint: 'Grant access to this class or specific database objects for one of your groups.',
         });
@@ -138,10 +134,7 @@ const authorize = (permission, options = {}) => {
       next();
     } catch (error) {
       console.error('Authorization Error:', error.message);
-      return res.status(403).json({
-        message: `Forbidden: Insufficient permissions for ${permission}.`,
-        code: 'FORBIDDEN',
-      });
+      return authError(res, 403, 'FORBIDDEN', `Forbidden: Insufficient permissions for ${permission}.`);
     }
   };
 };

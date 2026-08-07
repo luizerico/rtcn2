@@ -41,6 +41,10 @@ components:
       properties:
         message:
           type: string
+        code:
+          type: string
+          description: Stable machine-readable error code when available
+          example: INTERNAL
       required: [message]
 
     UserSummary:

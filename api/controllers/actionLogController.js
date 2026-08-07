@@ -38,6 +38,6 @@ exports.getActionLogFilters = async (_req, res) => {
       ],
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching log filter options', error: error.message });
+    return sendServerError(res, error, 'Error fetching log filter options');
   }
 };

@@ -29,7 +29,7 @@ exports.addMemberToGroup = async (req, res) => {
       group: updatedGroup,
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error adding member to group', error: error.message });
+    return sendServerError(res, error, 'Error adding member to group');
   }
 };
 
@@ -52,7 +52,7 @@ exports.removeMemberFromGroup = async (req, res) => {
       group: updatedGroup,
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error removing member from group', error: error.message });
+    return sendServerError(res, error, 'Error removing member from group');
   }
 };
 
@@ -66,7 +66,7 @@ exports.getGroupPermissions = async (req, res) => {
     const permissions = await listGroupPermissions(group._id);
     res.status(200).json({ groupId: group._id, permissions });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching group permissions', error: error.message });
+    return sendServerError(res, error, 'Error fetching group permissions');
   }
 };
 
@@ -98,6 +98,6 @@ exports.updateGroupPermissions = async (req, res) => {
       permissions,
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating group permissions', error: error.message });
+    return sendServerError(res, error, 'Error updating group permissions');
   }
 };

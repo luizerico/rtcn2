@@ -7,7 +7,7 @@ exports.getAllGroups = async (req, res) => {
     const groups = await Group.find({});
     res.status(200).json(groups);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching groups', error: error.message });
+    return sendServerError(res, error, 'Error fetching groups');
   }
 };
 
@@ -23,7 +23,7 @@ exports.createGroup = async (req, res) => {
     const newGroup = await Group.create({ name, description });
     res.status(201).json(newGroup);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating group', error: error.message });
+    return sendServerError(res, error, 'Error creating group');
   }
 };
 
@@ -35,7 +35,7 @@ exports.getGroupById = async (req, res) => {
     }
     res.status(200).json(group);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching group', error: error.message });
+    return sendServerError(res, error, 'Error fetching group');
   }
 };
 
@@ -51,7 +51,7 @@ exports.updateGroup = async (req, res) => {
     }
     res.status(200).json(updatedGroup);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating group', error: error.message });
+    return sendServerError(res, error, 'Error updating group');
   }
 };
 
@@ -74,6 +74,6 @@ exports.deleteGroup = async (req, res) => {
 
     res.status(200).json({ message: 'Group deleted successfully.' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting group', error: error.message });
+    return sendServerError(res, error, 'Error deleting group');
   }
 };

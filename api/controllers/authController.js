@@ -61,8 +61,7 @@ exports.registerUser = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Registration Error:', err);
-    res.status(500).json({ message: 'Server error during registration.' });
+    return sendServerError(res, err, 'Server error during registration.');
   }
 };
 
@@ -79,10 +78,7 @@ exports.loginUser = async (req, res) => {
       if (user) {
         req.actionLogContext = { userId: user._id, username: user.username };
       }
-      return res.status(401).json({
-        message: 'Invalid credentials.',
-        code: 'INVALID_CREDENTIALS',
-      });
+      return sendError(res, 401, 'Invalid credentials.', { code: 'INVALID_CREDENTIALS' });
     }
 
     if (!user.isVerified) {
@@ -109,8 +105,7 @@ exports.loginUser = async (req, res) => {
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (err) {
-    console.error('Login Error:', err);
-    res.status(500).json({ message: 'Server error during login.' });
+    return sendServerError(res, err, 'Server error during login.');
   }
 };
 
@@ -121,7 +116,7 @@ exports.logoutUser = async (req, res) => {
     }
     res.status(200).json({ message: 'Logged out successfully.' });
   } catch (err) {
-    res.status(500).json({ message: 'Server error during logout.' });
+    return sendServerError(res, err, 'Server error during logout.');
   }
 };
 
@@ -154,8 +149,7 @@ exports.requestPasswordReset = async (req, res) => {
       message: 'Password reset link sent successfully to your email.',
     });
   } catch (err) {
-    console.error('Password Reset Error:', err);
-    res.status(500).json({ message: 'Error requesting password reset.' });
+    return sendServerError(res, err, 'Error requesting password reset.');
   }
 };
 
@@ -193,8 +187,7 @@ exports.resetPassword = async (req, res) => {
 
     res.status(200).json({ message: 'Password reset successful.' });
   } catch (err) {
-    console.error('Password Reset Error:', err);
-    res.status(500).json({ message: 'Server error during password reset.' });
+    return sendServerError(res, err, 'Server error during password reset.');
   }
 };
 
@@ -242,7 +235,7 @@ exports.changeOwnPassword = async (req, res) => {
       code: 'PASSWORD_CHANGED',
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server error updating password.' });
+    return sendServerError(res, err, 'Server error updating password.');
   }
 };
 
@@ -256,8 +249,7 @@ exports.adminChangeUserPassword = async (req, res) => {
   try {
     const canManage = await userHasPermission(req.user, 'USER:WRITE');
     if (!canManage) {
-      return res.status(403).json({
-        message: 'Forbidden: Insufficient permissions for USER:WRITE.',
+      return sendError(res, 403, 'Forbidden: Insufficient permissions for USER:WRITE.', {
         code: 'FORBIDDEN',
       });
     }
@@ -275,7 +267,7 @@ exports.adminChangeUserPassword = async (req, res) => {
       message: `Password updated for ${user.username}. Their active sessions were disconnected.`,
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server error updating user password.' });
+    return sendServerError(res, err, 'Server error updating user password.');
   }
 };
 
@@ -291,7 +283,7 @@ exports.listSessions = async (req, res) => {
       scope: canManage ? 'all' : 'self',
     });
   } catch (err) {
-    res.status(500).json({ message: 'Error listing sessions.' });
+    return sendServerError(res, err, 'Error listing sessions.');
   }
 };
 
@@ -309,8 +301,7 @@ exports.disconnectSession = async (req, res) => {
     const canManage = await userHasPermission(req.user, 'USER:WRITE');
 
     if (!isOwn && !canManage) {
-      return res.status(403).json({
-        message: 'Forbidden: you can only disconnect your own sessions.',
+      return sendError(res, 403, 'Forbidden: you can only disconnect your own sessions.', {
         code: 'FORBIDDEN',
       });
     }
@@ -322,7 +313,7 @@ exports.disconnectSession = async (req, res) => {
       sessionId,
     });
   } catch (err) {
-    res.status(500).json({ message: 'Error disconnecting session.' });
+    return sendServerError(res, err, 'Error disconnecting session.');
   }
 };
 

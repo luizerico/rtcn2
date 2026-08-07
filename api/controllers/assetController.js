@@ -5,6 +5,7 @@ const {
   DatasetAsset,
 } = require('../models/assets');
 const { kindToDiscriminator } = require('../constants/assetTypes');
+const { sendServerError } = require('../utils/httpErrors');
 
 function auditFields(userId, existing) {
   if (existing) {
@@ -70,7 +71,7 @@ exports.getAllAssets = async (req, res) => {
 
     res.status(200).json(assets);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching assets', error: error.message });
+    return sendServerError(res, error, 'Error fetching assets');
   }
 };
 
@@ -93,7 +94,7 @@ exports.createAsset = async (req, res) => {
 
     res.status(201).json(asset);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating asset', error: error.message });
+    return sendServerError(res, error, 'Error creating asset');
   }
 };
 
@@ -109,7 +110,7 @@ exports.getAssetById = async (req, res) => {
     }
     res.status(200).json(asset);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching asset', error: error.message });
+    return sendServerError(res, error, 'Error fetching asset');
   }
 };
 
@@ -143,7 +144,7 @@ exports.updateAsset = async (req, res) => {
     }
     res.status(200).json(updated);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating asset', error: error.message });
+    return sendServerError(res, error, 'Error updating asset');
   }
 };
 
@@ -155,6 +156,6 @@ exports.deleteAsset = async (req, res) => {
     }
     res.status(200).json({ message: 'Asset deleted successfully.' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting asset', error: error.message });
+    return sendServerError(res, error, 'Error deleting asset');
   }
 };
