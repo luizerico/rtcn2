@@ -4,6 +4,10 @@
 build/
 *.log*
 
+# Local agent / git worktree scratch (not part of the app)
+.worktrees/
+.worktrees_trash/
+
 # Python reports service
 reports/.venv/
 reports/**/__pycache__/

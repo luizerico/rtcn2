@@ -6,7 +6,8 @@ const surveyRoutes = require('./routes/surveyRoutes');
 const userRoutes = require('./routes/userRoutes');
 const actionLogRoutes = require('./routes/actionLogRoutes');
 const { actionLogMiddleware } = require('./middleware/actionLogMiddleware');
-const { securityHeaders, apiRateLimiter } = require('./middleware/security');
+const { securityHeaders, apiRateLimiter, authRateLimiter } = require('./middleware/security');
+const { errorHandler } = require('./middleware/errorMiddleware');
 
 // Register Asset subclasses (discriminators) once for the API process.
 require('./models/assets');
@@ -33,6 +34,7 @@ function createApp({ fallback } = {}) {
   });
 
   app.use('/api', apiRateLimiter());
+  app.use('/api/auth', authRateLimiter());
 
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
@@ -46,12 +48,11 @@ function createApp({ fallback } = {}) {
     app.use(fallback);
   }
 
-  app.use((err, _req, res, _next) => {
+  app.use((err, req, res, next) => {
     if (err?.type === 'entity.too.large' || err?.status === 413) {
-      return res.status(413).json({ message: 'Request body too large.' });
+      return res.status(413).json({ message: 'Request body too large.', code: 'PAYLOAD_TOO_LARGE' });
     }
-    console.error('Unhandled error:', err);
-    res.status(500).json({ message: 'Internal server error.' });
+    return errorHandler(err, req, res, next);
   });
 
   return app;

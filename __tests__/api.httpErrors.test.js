@@ -29,6 +29,12 @@ describe('httpErrors helpers', () => {
     expect(jsonMock).toHaveBeenCalledWith({ message: 'Bad input.', code: 'BAD_REQUEST' });
   });
 
+  it('sendError accepts a bare string code', () => {
+    sendError(res, 404, 'Missing.', 'NOT_FOUND');
+    expect(statusMock).toHaveBeenCalledWith(404);
+    expect(jsonMock).toHaveBeenCalledWith({ message: 'Missing.', code: 'NOT_FOUND' });
+  });
+
   it('sendServerError logs the exception and omits details from the body', () => {
     const error = new Error('E11000 duplicate key at path "users.email" /data/db/wiredTiger');
     sendServerError(res, error, 'Error fetching users');

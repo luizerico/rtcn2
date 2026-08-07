@@ -4,6 +4,22 @@
  * Exception details stay server-side; clients get stable `message` + `code` only.
  */
 
+const ERROR_CODES = Object.freeze({
+  NO_TOKEN: 'NO_TOKEN',
+  EXPIRED: 'EXPIRED',
+  INVALID: 'INVALID',
+  REVOKED: 'REVOKED',
+  USER_NOT_FOUND: 'USER_NOT_FOUND',
+  NOT_VERIFIED: 'NOT_VERIFIED',
+  FORBIDDEN: 'FORBIDDEN',
+  NOT_FOUND: 'NOT_FOUND',
+  CONFLICT: 'CONFLICT',
+  VALIDATION: 'VALIDATION',
+  BAD_REQUEST: 'BAD_REQUEST',
+  INTERNAL: 'INTERNAL',
+  CONFIG: 'CONFIG',
+});
+
 class HttpError extends Error {
   /**
    * @param {number} status
@@ -29,15 +45,21 @@ class HttpError extends Error {
  * @param {{ code?: string, [key: string]: unknown }} [options]
  */
 function sendError(res, status, message, options = {}) {
-  const { code, ...extras } = options;
+  // Allow bare string code: sendError(res, 404, '…', ERROR_CODES.NOT_FOUND)
+  const opts = typeof options === 'string' ? { code: options } : options || {};
+  const { code, details, ...extras } = opts;
   const body = { message };
   if (code) {
     body.code = code;
   }
-  for (const [key, value] of Object.entries(extras)) {
-    if (value !== undefined) {
-      body[key] = value;
-    }
+  const detailPayload =
+    details && typeof details === 'object'
+      ? { ...details, ...extras }
+      : Object.keys(extras).length
+        ? extras
+        : undefined;
+  if (detailPayload && Object.keys(detailPayload).length > 0) {
+    body.details = detailPayload;
   }
   return res.status(status).json(body);
 }
@@ -65,6 +87,7 @@ function asyncHandler(fn) {
 }
 
 module.exports = {
+  ERROR_CODES,
   HttpError,
   sendError,
   sendServerError,

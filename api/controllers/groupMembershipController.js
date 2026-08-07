@@ -4,6 +4,7 @@ const {
   listGroupPermissions,
   replaceGroupClassPermissions,
 } = require('../services/rbacService');
+const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
 
 exports.addMemberToGroup = async (req, res) => {
   try {

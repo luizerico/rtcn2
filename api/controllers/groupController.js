@@ -1,6 +1,7 @@
 const Group = require('../models/Group');
 const Permission = require('../models/Permission');
 const User = require('../models/User');
+const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
 
 exports.getAllGroups = async (req, res) => {
   try {
@@ -41,7 +42,24 @@ exports.getGroupById = async (req, res) => {
 
 exports.updateGroup = async (req, res) => {
   try {
-    const updatedGroup = await Group.findByIdAndUpdate(req.params.id, req.body, {
+    const GROUP_UPDATE_ALLOWED = ['name', 'description'];
+    const updates = {};
+    for (const key of GROUP_UPDATE_ALLOWED) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        updates[key] = req.body[key];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return sendError(
+        res,
+        400,
+        `No updatable fields provided. Allowed: ${GROUP_UPDATE_ALLOWED.join(', ')}.`,
+        ERROR_CODES.VALIDATION
+      );
+    }
+
+    const updatedGroup = await Group.findByIdAndUpdate(req.params.id, updates, {
       returnDocument: 'after',
       runValidators: true,
     });

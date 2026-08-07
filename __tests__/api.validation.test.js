@@ -54,7 +54,7 @@ describe('request validation helpers', () => {
     const handled = collectValidationError(new ValidationError('bad'));
     expect(handled).toEqual({
       status: 400,
-      body: { message: 'bad', code: 'VALIDATION_ERROR' },
+      body: { message: 'bad', code: 'VALIDATION' },
     });
     expect(collectValidationError(new Error('other'))).toBeNull();
   });
@@ -121,7 +121,7 @@ describe('validate middleware', () => {
     expect(status).toHaveBeenCalledWith(400);
     expect(json).toHaveBeenCalledWith({
       message: 'nope',
-      code: 'VALIDATION_ERROR',
+      code: 'VALIDATION',
     });
     expect(next).not.toHaveBeenCalled();
   });

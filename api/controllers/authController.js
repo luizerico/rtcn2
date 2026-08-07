@@ -2,6 +2,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
+const { assertPasswordPolicy } = require('../utils/passwordPolicy');
 const {
   createSession,
   revokeSession,
@@ -26,12 +27,7 @@ exports.registerUser = async (req, res) => {
 
   const passwordCheck = assertPasswordPolicy(password);
   if (!passwordCheck.ok) {
-    return res.status(400).json({ message: passwordCheck.message });
-  }
-
-  const passwordPolicy = assertPasswordPolicy(password);
-  if (!passwordPolicy.ok) {
-    return res.status(400).json({ message: passwordPolicy.message });
+    return sendError(res, 400, passwordCheck.message, ERROR_CODES.VALIDATION);
   }
 
   try {
@@ -158,9 +154,9 @@ exports.resetPassword = async (req, res) => {
   const token = req.validated?.token || req.params.token;
   const newPassword = req.validated?.newPassword || req.body.newPassword;
 
-  const passwordPolicy = assertPasswordPolicy(newPassword, { label: 'New password' });
-  if (!passwordPolicy.ok) {
-    return res.status(400).json({ message: passwordPolicy.message });
+  const passwordCheck = assertPasswordPolicy(newPassword);
+  if (!passwordCheck.ok) {
+    return sendError(res, 400, passwordCheck.message, ERROR_CODES.VALIDATION);
   }
 
   try {
@@ -221,6 +217,11 @@ exports.changeOwnPassword = async (req, res) => {
   const currentPassword = req.validated?.currentPassword || req.body.currentPassword;
   const newPassword = req.validated?.newPassword || req.body.newPassword;
 
+  const passwordCheck = assertPasswordPolicy(newPassword);
+  if (!passwordCheck.ok) {
+    return sendError(res, 400, passwordCheck.message, ERROR_CODES.VALIDATION);
+  }
+
   try {
     const user = await User.findById(req.user._id);
     if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
@@ -246,6 +247,11 @@ exports.changeOwnPassword = async (req, res) => {
 exports.adminChangeUserPassword = async (req, res) => {
   const newPassword = req.validated?.newPassword || req.body.newPassword;
   const id = req.validated?.id || req.params.id;
+
+  const passwordCheck = assertPasswordPolicy(newPassword);
+  if (!passwordCheck.ok) {
+    return sendError(res, 400, passwordCheck.message, ERROR_CODES.VALIDATION);
+  }
 
   try {
     const canManage = await userHasPermission(req.user, 'USER:WRITE');
