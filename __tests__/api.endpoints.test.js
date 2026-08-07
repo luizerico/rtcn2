@@ -9,6 +9,7 @@ const mongoose = require('mongoose');
 const request = require('supertest');
 const User = require('../api/models/User');
 const Group = require('../api/models/Group');
+const Permission = require('../api/models/Permission');
 const { buildFullAdminPermissions } = require('../api/constants/rbac');
 const { replaceGroupPermissions } = require('../api/services/rbacService');
 const {
@@ -17,12 +18,18 @@ const {
   clearDatabase,
   createTestApp,
 } = require('./helpers/apiTestUtils');
+const {
+  createMemoryEmailSender,
+  setEmailSender,
+  resetEmailSender,
+} = require('../api/services/emailService');
 
 describe('API endpoints', () => {
   let app;
   let authToken;
   let userId;
   let secondaryUserId;
+  let mailer;
 
   beforeAll(async () => {
     await connectTestDatabase();
@@ -30,10 +37,13 @@ describe('API endpoints', () => {
   }, 120000);
 
   afterAll(async () => {
+    resetEmailSender();
     await disconnectTestDatabase();
   });
 
   beforeEach(async () => {
+    mailer = createMemoryEmailSender();
+    setEmailSender(mailer);
     await clearDatabase();
 
     const registerRes = await request(app).post('/api/auth/register').send({
@@ -57,7 +67,8 @@ describe('API endpoints', () => {
       members: [userId],
     });
     await replaceGroupPermissions(adminGroup._id, buildFullAdminPermissions(adminGroup._id));
-    await User.findByIdAndUpdate(userId, { roleId: adminGroup._id });
+    await User.findByIdAndUpdate(userId, { roleId: adminGroup._id, isVerified: true });
+    await User.findByIdAndUpdate(secondaryUserId, { isVerified: true });
 
     const loginRes = await request(app).post('/api/auth/login').send({
       username: 'alice',
@@ -72,12 +83,29 @@ describe('API endpoints', () => {
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ status: 'ok' });
     });
+
+    it('sets baseline security headers', async () => {
+      const res = await request(app).get('/api/health');
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+      expect(res.headers['x-frame-options']).toBe('SAMEORIGIN');
+      expect(res.headers['referrer-policy']).toBeDefined();
+    });
   });
 
   describe('Auth', () => {
     it('POST /api/auth/register rejects missing fields', async () => {
       const res = await request(app).post('/api/auth/register').send({ username: 'x' });
       expect(res.status).toBe(400);
+    });
+
+    it('POST /api/auth/register rejects passwords shorter than 8 characters', async () => {
+      const res = await request(app).post('/api/auth/register').send({
+        username: 'shortpwd',
+        email: 'shortpwd@example.com',
+        password: 'short',
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/at least 8 characters/i);
     });
 
     it('POST /api/auth/register rejects duplicate users', async () => {
@@ -105,6 +133,17 @@ describe('API endpoints', () => {
         password: 'wrong-password',
       });
       expect(res.status).toBe(401);
+    });
+
+    it('POST /api/auth/login rejects unverified accounts', async () => {
+      await User.findByIdAndUpdate(userId, { isVerified: false });
+      const res = await request(app).post('/api/auth/login').send({
+        username: 'alice',
+        password: 'Password123!',
+      });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('NOT_VERIFIED');
+      expect(res.body.token).toBeUndefined();
     });
 
     it('POST /api/auth/login accepts email as login id', async () => {
@@ -230,10 +269,16 @@ describe('API endpoints', () => {
         .get('/api/auth/forgot-password')
         .query({ email: 'alice@example.com' });
       expect(forgot.status).toBe(200);
-      expect(forgot.body.resetToken).toBeDefined();
+      expect(forgot.body.resetToken).toBeUndefined();
+      expect(mailer.messages).toHaveLength(1);
+      expect(mailer.last().to).toBe('alice@example.com');
+      expect(mailer.last().subject).toBe('Password Reset Request');
+
+      const resetToken = mailer.extractResetToken();
+      expect(resetToken).toBeTruthy();
 
       const reset = await request(app)
-        .post(`/api/auth/reset-password/${forgot.body.resetToken}`)
+        .post(`/api/auth/reset-password/${resetToken}`)
         .send({ newPassword: 'NewPassword123!' });
       expect(reset.status).toBe(200);
 
@@ -254,11 +299,28 @@ describe('API endpoints', () => {
       const forgot = await request(app)
         .get('/api/auth/forgot-password')
         .query({ email: 'alice@example.com' });
+      expect(forgot.status).toBe(200);
+
+      const resetToken = mailer.extractResetToken();
+      expect(resetToken).toBeTruthy();
+
+      const res = await request(app)
+        .post(`/api/auth/reset-password/${resetToken}`)
+        .send({});
+      expect(res.status).toBe(400);
+    });
+
+    it('POST /api/auth/reset-password/:token rejects short passwords', async () => {
+      const forgot = await request(app)
+        .get('/api/auth/forgot-password')
+        .query({ email: 'alice@example.com' });
+      expect(forgot.status).toBe(200);
 
       const res = await request(app)
         .post(`/api/auth/reset-password/${forgot.body.resetToken}`)
-        .send({});
+        .send({ newPassword: 'short' });
       expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/at least 8 characters/i);
     });
   });
 
@@ -306,6 +368,45 @@ describe('API endpoints', () => {
         .get(`/api/groups/${groupId}`)
         .set('Authorization', `Bearer ${authToken}`);
       expect(missing.status).toBe(404);
+    });
+
+    it('deletes related permissions and clears roleId on group delete', async () => {
+      const create = await request(app)
+        .post('/api/groups')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'temp-editors', description: 'Temporary group' });
+      expect(create.status).toBe(201);
+      const groupId = create.body._id;
+
+      await User.findByIdAndUpdate(secondaryUserId, { roleId: groupId });
+
+      const setPermissions = await request(app)
+        .post(`/api/groups/${groupId}/permissions`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          scopes: ['READ', 'WRITE'],
+          resourceType: 'DOCUMENT',
+          allObjects: true,
+        });
+      expect(setPermissions.status).toBe(200);
+
+      const before = await Permission.countDocuments({
+        $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
+      });
+      expect(before).toBeGreaterThan(0);
+
+      const remove = await request(app)
+        .delete(`/api/groups/${groupId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(remove.status).toBe(200);
+
+      const after = await Permission.countDocuments({
+        $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
+      });
+      expect(after).toBe(0);
+
+      const secondary = await User.findById(secondaryUserId);
+      expect(secondary.roleId).toBeNull();
     });
 
     it('rejects create without name', async () => {
@@ -456,17 +557,53 @@ describe('API endpoints', () => {
         });
       expect(create.status).toBe(201);
       expect(create.body.username).toBe('carol');
+      expect(create.body.isVerified).toBe(true);
+    });
 
-      const weakCreate = await request(app)
+    it('allows admin to toggle isVerified and rejects roleId mass assignment', async () => {
+      const registered = await request(app).post('/api/auth/register').send({
+        username: 'dave',
+        email: 'dave@example.com',
+        password: 'Password123!',
+      });
+      expect(registered.status).toBe(201);
+      expect(registered.body.user.isVerified).toBe(false);
+      const daveId = registered.body.user.id;
+
+      const denyLogin = await request(app).post('/api/auth/login').send({
+        username: 'dave',
+        password: 'Password123!',
+      });
+      expect(denyLogin.status).toBe(403);
+      expect(denyLogin.body.code).toBe('NOT_VERIFIED');
+
+      const verify = await request(app)
+        .put(`/api/users/${daveId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ isVerified: true, roleId: userId, password: 'Hacked123!' });
+      expect(verify.status).toBe(200);
+      expect(verify.body.isVerified).toBe(true);
+      expect(String(verify.body.roleId || '')).not.toBe(String(userId));
+
+      const allowLogin = await request(app).post('/api/auth/login').send({
+        username: 'dave',
+        password: 'Password123!',
+      });
+      expect(allowLogin.status).toBe(200);
+      expect(allowLogin.body.token).toBeDefined();
+    });
+
+    it('rejects create user with short password', async () => {
+      const res = await request(app)
         .post('/api/users')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           username: 'dave',
           email: 'dave@example.com',
-          password: 'tiny',
+          password: 'short',
         });
-      expect(weakCreate.status).toBe(400);
-      expect(weakCreate.body.message).toMatch(/at least 8 characters/i);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/at least 8 characters/i);
     });
   });
 
@@ -525,6 +662,17 @@ describe('API endpoints', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send({ description: 'missing name' });
       expect(res.status).toBe(400);
+    });
+
+    it('rejects SURVEY kinds on asset create without falling through', async () => {
+      for (const kind of ['SURVEY', 'SURVEY_RESPONSE']) {
+        const res = await request(app)
+          .post('/api/assets')
+          .set('Authorization', `Bearer ${authToken}`)
+          .send({ name: `via-assets-${kind}`, kind });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/surveys API/i);
+      }
     });
   });
 

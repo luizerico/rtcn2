@@ -122,6 +122,20 @@ npm start
 - Require strong `JWT_SECRET` / `ADMIN_PASSWORD`
 - Restrict MongoDB network access
 - Rotate the seeded admin password after first login
+- Configure real email delivery in production (`EMAIL_PROVIDER=smtp` or `module`); the console sender is for local/test only and never returns reset tokens in HTTP responses
+
+### Email (password reset)
+
+Password reset uses a pluggable sender in `api/services/emailService.js`:
+
+| `EMAIL_PROVIDER` | Behavior |
+|------------------|----------|
+| `console` (default in development/test) | Logs the message; safe for local/CI |
+| `memory` | Captures messages in-process (tests) |
+| `smtp` | Nodemailer SMTP (`SMTP_*` + `EMAIL_FROM`; requires `nodemailer`) |
+| `module` | Loads `EMAIL_SENDER_MODULE` exporting `send(message)` |
+
+Production must set `smtp` or `module` — the console default is rejected so reset links are not silently logged.
 
 ## API testing
 
@@ -187,6 +201,13 @@ Separate FastAPI container that reads the same MongoDB and exposes analytics at 
 - `authorize('RESOURCE:ACTION')` resolves the caller’s groups (`roleId` + membership) and loads matching permission rows.
 - `ADMIN` on a resource type grants every action; `WRITE` also covers `CREATE`.
 - `npm run db:init` upserts the **admin** group and writes the full permission matrix into `permissions`.
+
+## Account verification
+
+- `User.isVerified` must be `true` to sign in (`POST /api/auth/login`) and to use an existing session.
+- Self-registration creates unverified users; an admin must set `isVerified` (for example `PUT /api/users/{id}`) before they can log in.
+- Admin-created users (`POST /api/users`) and the bootstrap admin are verified automatically.
+- There is no email-verification flow yet; verification is admin-managed.
 
 - **Two terminals still?** Use root `npm run dev` only — not `client` and `api` separately.
 - **`JWT_SECRET is not configured`**: set it in `.env`.

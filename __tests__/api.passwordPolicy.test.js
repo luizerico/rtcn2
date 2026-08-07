@@ -3,43 +3,31 @@
  */
 
 const {
-  PASSWORD_MIN_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_POLICY_MESSAGE,
   assertPasswordPolicy,
 } = require('../api/utils/passwordPolicy');
 
 describe('passwordPolicy', () => {
-  it('exports the shared minimum length', () => {
-    expect(PASSWORD_MIN_LENGTH).toBe(8);
+  it('exposes the shared minimum length', () => {
+    expect(MIN_PASSWORD_LENGTH).toBe(8);
   });
 
-  it('accepts passwords that meet the policy', () => {
-    expect(assertPasswordPolicy('Password123!')).toEqual({ ok: true });
-    expect(assertPasswordPolicy('12345678')).toEqual({ ok: true });
+  it('rejects missing or empty passwords', () => {
+    expect(assertPasswordPolicy(undefined).ok).toBe(false);
+    expect(assertPasswordPolicy(null).ok).toBe(false);
+    expect(assertPasswordPolicy('').ok).toBe(false);
+    expect(assertPasswordPolicy(12345678).ok).toBe(false);
   });
 
-  it('rejects short, missing, or non-string passwords', () => {
-    expect(assertPasswordPolicy('short')).toEqual({
-      ok: false,
-      message: 'Password must be at least 8 characters.',
-    });
-    expect(assertPasswordPolicy('')).toEqual({
-      ok: false,
-      message: 'Password must be at least 8 characters.',
-    });
-    expect(assertPasswordPolicy(null)).toEqual({
-      ok: false,
-      message: 'Password must be at least 8 characters.',
-    });
-    expect(assertPasswordPolicy(12345678)).toEqual({
-      ok: false,
-      message: 'Password must be at least 8 characters.',
-    });
+  it('rejects passwords shorter than the minimum', () => {
+    const result = assertPasswordPolicy('short');
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe(PASSWORD_POLICY_MESSAGE);
   });
 
-  it('supports a custom label for change/reset flows', () => {
-    expect(assertPasswordPolicy('abc', { label: 'New password' })).toEqual({
-      ok: false,
-      message: 'New password must be at least 8 characters.',
-    });
+  it('accepts passwords that meet the minimum', () => {
+    const result = assertPasswordPolicy('12345678');
+    expect(result).toEqual({ ok: true, password: '12345678' });
   });
 });
