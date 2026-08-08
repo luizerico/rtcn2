@@ -26,15 +26,19 @@ function apiRateLimiter() {
   });
 }
 
-/** Stricter limit for unauthenticated auth endpoints (skipped in Jest). */
+/**
+ * Stricter limit for password login (skipped in Jest).
+ * Only failed/invalid login responses count toward the block.
+ */
 function authRateLimiter() {
   return rateLimit({
     windowMs: 15 * 60 * 1000,
     max: Number.parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20', 10),
     standardHeaders: true,
     legacyHeaders: false,
+    skipSuccessfulRequests: true,
     skip: isTestEnv,
-    message: { message: 'Too many authentication attempts, please try again later.' },
+    message: { message: 'Too many login attempts, please try again later.' },
   });
 }
 

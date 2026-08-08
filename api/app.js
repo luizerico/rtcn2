@@ -34,7 +34,8 @@ function createApp({ fallback } = {}) {
   });
 
   app.use('/api', apiRateLimiter());
-  app.use('/api/auth', authRateLimiter());
+  // Count only failed password logins toward the auth lockout (not register/me/etc.).
+  app.use('/api/auth/login', authRateLimiter());
 
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);

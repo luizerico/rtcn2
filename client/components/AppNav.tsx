@@ -86,11 +86,13 @@ function NavLink({
 
 function SidebarBody({
   username,
+  isAdmin,
   onLogout,
   onNavigate,
   visibleLinks,
 }: {
   username: string | null;
+  isAdmin: boolean;
   onLogout: () => void;
   onNavigate?: () => void;
   visibleLinks: NavItem[];
@@ -115,13 +117,15 @@ function SidebarBody({
           </p>
         )}
         <NavLink href="/account" label="Profile" onNavigate={onNavigate} />
-        <Link
-          href="/login"
-          onClick={onNavigate}
-          className="block rounded-md px-3 py-2 text-sm text-teal-50/85 hover:bg-teal-900"
-        >
-          Switch account
-        </Link>
+        {isAdmin ? (
+          <Link
+            href="/login"
+            onClick={onNavigate}
+            className="block rounded-md px-3 py-2 text-sm text-teal-50/85 hover:bg-teal-900"
+          >
+            Switch account
+          </Link>
+        ) : null}
         <button
           type="button"
           onClick={onLogout}
@@ -234,6 +238,7 @@ export default function AppNav() {
             </div>
             <SidebarBody
               username={username}
+              isAdmin={isAdmin}
               onLogout={handleLogout}
               onNavigate={() => setMobileOpen(false)}
               visibleLinks={visibleLinks}
@@ -243,7 +248,12 @@ export default function AppNav() {
       ) : null}
 
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-[var(--sidebar)] px-4 py-6 text-[var(--sidebar-text)] md:flex">
-        <SidebarBody username={username} onLogout={handleLogout} visibleLinks={visibleLinks} />
+        <SidebarBody
+          username={username}
+          isAdmin={isAdmin}
+          onLogout={handleLogout}
+          visibleLinks={visibleLinks}
+        />
       </aside>
     </>
   );
