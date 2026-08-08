@@ -339,7 +339,6 @@ export function useAssetAclEditor({
       return;
     }
 
-    // When applying ACL, store human-readable labels for survey responses.
     const objects = (selectedClass?.objects || [])
       .filter((object) => selectedIds.includes(object.id))
       .map((object) => ({

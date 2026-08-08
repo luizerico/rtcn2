@@ -12,7 +12,7 @@ const { protect } = require('../middleware/authMiddleware');
 const { validate } = require('../middleware/validate');
 const { createAssetBody, paramObjectId } = require('../validation/schemas');
 const { userHasPermission } = require('../services/rbacService');
-const { Asset } = require('../models/Asset');
+const { findAssetById } = require('../models/assets');
 const { ASSET_KINDS } = require('../constants/rbac');
 
 function forbid(res, permission) {
@@ -37,7 +37,7 @@ function authorizeAnyAssetKind(action, { allowAnyInstance = false } = {}) {
 
 function authorizeAssetById(action) {
   return async (req, res, next) => {
-    const asset = await Asset.findById(req.params.id);
+    const asset = await findAssetById(req.params.id);
     if (!asset) {
       return sendError(res, 404, 'Asset not found.', ERROR_CODES.NOT_FOUND);
     }

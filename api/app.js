@@ -9,7 +9,7 @@ const { actionLogMiddleware } = require('./middleware/actionLogMiddleware');
 const { securityHeaders, apiRateLimiter, authRateLimiter } = require('./middleware/security');
 const { errorHandler } = require('./middleware/errorMiddleware');
 
-// Register Asset subclasses (discriminators) once for the API process.
+// Register concrete Asset subclass models once for the API process.
 require('./models/assets');
 
 const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '100kb';

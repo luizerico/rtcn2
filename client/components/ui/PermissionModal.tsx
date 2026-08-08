@@ -52,9 +52,9 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} title="Asset permissions" size="xl">
       <form onSubmit={editor.handleApply} className="space-y-4">
         <p className="text-xs text-[var(--muted)]">
-          Permissions apply only to asset subclasses (documents, dashboards, datasets, surveys,
-          survey responses). Users and groups are not assets — they appear only as who receives
-          access.
+          Permissions apply only to asset subclasses (documents, dashboards, datasets, surveys).
+          Users and groups are not assets — they appear only as who receives access. Survey answers
+          inherit survey read access; results are admin-only.
         </p>
 
         <div className="grid gap-3 sm:grid-cols-2">

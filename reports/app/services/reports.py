@@ -7,6 +7,14 @@ from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 
+ASSET_COLLECTIONS = (
+    ("documents", "DOCUMENT", "Document"),
+    ("dashboards", "DASHBOARD", "Dashboard"),
+    ("datasets", "DATASET", "Dataset"),
+    ("surveys", "SURVEY", "Survey"),
+)
+
+
 def _oid(value: str | None) -> ObjectId | None:
     if not value or not ObjectId.is_valid(value):
         return None
@@ -25,15 +33,18 @@ def _date_filter(from_date: datetime | None, to_date: datetime | None) -> dict[s
 async def build_overview(db: AsyncIOMotorDatabase) -> dict[str, Any]:
     users = await db.users.count_documents({})
     groups = await db.groups.count_documents({})
-    assets = await db.assets.count_documents({})
     permissions = await db.permissions.count_documents({})
     action_logs = await db.actionlogs.count_documents({})
-    surveys = await db.assets.count_documents({"assetType": "Survey"})
-    survey_responses = await db.assets.count_documents({"assetType": "SurveyResponse"})
+    surveys = await db.surveys.count_documents({})
+    survey_responses = await db.survey_responses.count_documents({})
 
-    by_kind = await db.assets.aggregate(
-        [{"$group": {"_id": "$kind", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]
-    ).to_list(50)
+    by_kind: list[dict[str, Any]] = []
+    assets = 0
+    for collection, kind, _asset_type in ASSET_COLLECTIONS:
+        count = await db[collection].count_documents({})
+        assets += count
+        by_kind.append({"key": kind, "count": count})
+    by_kind.sort(key=lambda row: row["count"], reverse=True)
 
     return {
         "users": users,
@@ -43,45 +54,45 @@ async def build_overview(db: AsyncIOMotorDatabase) -> dict[str, Any]:
         "actionLogs": action_logs,
         "surveys": surveys,
         "surveyResponses": survey_responses,
-        "assetsByKind": [
-            {"key": row["_id"] or "UNKNOWN", "count": row["count"]} for row in by_kind
-        ],
+        "assetsByKind": by_kind,
     }
 
 
 async def build_asset_summary(db: AsyncIOMotorDatabase) -> dict[str, Any]:
-    by_kind = await db.assets.aggregate(
-        [
-            {"$group": {"_id": {"kind": "$kind", "assetType": "$assetType"}, "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}},
-        ]
-    ).to_list(100)
+    by_type: list[dict[str, Any]] = []
+    recent_docs: list[dict[str, Any]] = []
 
-    recent = await db.assets.find(
-        {},
-        {"name": 1, "kind": 1, "assetType": 1, "createdAt": 1, "ownerId": 1},
-    ).sort("createdAt", -1).limit(20).to_list(20)
+    for collection, kind, asset_type in ASSET_COLLECTIONS:
+        count = await db[collection].count_documents({})
+        by_type.append({"kind": kind, "assetType": asset_type, "count": count})
+        rows = (
+            await db[collection]
+            .find({}, {"name": 1, "kind": 1, "assetType": 1, "createdAt": 1, "ownerId": 1})
+            .sort("createdAt", -1)
+            .limit(20)
+            .to_list(20)
+        )
+        for doc in rows:
+            recent_docs.append(
+                {
+                    "id": str(doc["_id"]),
+                    "name": doc.get("name") or "",
+                    "kind": doc.get("kind") or kind,
+                    "assetType": doc.get("assetType") or asset_type,
+                    "createdAt": doc.get("createdAt"),
+                    "ownerId": str(doc["ownerId"]) if doc.get("ownerId") else None,
+                }
+            )
+
+    by_type.sort(key=lambda row: row["count"], reverse=True)
+    recent_docs.sort(
+        key=lambda row: row["createdAt"] or datetime.min,
+        reverse=True,
+    )
 
     return {
-        "byType": [
-            {
-                "kind": row["_id"].get("kind") or "UNKNOWN",
-                "assetType": row["_id"].get("assetType") or "Asset",
-                "count": row["count"],
-            }
-            for row in by_kind
-        ],
-        "recent": [
-            {
-                "id": str(doc["_id"]),
-                "name": doc.get("name") or "",
-                "kind": doc.get("kind") or "UNKNOWN",
-                "assetType": doc.get("assetType") or "Asset",
-                "createdAt": doc.get("createdAt"),
-                "ownerId": str(doc["ownerId"]) if doc.get("ownerId") else None,
-            }
-            for doc in recent
-        ],
+        "byType": by_type,
+        "recent": recent_docs[:20],
     }
 
 
@@ -195,20 +206,21 @@ async def build_survey_report(db: AsyncIOMotorDatabase, survey_id: str) -> dict[
     if not oid:
         return None
 
-    survey = await db.assets.find_one({"_id": oid, "assetType": "Survey"})
+    survey = await db.surveys.find_one({"_id": oid})
     if not survey:
         return None
 
-    responses = await db.assets.find(
-        {"assetType": "SurveyResponse", "surveyId": oid},
+    responses = await db.survey_responses.find(
+        {"surveyId": oid},
         {"createdBy": 1, "createdAt": 1, "answers": 1, "name": 1},
     ).sort("createdAt", -1).to_list(1000)
 
-    questions = await db.questions.find({"surveyId": oid}).sort("sortOrder", 1).to_list(200)
+    questions = list(survey.get("questions") or [])
+    questions.sort(key=lambda q: q.get("sortOrder") or 0)
 
     option_counts: dict[str, dict[str, int]] = {}
     text_totals: dict[str, int] = {}
-    question_by_id = {str(q.get("questionId") or q["_id"]): q for q in questions}
+    question_by_id = {str(q.get("questionId") or ""): q for q in questions if q.get("questionId")}
 
     for response in responses:
         for answer in response.get("answers") or []:
@@ -227,7 +239,7 @@ async def build_survey_report(db: AsyncIOMotorDatabase, survey_id: str) -> dict[
 
     question_summaries = []
     for question in questions:
-        qid = str(question.get("questionId") or question["_id"])
+        qid = str(question.get("questionId") or "")
         qtype = question.get("type") or "text"
         if qtype == "text":
             total = text_totals.get(qid, 0)

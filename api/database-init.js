@@ -28,7 +28,7 @@ async function initializeAdmin() {
     console.log(`Admin user: ${adminUser.username} (${adminUser.email})`);
     console.log(`Admin group: ${adminGroup.name} with ${permissions.length} permissions`);
     console.log(
-      'Admin group members can manage users/groups; asset permissions cover DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE.'
+      'Admin group members can manage users/groups; asset permissions cover DOCUMENT, DASHBOARD, DATASET, SURVEY. Survey answers inherit SURVEY:READ; results are admin-only.'
     );
 
     await mongoose.connection.close();

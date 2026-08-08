@@ -250,20 +250,6 @@ describe('RBAC admin full access', () => {
         resourceId: null,
         permission: 'CREATE',
       },
-      {
-        groupId: surveyGroup._id,
-        resourceType: 'SURVEY_RESPONSE',
-        target: '*',
-        resourceId: null,
-        permission: 'CREATE',
-      },
-      {
-        groupId: surveyGroup._id,
-        resourceType: 'SURVEY_RESPONSE',
-        target: '*',
-        resourceId: null,
-        permission: 'READ',
-      },
     ]);
 
     const login = await request(app).post('/api/auth/login').send({

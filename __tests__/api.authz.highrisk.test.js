@@ -94,70 +94,27 @@ describe('High-risk authz paths', () => {
       expect(list.status).toBe(403);
     });
 
-    it('allows class-wide SURVEY_RESPONSE create/read and denies when only SURVEY is granted', async () => {
+    it('allows SURVEY:READ to submit answers; results remain admin-only', async () => {
       const survey = await createSurvey(app, adminToken, 'Scoped survey');
       const questionId = survey.questions[0].questionId;
 
-      const surveyOnly = await Group.create({
-        name: 'survey-authors',
-        description: 'Survey CRUD without responses',
+      const surveyReaders = await Group.create({
+        name: 'survey-readers',
+        description: 'Can read and answer surveys',
         members: [viewer.user._id],
       });
-      await replaceGroupPermissions(surveyOnly._id, [
+      await replaceGroupPermissions(surveyReaders._id, [
         {
-          groupId: surveyOnly._id,
+          groupId: surveyReaders._id,
           resourceType: 'SURVEY',
-          target: '*',
-          resourceId: null,
-          permission: 'READ',
-        },
-        {
-          groupId: surveyOnly._id,
-          resourceType: 'SURVEY',
-          target: '*',
-          resourceId: null,
-          permission: 'CREATE',
-        },
-      ]);
-
-      let token = await login(app, 'viewer', 'Password123!');
-      let auth = { Authorization: `Bearer ${token}` };
-
-      const deniedSubmit = await request(app)
-        .post(`/api/surveys/${survey._id}/responses`)
-        .set(auth)
-        .send({ answers: [{ questionId, value: 'Yes' }] });
-      expect(deniedSubmit.status).toBe(403);
-
-      const deniedList = await request(app)
-        .get(`/api/surveys/${survey._id}/responses`)
-        .set(auth);
-      expect(deniedList.status).toBe(403);
-
-      const responseGroup = await Group.create({
-        name: 'response-workers',
-        description: 'Can submit and read responses',
-        members: [viewer.user._id],
-      });
-      await replaceGroupPermissions(responseGroup._id, [
-        {
-          groupId: responseGroup._id,
-          resourceType: 'SURVEY_RESPONSE',
-          target: '*',
-          resourceId: null,
-          permission: 'CREATE',
-        },
-        {
-          groupId: responseGroup._id,
-          resourceType: 'SURVEY_RESPONSE',
           target: '*',
           resourceId: null,
           permission: 'READ',
         },
       ]);
 
-      token = await login(app, 'viewer', 'Password123!');
-      auth = { Authorization: `Bearer ${token}` };
+      const token = await login(app, 'viewer', 'Password123!');
+      const auth = { Authorization: `Bearer ${token}` };
 
       const submit = await request(app)
         .post(`/api/surveys/${survey._id}/responses`)
@@ -170,9 +127,7 @@ describe('High-risk authz paths', () => {
       const list = await request(app)
         .get(`/api/surveys/${survey._id}/responses`)
         .set(auth);
-      expect(list.status).toBe(200);
-      expect(list.body.responses).toHaveLength(1);
-      expect(list.body.summary.responseCount).toBe(1);
+      expect(list.status).toBe(403);
     });
 
     it('allows admin to submit and list responses', async () => {
@@ -193,9 +148,11 @@ describe('High-risk authz paths', () => {
       expect(list.body.responses).toHaveLength(1);
     });
 
-    it('denies response access when only instance SURVEY grant exists (no SURVEY_RESPONSE)', async () => {
+    it('allows instance SURVEY:READ to answer that survey only; results stay admin-only', async () => {
       const surveyA = await createSurvey(app, adminToken, 'Survey A');
       const surveyB = await createSurvey(app, adminToken, 'Survey B');
+      const qA = surveyA.questions[0].questionId;
+      const qB = surveyB.questions[0].questionId;
 
       const limited = await Group.create({
         name: 'survey-a-readers',
@@ -213,6 +170,18 @@ describe('High-risk authz paths', () => {
 
       const token = await login(app, 'viewer', 'Password123!');
       const auth = { Authorization: `Bearer ${token}` };
+
+      const submitA = await request(app)
+        .post(`/api/surveys/${surveyA._id}/responses`)
+        .set(auth)
+        .send({ answers: [{ questionId: qA, value: 'Yes' }] });
+      expect(submitA.status).toBe(201);
+
+      const submitB = await request(app)
+        .post(`/api/surveys/${surveyB._id}/responses`)
+        .set(auth)
+        .send({ answers: [{ questionId: qB, value: 'Yes' }] });
+      expect(submitB.status).toBe(403);
 
       const listA = await request(app)
         .get(`/api/surveys/${surveyA._id}/responses`)

@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { apiDelete, apiGet, apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
-import EditMembersModal, { EditMembersPayload } from '@/components/ui/EditMembersModal';
+import EditMembersModal, { EditMembersSavePayload } from '@/components/ui/EditMembersModal';
 import CreateGroupModal from '@/components/ui/CreateGroupModal';
 import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
@@ -137,15 +137,19 @@ export default function AdminGroupsPage() {
     }
   };
 
-  const handleAddMember = async ({ userId }: EditMembersPayload) => {
+  const handleSaveMembers = async ({ addUserIds, removeUserIds }: EditMembersSavePayload) => {
     if (!selectedGroupId) return;
-    await apiPost(`/groups/${selectedGroupId}/members`, { targetUserId: userId });
-    await loadGroups();
-  };
-
-  const handleRemoveMember = async ({ userId }: EditMembersPayload) => {
-    if (!selectedGroupId) return;
-    await apiDelete(`/groups/${selectedGroupId}/members`, { targetUserId: userId });
+    for (const userId of addUserIds) {
+      await apiPost(`/groups/${selectedGroupId}/members`, { targetUserId: userId });
+    }
+    for (const userId of removeUserIds) {
+      await apiDelete(`/groups/${selectedGroupId}/members`, { targetUserId: userId });
+    }
+    pushToast({
+      tone: 'success',
+      title: 'Members updated',
+      message: 'Group membership changes were saved.',
+    });
     await loadGroups();
   };
 
@@ -405,8 +409,7 @@ export default function AdminGroupsPage() {
         onClose={() => setMemberModalOpen(false)}
         groupName={selectedGroup?.name}
         memberIds={selectedGroup?.members?.map(String) || []}
-        onAddUser={handleAddMember}
-        onRemoveUser={handleRemoveMember}
+        onSave={handleSaveMembers}
       />
 
       <ConfirmDeleteDialog

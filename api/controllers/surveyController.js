@@ -2,11 +2,8 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 const Survey = require('../models/assets/Survey');
 const SurveyResponse = require('../models/assets/SurveyResponse');
-const Question = require('../models/Question');
 const { QUESTION_TYPES } = require('../constants/assetTypes');
 const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
-// Ensure all asset discriminators are registered.
-require('../models/assets');
 
 function normalizeQuestions(rawQuestions) {
   if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
@@ -54,22 +51,23 @@ function normalizeQuestions(rawQuestions) {
   return { questions };
 }
 
-async function loadSurveyQuestions(surveyId) {
-  return Question.find({ surveyId }).sort({ sortOrder: 1, createdAt: 1 });
-}
-
-function serializeSurvey(survey, questions) {
+function serializeSurvey(survey) {
   const plain = survey.toObject ? survey.toObject() : { ...survey };
+  const questions = Array.isArray(plain.questions) ? plain.questions : [];
   return {
     ...plain,
-    questions: questions.map((q) => ({
-      questionId: q.questionId,
-      prompt: q.prompt,
-      type: q.type,
-      options: q.options,
-      required: q.required,
-      sortOrder: q.sortOrder,
-    })),
+    questionCount: questions.length,
+    questions: questions
+      .slice()
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+      .map((q) => ({
+        questionId: q.questionId,
+        prompt: q.prompt,
+        type: q.type,
+        options: q.options,
+        required: q.required,
+        sortOrder: q.sortOrder,
+      })),
   };
 }
 
@@ -176,25 +174,6 @@ function buildResponseSummary(survey, questions, responses) {
   };
 }
 
-async function replaceSurveyQuestions(surveyId, questions, userId) {
-  await Question.deleteMany({ surveyId });
-  if (!questions.length) return [];
-
-  const docs = questions.map((q) => ({
-    surveyId,
-    questionId: q.questionId,
-    prompt: q.prompt,
-    type: q.type,
-    options: q.options,
-    required: q.required,
-    sortOrder: q.sortOrder,
-    createdBy: userId,
-    updatedBy: userId,
-  }));
-
-  return Question.insertMany(docs);
-}
-
 const SORT_FIELDS = new Set(['name', 'createdAt', 'updatedAt', 'questionCount']);
 
 function parseListQuery(query = {}) {
@@ -253,21 +232,28 @@ exports.listSurveys = async (req, res) => {
     const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
     const skip = (page - 1) * limit;
 
-    const surveys = await Survey.find(filter)
-      .sort({ [sortField]: order === 'asc' ? 1 : -1 })
-      .skip(skip)
-      .limit(limit)
+    let query = Survey.find(filter).sort({
+      [sortField === 'questionCount' ? 'updatedAt' : sortField]: order === 'asc' ? 1 : -1,
+    });
+
+    if (sortField !== 'questionCount') {
+      query = query.skip(skip).limit(limit);
+    }
+
+    const surveys = await query
       .populate('ownerId', 'username email')
       .populate('createdBy', 'username email')
       .populate('updatedBy', 'username email');
 
-    const items = surveys.map((survey) => {
-      const plain = survey.toObject();
-      return {
-        ...plain,
-        questionCount: plain.questionCount ?? 0,
-      };
-    });
+    let items = surveys.map((survey) => serializeSurvey(survey));
+
+    if (sortField === 'questionCount') {
+      items.sort((a, b) => {
+        const diff = (a.questionCount || 0) - (b.questionCount || 0);
+        return order === 'asc' ? diff : -diff;
+      });
+      items = items.slice(skip, skip + limit);
+    }
 
     res.status(200).json({
       items,
@@ -301,19 +287,14 @@ exports.createSurvey = async (req, res) => {
       name: String(name).trim(),
       description: description || '',
       kind: 'SURVEY',
-      questionCount: normalized.questions.length,
+      assetType: 'Survey',
+      questions: normalized.questions,
       ownerId: req.user._id,
       createdBy: req.user._id,
       updatedBy: req.user._id,
     });
 
-    const questions = await replaceSurveyQuestions(
-      survey._id,
-      normalized.questions,
-      req.user._id
-    );
-
-    res.status(201).json(serializeSurvey(survey, questions));
+    res.status(201).json(serializeSurvey(survey));
   } catch (error) {
     return sendServerError(res, error, 'Error creating survey');
   }
@@ -330,8 +311,7 @@ exports.getSurveyById = async (req, res) => {
       return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
 
-    const questions = await loadSurveyQuestions(survey._id);
-    res.status(200).json(serializeSurvey(survey, questions));
+    res.status(200).json(serializeSurvey(survey));
   } catch (error) {
     return sendServerError(res, error, 'Error fetching survey');
   }
@@ -347,19 +327,17 @@ exports.updateSurvey = async (req, res) => {
     if (req.body.name !== undefined) survey.name = String(req.body.name).trim();
     if (req.body.description !== undefined) survey.description = req.body.description;
 
-    let questions = await loadSurveyQuestions(survey._id);
     if (req.body.questions !== undefined) {
       const normalized = normalizeQuestions(req.body.questions);
       if (normalized.error) {
         return sendError(res, 400, normalized.error, ERROR_CODES.VALIDATION);
       }
-      questions = await replaceSurveyQuestions(survey._id, normalized.questions, req.user._id);
-      survey.questionCount = questions.length;
+      survey.questions = normalized.questions;
     }
 
     survey.updatedBy = req.user._id;
     await survey.save();
-    res.status(200).json(serializeSurvey(survey, questions));
+    res.status(200).json(serializeSurvey(survey));
   } catch (error) {
     return sendServerError(res, error, 'Error updating survey');
   }
@@ -371,9 +349,8 @@ exports.deleteSurvey = async (req, res) => {
     if (!survey) {
       return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
-    await Question.deleteMany({ surveyId: survey._id });
     await SurveyResponse.deleteMany({ surveyId: survey._id });
-    res.status(200).json({ message: 'Survey, questions, and related responses deleted.' });
+    res.status(200).json({ message: 'Survey and related responses deleted.' });
   } catch (error) {
     return sendServerError(res, error, 'Error deleting survey');
   }
@@ -386,7 +363,7 @@ exports.submitSurveyResponse = async (req, res) => {
       return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
 
-    const questions = await loadSurveyQuestions(survey._id);
+    const questions = Array.isArray(survey.questions) ? survey.questions : [];
     const validated = validateAnswers(questions, req.body.answers);
     if (validated.error) {
       return sendError(res, 400, validated.error, ERROR_CODES.VALIDATION);
@@ -402,6 +379,7 @@ exports.submitSurveyResponse = async (req, res) => {
       name: `${respondentName} · ${survey.name}`,
       description: answerPreview || `Submitted response for ${survey.name}`,
       kind: 'SURVEY_RESPONSE',
+      assetType: 'SurveyResponse',
       surveyId: survey._id,
       answers: validated.answers,
       ownerId: req.user._id,
@@ -422,28 +400,14 @@ exports.listSurveyResponses = async (req, res) => {
       return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
 
-    const questions = await loadSurveyQuestions(survey._id);
-    const filter = { surveyId: survey._id };
-
-    const access = req.accessibleResources;
-    if (access && !access.all) {
-      if (!access.ids.length) {
-        return res.status(200).json({
-          survey: serializeSurvey(survey, questions),
-          responses: [],
-          summary: buildResponseSummary(survey, questions, []),
-        });
-      }
-      filter._id = { $in: access.ids };
-    }
-
-    const responses = await SurveyResponse.find(filter)
+    const questions = Array.isArray(survey.questions) ? survey.questions : [];
+    const responses = await SurveyResponse.find({ surveyId: survey._id })
       .sort({ createdAt: -1 })
       .populate('createdBy', 'username email')
       .populate('updatedBy', 'username email');
 
     res.status(200).json({
-      survey: serializeSurvey(survey, questions),
+      survey: serializeSurvey(survey),
       responses,
       summary: buildResponseSummary(survey, questions, responses),
     });

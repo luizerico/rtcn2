@@ -830,15 +830,20 @@ describe('API endpoints', () => {
       expect(res.status).toBe(400);
     });
 
-    it('rejects SURVEY kinds on asset create without falling through', async () => {
-      for (const kind of ['SURVEY', 'SURVEY_RESPONSE']) {
-        const res = await request(app)
-          .post('/api/assets')
-          .set('Authorization', `Bearer ${authToken}`)
-          .send({ name: `via-assets-${kind}`, kind });
-        expect(res.status).toBe(400);
-        expect(res.body.message).toMatch(/surveys API/i);
-      }
+    it('rejects SURVEY kind on asset create without falling through', async () => {
+      const res = await request(app)
+        .post('/api/assets')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'via-assets-SURVEY', kind: 'SURVEY' });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/surveys API/i);
+
+      const invalid = await request(app)
+        .post('/api/assets')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'via-assets-SURVEY_RESPONSE', kind: 'SURVEY_RESPONSE' });
+      expect(invalid.status).toBe(400);
+      expect(invalid.body.message).toMatch(/Invalid asset kind/i);
     });
   });
 
