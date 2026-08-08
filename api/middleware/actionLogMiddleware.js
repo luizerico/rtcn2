@@ -40,7 +40,7 @@ function actionLogMiddleware(req, res, next) {
     const meta = requestMeta(req);
     const bodyKeys =
       req.body && typeof req.body === 'object' && !Array.isArray(req.body)
-        ? Object.keys(req.body).filter((key) => !['password', 'token', 'resetToken', 'currentPassword', 'newPassword'].includes(key))
+        ? Object.keys(req.body).filter((key) => !['password', 'token', 'resetToken', 'resetTokenHash', 'currentPassword', 'newPassword'].includes(key))
         : [];
 
     void recordAction({

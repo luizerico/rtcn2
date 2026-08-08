@@ -19,7 +19,7 @@ services:
       retries: 5
 
   app:
-    image: node:20-alpine
+    image: node:20.19-alpine
     container_name: projects_app
     restart: unless-stopped
     working_dir: /app
@@ -32,7 +32,7 @@ services:
       MONGODB_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASS:-rootpassword}@mongodb:27017/${DB_NAME:-projects}?authSource=admin
       MONGO_URI: mongodb://${MONGO_ROOT_USER:-root}:${MONGO_ROOT_PASS:-rootpassword}@mongodb:27017/${DB_NAME:-projects}?authSource=admin
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
-      JWT_EXPIRE: ${JWT_EXPIRE:-7d}
+      JWT_EXPIRE: ${JWT_EXPIRE:-1h}
       DB_NAME: ${DB_NAME:-projects}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}

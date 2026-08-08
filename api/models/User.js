@@ -14,7 +14,8 @@ const userSchema = new Schema({
     // Login requires true. Self-register defaults false until an admin verifies;
     // admin create and bootstrap set true. No email-verification flow yet.
     isVerified: { type: Boolean, default: false },
-    resetToken: { type: String, default: null },
+    /** SHA-256 of the one-time reset token (raw token is only emailed). */
+    resetTokenHash: { type: String, default: null },
     tokenExpiry: { type: Date, default: null }
 }, { timestamps: true });
 

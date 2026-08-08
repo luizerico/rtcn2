@@ -276,25 +276,35 @@ describe('API endpoints', () => {
       expect(res.status).toBe(400);
     });
 
-    it('GET /api/auth/forgot-password returns 404 for unknown email', async () => {
+    it('GET /api/auth/forgot-password does not enumerate unknown emails', async () => {
       const res = await request(app)
         .get('/api/auth/forgot-password')
         .query({ email: 'missing@example.com' });
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(200);
+      expect(res.body.message).toMatch(/if an account exists/i);
+      expect(mailer.messages).toHaveLength(0);
     });
 
-    it('password reset flow succeeds', async () => {
+    it('password reset flow succeeds with hashed token storage', async () => {
+      const { hashResetToken } = require('../api/utils/passwordReset');
+
       const forgot = await request(app)
         .get('/api/auth/forgot-password')
         .query({ email: 'alice@example.com' });
       expect(forgot.status).toBe(200);
       expect(forgot.body.resetToken).toBeUndefined();
+      expect(forgot.body.message).toMatch(/if an account exists/i);
       expect(mailer.messages).toHaveLength(1);
       expect(mailer.last().to).toBe('alice@example.com');
       expect(mailer.last().subject).toBe('Password Reset Request');
 
       const resetToken = mailer.extractResetToken();
       expect(resetToken).toBeTruthy();
+
+      const stored = await User.findOne({ email: 'alice@example.com' }).select('resetTokenHash');
+      expect(stored.resetTokenHash).toBeTruthy();
+      expect(stored.resetTokenHash).not.toBe(resetToken);
+      expect(stored.resetTokenHash).toBe(hashResetToken(resetToken));
 
       const reset = await request(app)
         .post(`/api/auth/reset-password/${resetToken}`)
@@ -312,6 +322,22 @@ describe('API endpoints', () => {
         password: 'NewPassword123!',
       });
       expect(newLogin.status).toBe(200);
+      expect(newLogin.headers['set-cookie']?.join(';') || '').toMatch(/rbac_session=/);
+    });
+
+    it('accepts httpOnly session cookie without Authorization header', async () => {
+      const login = await request(app).post('/api/auth/login').send({
+        username: 'alice',
+        password: 'Password123!',
+      });
+      expect(login.status).toBe(200);
+      const cookie = login.headers['set-cookie'];
+      expect(cookie).toBeTruthy();
+      const cookieHeader = Array.isArray(cookie) ? cookie.map((c) => c.split(';')[0]).join('; ') : cookie;
+
+      const me = await request(app).get('/api/auth/me').set('Cookie', cookieHeader);
+      expect(me.status).toBe(200);
+      expect(me.body.user.username).toBe('alice');
     });
 
     it('POST /api/auth/reset-password/:token rejects missing password', async () => {
@@ -334,9 +360,11 @@ describe('API endpoints', () => {
         .get('/api/auth/forgot-password')
         .query({ email: 'alice@example.com' });
       expect(forgot.status).toBe(200);
+      const resetToken = mailer.extractResetToken();
+      expect(resetToken).toBeTruthy();
 
       const res = await request(app)
-        .post(`/api/auth/reset-password/${forgot.body.resetToken}`)
+        .post(`/api/auth/reset-password/${resetToken}`)
         .send({ newPassword: 'short' });
       expect(res.status).toBe(400);
       expect(res.body.message).toMatch(/at least 8 characters/i);

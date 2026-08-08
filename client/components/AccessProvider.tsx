@@ -92,13 +92,6 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
   const ensure = useCallback(
     async (options?: { force?: boolean }): Promise<AccessSnapshot | null> => {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-      if (!token) {
-        clear();
-        setReady(true);
-        return null;
-      }
-
       if (!options?.force) {
         const cached = readAccessCache();
         if (cached) {
@@ -121,6 +114,12 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       const request = (async () => {
         try {
           const next = await fetchMe();
+          if (next?.sessionId && typeof window !== 'undefined') {
+            localStorage.setItem('sessionId', next.sessionId);
+            if (next.user?.username) {
+              localStorage.setItem('userUsername', next.user.username);
+            }
+          }
           setReady(true);
           return next;
         } catch (err) {

@@ -1,8 +1,8 @@
 ﻿const User = require('../models/User');
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
 const { assertPasswordPolicy } = require('../utils/passwordPolicy');
+const { createResetToken, hashResetToken } = require('../utils/passwordReset');
 const {
   createSession,
   revokeSession,
@@ -12,6 +12,7 @@ const {
 } = require('../services/sessionService');
 const { userHasPermission } = require('../services/rbacService');
 const { sendEmail } = require('../services/emailService');
+const { setSessionCookie, clearSessionCookie } = require('../utils/sessionCookie');
 
 
 function requestMeta(req) {
@@ -93,9 +94,12 @@ exports.loginUser = async (req, res) => {
     });
 
     req.actionLogContext = { userId: user._id, username: user.username };
+    setSessionCookie(req, res, token, session.expiresAt);
 
     res.status(200).json({
       message: 'Login successful.',
+      // Token remains available for API clients (Postman, reports tooling).
+      // Browsers should prefer the httpOnly session cookie.
       token,
       sessionId: session.sessionId,
       expiresAt: session.expiresAt,
@@ -111,40 +115,38 @@ exports.logoutUser = async (req, res) => {
     if (req.session?.sessionId) {
       await revokeSession(req.session.sessionId, 'logout');
     }
+    clearSessionCookie(req, res);
     res.status(200).json({ message: 'Logged out successfully.' });
   } catch (err) {
     return sendServerError(res, err, 'Server error during logout.');
   }
 };
 
+const FORGOT_PASSWORD_MESSAGE =
+  'If an account exists for that email, a password reset link has been sent.';
+
 exports.requestPasswordReset = async (req, res) => {
   const email = req.validated?.email || req.query.email;
 
   try {
     const user = await User.findOne({ email });
-    if (!user) {
-      return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
+    if (user) {
+      const { raw, hash, expiresAt } = createResetToken();
+      user.resetTokenHash = hash;
+      user.tokenExpiry = expiresAt;
+      await user.save();
+
+      const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset/${raw}`;
+      const text = `Use this secure link to reset your password: ${resetUrl}`;
+      await sendEmail({
+        to: user.email,
+        subject: 'Password Reset Request',
+        text,
+      });
     }
 
-    const resetToken = crypto.randomUUID();
-    const expirationDate = new Date();
-    expirationDate.setDate(expirationDate.getDate() + 3);
-
-    user.resetToken = resetToken;
-    user.tokenExpiry = expirationDate;
-    await user.save();
-
-    const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset/${resetToken}`;
-    const text = `Use this secure link to reset your password: ${resetUrl}`;
-    await sendEmail({
-      to: user.email,
-      subject: 'Password Reset Request',
-      text,
-    });
-
-    res.status(200).json({
-      message: 'Password reset link sent successfully to your email.',
-    });
+    // Always the same response to avoid email enumeration.
+    res.status(200).json({ message: FORGOT_PASSWORD_MESSAGE });
   } catch (err) {
     return sendServerError(res, err, 'Error requesting password reset.');
   }
@@ -160,24 +162,25 @@ exports.resetPassword = async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ resetToken: token }).select(
-      'password email resetToken tokenExpiry'
+    const tokenHash = hashResetToken(token);
+    const user = await User.findOne({ resetTokenHash: tokenHash }).select(
+      'password email resetTokenHash tokenExpiry'
     );
 
     if (!user) {
       return sendError(res, 400, 'Invalid or expired password reset token.', ERROR_CODES.VALIDATION);
     }
 
-    if (user.tokenExpiry < new Date()) {
+    if (!user.tokenExpiry || user.tokenExpiry < new Date()) {
       await User.findByIdAndUpdate(user._id, {
-        $set: { resetToken: null, tokenExpiry: null },
+        $set: { resetTokenHash: null, tokenExpiry: null },
       });
       return sendError(res, 400, 'Password reset link has expired.', ERROR_CODES.VALIDATION);
     }
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(passwordCheck.password, salt);
-    user.resetToken = null;
+    user.resetTokenHash = null;
     user.tokenExpiry = null;
     await user.save();
     await revokeAllUserSessions(user._id, 'password_reset');
@@ -231,6 +234,7 @@ exports.changeOwnPassword = async (req, res) => {
     user.password = await bcrypt.hash(passwordCheck.password, 10);
     await user.save();
     await revokeAllUserSessions(user._id, 'password_changed');
+    clearSessionCookie(req, res);
 
     res.status(200).json({
       message: 'Password updated. Please sign in again with your new password.',
