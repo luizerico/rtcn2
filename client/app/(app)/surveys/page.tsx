@@ -157,8 +157,8 @@ export default function SurveysPage() {
   const total = data?.total || 0;
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 sm:space-y-8">
-      <header className="border-b border-[var(--border)] pb-4 sm:pb-6">
+    <div className="mx-auto max-w-7xl space-y-8">
+      <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Surveys' }]} />
         <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Surveys</h1>
         <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">

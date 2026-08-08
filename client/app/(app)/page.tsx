@@ -26,8 +26,8 @@ const menuItems = [
 
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-5xl">
-      <header className="mb-10 border-b border-[var(--border)] pb-6">
+    <div className="mx-auto max-w-7xl space-y-8">
+      <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs items={[{ label: 'Home' }]} />
         <h1 className="mt-2 text-4xl font-semibold tracking-tight text-[var(--foreground)]">
           LEMA Common Services

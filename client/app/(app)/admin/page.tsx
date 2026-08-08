@@ -59,8 +59,8 @@ export default function AdminPage() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <header className="mb-8 border-b border-[var(--border)] pb-6">
+    <div className="mx-auto max-w-7xl space-y-8">
+      <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Admin' }]} />
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Administration</h1>
         <p className="mt-2 max-w-2xl text-[var(--muted)]">
