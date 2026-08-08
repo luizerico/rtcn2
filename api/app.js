@@ -43,6 +43,7 @@ function createApp({ fallback } = {}) {
   app.use('/api/surveys', surveyRoutes);
   app.use('/api/permissions', require('./routes/permissionRoutes'));
   app.use('/api/logs', actionLogRoutes);
+  app.use('/api/reports', require('./routes/reportsProxyRoutes'));
 
   if (typeof fallback === 'function') {
     app.use(fallback);

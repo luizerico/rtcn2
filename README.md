@@ -14,7 +14,7 @@ Unified **Next.js** application: the UI and `/api` backend run in **one process*
 
 ## Prerequisites
 
-- Node.js **20.19+** (recommended)
+- Node.js **20.19+** (required; see `package.json` `engines`)
 - npm 10+
 - MongoDB 7+ (local install **or** Docker)
 - Docker Desktop (optional)
@@ -45,7 +45,7 @@ PORT=3000
 NODE_ENV=development
 MONGO_URI=mongodb://localhost:27017/projects
 JWT_SECRET=replace-with-a-long-random-secret
-JWT_EXPIRE=7d
+JWT_EXPIRE=1h
 ADMIN_USERNAME=admin
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=replace-with-a-strong-password
@@ -158,8 +158,8 @@ Spec: [`docs/openapi.yaml`](docs/openapi.yaml)
 
 1. Postman → **Import** → select `docs/openapi.yaml`
 2. Set `baseUrl` to `http://localhost:3000`
-3. Login via `POST /api/auth/login`, copy `token`
-4. Collection auth → Bearer Token
+3. Login via `POST /api/auth/login`, copy `token` (or use the `rbac_session` cookie)
+4. Collection auth → Bearer Token (browser apps use the httpOnly cookie with credentials)
 
 ## Useful scripts
 

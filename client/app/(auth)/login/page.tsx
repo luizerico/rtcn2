@@ -61,7 +61,6 @@ function LoginForm() {
 
     try {
       const response = await apiPost<{
-        token: string;
         sessionId: string;
         user: { username: string };
       }>('/auth/login', {
@@ -69,7 +68,8 @@ function LoginForm() {
         password,
       });
 
-      localStorage.setItem('authToken', response.token);
+      // Session JWT is delivered via httpOnly cookie; keep only non-secret hints locally.
+      localStorage.removeItem('authToken');
       localStorage.setItem('sessionId', response.sessionId);
       localStorage.setItem('userUsername', response.user.username);
       clearAccessCache();

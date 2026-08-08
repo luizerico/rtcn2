@@ -7,6 +7,7 @@ const SENSITIVE_KEYS = new Set([
   'token',
   'authorization',
   'resetToken',
+  'resetTokenHash',
   'currentPassword',
   'newPassword',
   'confirmPassword',

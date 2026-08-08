@@ -177,6 +177,7 @@ export default function AppNav() {
     localStorage.removeItem('authToken');
     localStorage.removeItem('userUsername');
     localStorage.removeItem('sessionId');
+    // Cookie cleared by /auth/logout Set-Cookie.
     pushToast({
       tone: 'info',
       title: 'Signed out',

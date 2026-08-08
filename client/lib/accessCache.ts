@@ -4,11 +4,11 @@ const CACHE_KEY = 'rbac_access_cache_v1';
 /** Reuse cached /auth/me access for this long before refetching. */
 export const ACCESS_CACHE_TTL_MS = 5 * 60 * 1000;
 
-function tokenFingerprint(): string | null {
+function sessionFingerprint(sessionId?: string | null): string | null {
   if (typeof window === 'undefined') return null;
-  const token = localStorage.getItem('authToken');
-  if (!token) return null;
-  return `${token.slice(0, 12)}:${token.slice(-8)}`;
+  const id = sessionId || localStorage.getItem('sessionId');
+  if (!id) return null;
+  return `sid:${id}`;
 }
 
 interface StoredCache {
@@ -27,7 +27,7 @@ export function clearAccessCache() {
 
 export function readAccessCache(): AccessSnapshot | null {
   if (typeof window === 'undefined') return null;
-  const fingerprint = tokenFingerprint();
+  const fingerprint = sessionFingerprint();
   if (!fingerprint) {
     clearAccessCache();
     return null;
@@ -53,7 +53,7 @@ export function readAccessCache(): AccessSnapshot | null {
 
 export function writeAccessCache(snapshot: AccessSnapshot) {
   if (typeof window === 'undefined') return;
-  const fingerprint = tokenFingerprint();
+  const fingerprint = sessionFingerprint(snapshot.sessionId);
   if (!fingerprint) return;
   try {
     const payload: StoredCache = { fingerprint, snapshot };

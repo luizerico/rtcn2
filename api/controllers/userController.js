@@ -5,7 +5,7 @@ const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors
 
 exports.getAllUsers = async (_req, res) => {
   try {
-    const users = await User.find({}).select('-password -resetToken -tokenExpiry').sort({ createdAt: -1 });
+    const users = await User.find({}).select('-password -resetTokenHash -tokenExpiry').sort({ createdAt: -1 });
     res.status(200).json(users);
   } catch (error) {
     return sendServerError(res, error, 'Error fetching users');
@@ -14,7 +14,7 @@ exports.getAllUsers = async (_req, res) => {
 
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password -resetToken -tokenExpiry');
+    const user = await User.findById(req.params.id).select('-password -resetTokenHash -tokenExpiry');
     if (!user) {
       return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
@@ -87,7 +87,7 @@ exports.updateUser = async (req, res) => {
     const user = await User.findByIdAndUpdate(req.params.id, updates, {
       returnDocument: 'after',
       runValidators: true,
-    }).select('-password -resetToken -tokenExpiry');
+    }).select('-password -resetTokenHash -tokenExpiry');
 
     if (!user) {
       return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);

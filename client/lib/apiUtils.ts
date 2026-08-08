@@ -1,5 +1,6 @@
 /**
  * Client helpers for same-origin Next.js API routes (`/api/...`).
+ * Browser sessions use the httpOnly cookie; credentials are always included.
  */
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
@@ -23,16 +24,9 @@ export function setAuthRedirectHandler(handler: AuthRedirectHandler | null) {
 }
 
 function buildAuthHeaders(): HeadersInit {
-  const headers: Record<string, string> = {
+  return {
     'Content-Type': 'application/json',
   };
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-  }
-  return headers;
 }
 
 function resolveUrl(endpoint: string): string {
@@ -84,7 +78,7 @@ async function parseError(res: Response): Promise<{ message: string; code?: stri
   }
 }
 
-function handleUnauthorized(message: string, code?: string) {
+function clearLocalSessionHints() {
   if (typeof window === 'undefined') return;
   localStorage.removeItem('authToken');
   localStorage.removeItem('userUsername');
@@ -94,6 +88,11 @@ function handleUnauthorized(message: string, code?: string) {
   } catch {
     // ignore
   }
+}
+
+function handleUnauthorized(message: string, code?: string) {
+  if (typeof window === 'undefined') return;
+  clearLocalSessionHints();
   const reason = code || 'EXPIRED';
   if (authRedirectHandler) {
     authRedirectHandler({ code: reason, message });
@@ -106,6 +105,7 @@ async function request<T>(method: string, endpoint: string, bodyData?: object): 
   const res = await fetch(resolveUrl(endpoint), {
     method,
     headers: buildAuthHeaders(),
+    credentials: 'include',
     body: bodyData ? JSON.stringify(bodyData) : undefined,
   });
 
@@ -139,4 +139,4 @@ export async function apiDelete<T>(endpoint: string, bodyData?: object): Promise
   return request<T>('DELETE', endpoint, bodyData);
 }
 
-export { ApiError };
+export { ApiError, clearLocalSessionHints };

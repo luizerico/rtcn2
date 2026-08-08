@@ -1,11 +1,9 @@
 /**
- * Client helpers for the FastAPI GraphQL reports service.
- * Defaults to http://localhost:8000 when NEXT_PUBLIC_REPORTS_URL is unset.
+ * Client helpers for reports analytics.
+ * Goes through the same-origin `/api/reports` proxy so the httpOnly session cookie is used.
  */
 
-const REPORTS_BASE =
-  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_REPORTS_URL) ||
-  'http://localhost:8000';
+import { apiGet, apiPost, ApiError } from '@/lib/apiUtils';
 
 export class ReportsError extends Error {
   constructor(
@@ -17,23 +15,12 @@ export class ReportsError extends Error {
   }
 }
 
-function reportsUrl(path: string): string {
-  const base = REPORTS_BASE.replace(/\/$/, '');
-  const suffix = path.startsWith('/') ? path : `/${path}`;
-  return `${base}${suffix}`;
-}
-
-function authHeaders(): HeadersInit {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+function toReportsError(err: unknown): ReportsError {
+  if (err instanceof ReportsError) return err;
+  if (err instanceof ApiError) {
+    return new ReportsError(err.message, err.status);
   }
-  return headers;
+  return new ReportsError(err instanceof Error ? err.message : 'Reports request failed.');
 }
 
 export type CountBucket = { key: string; count: number };
@@ -169,7 +156,7 @@ type GraphqlResponse<T> = {
 };
 
 export function getReportsBaseUrl(): string {
-  return REPORTS_BASE.replace(/\/$/, '');
+  return '/api/reports';
 }
 
 export async function checkReportsHealth(): Promise<{
@@ -177,42 +164,24 @@ export async function checkReportsHealth(): Promise<{
   service?: string;
   database?: string;
 }> {
-  const res = await fetch(reportsUrl('/health'), { method: 'GET' });
-  if (!res.ok) {
-    throw new ReportsError(`Reports health check failed (${res.status})`, res.status);
+  try {
+    return await apiGet('/reports/health');
+  } catch (err) {
+    throw toReportsError(err);
   }
-  return res.json();
 }
 
 export async function graphqlQuery<T>(
   query: string,
   variables?: Record<string, unknown>
 ): Promise<T> {
-  let res: Response;
+  let payload: GraphqlResponse<T>;
   try {
-    res = await fetch(reportsUrl('/graphql'), {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ query, variables }),
-    });
-  } catch {
-    throw new ReportsError(
-      `Cannot reach reports service at ${getReportsBaseUrl()}. Is the reports container running?`
-    );
+    payload = await apiPost<GraphqlResponse<T>>('/reports/graphql', { query, variables });
+  } catch (err) {
+    throw toReportsError(err);
   }
 
-  if (!res.ok) {
-    let detail = `Reports GraphQL request failed (${res.status})`;
-    try {
-      const body = (await res.json()) as { detail?: string; message?: string };
-      detail = body.detail || body.message || detail;
-    } catch {
-      // keep default
-    }
-    throw new ReportsError(detail, res.status);
-  }
-
-  const payload = (await res.json()) as GraphqlResponse<T>;
   if (payload.errors?.length) {
     throw new ReportsError(payload.errors.map((e) => e.message).join('; '));
   }

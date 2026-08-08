@@ -44,25 +44,17 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const token = localStorage.getItem('authToken');
-      if (!token) {
-        clearAccessCache();
-        clear();
-        pushToast({
-          tone: 'warning',
-          title: 'Sign in required',
-          message: 'You need an active session to open this page.',
-        });
-        router.replace('/login?reason=NO_TOKEN');
-        return;
-      }
-
       try {
-        // Uses sessionStorage cache when fresh — avoids /auth/me on every navigation.
+        // Cookie session + sessionStorage cache when fresh — avoids /auth/me on every navigation.
         await ensure();
         if (!cancelled) setReady(true);
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
+          if (!cancelled) {
+            clearAccessCache();
+            clear();
+            router.replace(`/login?reason=${encodeURIComponent(err.code || 'NO_TOKEN')}`);
+          }
           return;
         }
         const code = err instanceof ApiError && err.code ? err.code : 'INVALID';

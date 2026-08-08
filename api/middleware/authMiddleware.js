@@ -12,6 +12,7 @@ const {
   hashToken,
 } = require('../services/sessionService');
 const { sendError, ERROR_CODES } = require('../utils/httpErrors');
+const { readSessionCookie } = require('../utils/sessionCookie');
 
 function authError(res, status, code, message, extras = {}) {
   const options = { code };
@@ -27,6 +28,10 @@ const protect = async (req, res, next) => {
   if (typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ')) {
     token = req.headers.authorization.slice(7);
   } else {
+    token = readSessionCookie(req);
+  }
+
+  if (!token) {
     return authError(res, 401, ERROR_CODES.NO_TOKEN, 'Authentication required: no session token provided.');
   }
 
@@ -73,7 +78,7 @@ const protect = async (req, res, next) => {
       return authError(res, 401, ERROR_CODES.INVALID, 'Authentication failed: token does not match session.');
     }
 
-    req.user = await User.findById(decoded.id).select('-password');
+    req.user = await User.findById(decoded.id).select('-password -resetTokenHash');
     if (!req.user) {
       return authError(res, 401, ERROR_CODES.USER_NOT_FOUND, 'Authentication failed: user no longer exists.');
     }
@@ -87,6 +92,7 @@ const protect = async (req, res, next) => {
       );
     }
 
+    req.authToken = token;
     req.session = session;
     await touchSession(session);
     next();

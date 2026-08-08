@@ -34,6 +34,9 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: |
+        JWT with `sid` claim. Browsers normally use the httpOnly `rbac_session` cookie instead;
+        Bearer remains supported for API clients and the reports proxy.
 
   schemas:
     ErrorMessage:
@@ -545,6 +548,10 @@ paths:
         claim matches the session. Other apps can validate the same token via `/api/auth/validate`
         or by reading the `sessions` collection.
 
+        Browsers also receive an httpOnly `rbac_session` cookie (SameSite=Lax). The SPA should
+        call APIs with `credentials: include` and does not need to store the JWT in localStorage.
+        The JSON `token` field remains for API clients (Postman, scripts).
+
         Login requires `user.isVerified === true`. Self-registered users default to unverified
         until an administrator sets `isVerified` (for example via `PUT /api/users/{id}`).
         Admin-created users and the bootstrap admin are verified automatically.
@@ -557,7 +564,12 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: Login successful
+          description: Login successful (also sets httpOnly session cookie)
+          headers:
+            Set-Cookie:
+              description: httpOnly session cookie (`rbac_session`)
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -732,6 +744,10 @@ paths:
     get:
       tags: [Auth]
       summary: Request password reset
+      description: |
+        Always returns the same 200 message whether or not the email exists (no user enumeration).
+        When a matching account exists, a one-time raw token is emailed and only its SHA-256 hash
+        is stored on the user document (`resetTokenHash`).
       operationId: forgotPassword
       parameters:
         - in: query
@@ -742,7 +758,7 @@ paths:
             format: email
       responses:
         '200':
-          description: Reset email sent (token is delivered via the configured email sender only)
+          description: Generic acknowledgement (email sent only if the account exists)
           content:
             application/json:
               schema:
@@ -752,13 +768,7 @@ paths:
                   message:
                     type: string
         '400':
-          description: Missing email
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorMessage'
-        '404':
-          description: User not found
+          description: Missing or invalid email
           content:
             application/json:
               schema:
