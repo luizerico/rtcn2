@@ -261,7 +261,7 @@ components:
           example: [READ, WRITE]
         resourceType:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY]
         allObjects:
           type: boolean
           description: When true, grants class-wide (*) access for this group only.
@@ -285,7 +285,7 @@ components:
       properties:
         resourceType:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY]
         allObjects:
           type: boolean
           description: When true, replaces class-wide (*) ACL rows for this resource type.
@@ -326,7 +326,7 @@ components:
           type: string
         resourceType:
           type: string
-          enum: [USER, GROUP, ASSET, DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+          enum: [USER, GROUP, ASSET, DOCUMENT, DASHBOARD, DATASET, SURVEY]
         resourceId:
           type: string
           nullable: true
@@ -349,10 +349,10 @@ components:
           type: string
         kind:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY]
         assetType:
           type: string
-          enum: [Asset, Survey, SurveyResponse]
+          enum: [Document, Dashboard, Dataset, Survey]
         createdBy:
           type: string
         updatedBy:
@@ -1423,7 +1423,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SURVEY_RESPONSE]
+            enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY]
         - in: query
           name: allObjects
           schema:
@@ -1809,7 +1809,7 @@ paths:
   /api/surveys/{id}/responses:
     get:
       tags: [Surveys]
-      summary: List responses and visualization summary
+      summary: List responses and visualization summary (admin only)
       operationId: listSurveyResponses
       security:
         - bearerAuth: []
@@ -1824,7 +1824,7 @@ paths:
           description: Responses and summary
     post:
       tags: [Surveys]
-      summary: Submit survey answers as a SurveyResponse asset
+      summary: Submit survey answers (requires SURVEY:READ)
       operationId: submitSurveyResponse
       security:
         - bearerAuth: []

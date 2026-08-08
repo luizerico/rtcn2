@@ -18,7 +18,6 @@ const RESOURCE_TYPE_LABELS = {
   DASHBOARD: 'Dashboards',
   DATASET: 'Datasets',
   SURVEY: 'Surveys',
-  SURVEY_RESPONSE: 'Survey responses',
 };
 
 const ACTION_LABELS = {

@@ -17,11 +17,6 @@ jest.mock('@/lib/apiUtils', () => ({
             { id: 's2', name: 'NPS', label: 'NPS' },
           ],
         },
-        {
-          resourceType: 'SURVEY_RESPONSE',
-          label: 'Survey responses',
-          objects: [{ id: 'r1', name: 'Response: Pulse', label: 'Response: Pulse' }],
-        },
       ],
       principals: {
         users: [{ id: 'u1', name: 'alice', label: 'alice', principalType: 'USER' }],
@@ -81,9 +76,9 @@ describe('PermissionModal Component', () => {
     await waitFor(() => expect(screen.getByText('Pulse')).toBeInTheDocument());
     fireEvent.click(screen.getByLabelText(/pulse/i));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /create user/i })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: /add user/i })).not.toBeDisabled()
     );
-    fireEvent.click(screen.getByRole('button', { name: /create user/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add user/i }));
     fireEvent.click(await screen.findByRole('button', { name: /^alice$/i }));
     await screen.findByRole('option', { name: /alice/i });
     fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));

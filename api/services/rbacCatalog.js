@@ -1,39 +1,12 @@
 const Group = require('../models/Group');
 const User = require('../models/User');
 const Permission = require('../models/Permission');
-const { Asset } = require('../models/Asset');
-// Ensure SurveyResponse discriminator is registered before catalog queries.
-require('../models/assets');
-const SurveyResponse = require('../models/assets/SurveyResponse');
+const { findAssets } = require('../models/assets');
 const {
   RESOURCE_TYPE_LABELS,
   ASSET_KINDS,
   PERMISSION_RESOURCE_TYPES,
 } = require('../constants/rbac');
-
-function formatAnswerPreview(answers, max = 3) {
-  const values = (answers || [])
-    .map((answer) => String(answer?.value ?? '').trim())
-    .filter(Boolean);
-  if (!values.length) return 'No answers';
-  const shown = values.slice(0, max);
-  const extra = values.length > max ? ` (+${values.length - max} more)` : '';
-  return `${shown.join(', ')}${extra}`;
-}
-
-function buildSurveyResponseMeta({ respondent, surveyName, answers, createdAt }) {
-  const survey = surveyName || 'Survey';
-  const answeredBy = respondent || 'Unknown user';
-  const submittedAt = createdAt ? new Date(createdAt).toISOString() : null;
-  return {
-    surveyName: survey,
-    answeredBy,
-    submittedAt,
-    answersPreview: formatAnswerPreview(answers),
-    /** Simple object name for permissions / ACL target storage. */
-    label: survey,
-  };
-}
 
 function userDisplayName(user) {
   if (!user || typeof user !== 'object') return null;
@@ -42,11 +15,12 @@ function userDisplayName(user) {
 
 async function buildAssetOwnerMap(resourceIds = []) {
   const filter = resourceIds.length ? { _id: { $in: resourceIds } } : {};
-  const assets = await Asset.find(filter)
-    .select('ownerId createdBy')
-    .populate('ownerId', 'username email')
-    .populate('createdBy', 'username email')
-    .lean();
+  const assets = await findAssets(filter, {
+    populate: [
+      ['ownerId', 'username email'],
+      ['createdBy', 'username email'],
+    ],
+  });
 
   const owners = new Map();
   for (const asset of assets) {
@@ -55,40 +29,6 @@ async function buildAssetOwnerMap(resourceIds = []) {
     owners.set(String(asset._id), owner);
   }
   return owners;
-}
-
-async function buildSurveyResponseMetaMap(resourceIds = []) {
-  const filter = resourceIds.length ? { _id: { $in: resourceIds } } : {};
-  const responses = await SurveyResponse.find(filter)
-    .select('name surveyId answers createdBy createdAt')
-    .populate('createdBy', 'username email')
-    .lean();
-
-  if (!responses.length) return new Map();
-
-  const surveyIds = [...new Set(responses.map((row) => String(row.surveyId)).filter(Boolean))];
-  const surveys = surveyIds.length
-    ? await Asset.find({ _id: { $in: surveyIds } }).select('name').lean()
-    : [];
-  const surveyNameById = new Map(surveys.map((survey) => [String(survey._id), survey.name]));
-
-  const metaById = new Map();
-  for (const response of responses) {
-    const respondent =
-      typeof response.createdBy === 'object' && response.createdBy
-        ? response.createdBy.username || response.createdBy.email
-        : null;
-    metaById.set(
-      String(response._id),
-      buildSurveyResponseMeta({
-        respondent,
-        surveyName: surveyNameById.get(String(response.surveyId)),
-        answers: response.answers,
-        createdAt: response.createdAt,
-      })
-    );
-  }
-  return metaById;
 }
 
 function normalizePrincipal(policy) {
@@ -146,16 +86,10 @@ async function listAllPermissions() {
   if (!permissions.length) return [];
 
   const { userNameById, groupNameById } = await resolvePrincipalNames(permissions);
-  const responseIds = permissions
-    .filter((row) => row.resourceType === 'SURVEY_RESPONSE' && row.resourceId)
-    .map((row) => row.resourceId);
   const surveyIds = permissions
     .filter((row) => row.resourceType === 'SURVEY' && row.resourceId)
     .map((row) => row.resourceId);
-  const [responseMeta, surveyOwners] = await Promise.all([
-    buildSurveyResponseMetaMap(responseIds),
-    buildAssetOwnerMap(surveyIds),
-  ]);
+  const surveyOwners = await buildAssetOwnerMap(surveyIds);
 
   return permissions.map((row) => {
     const principal = normalizePrincipal(row);
@@ -163,11 +97,6 @@ async function listAllPermissions() {
       principal.principalType === 'USER'
         ? userNameById.get(principal.principalId) || 'Unknown user'
         : groupNameById.get(principal.principalId) || 'Unknown group';
-
-    const meta =
-      row.resourceType === 'SURVEY_RESPONSE' && row.resourceId
-        ? responseMeta.get(String(row.resourceId))
-        : null;
 
     const owner =
       row.resourceType === 'SURVEY' && row.resourceId
@@ -182,27 +111,28 @@ async function listAllPermissions() {
       groupId: principal.principalType === 'GROUP' ? principal.principalId : null,
       groupName: principal.principalType === 'GROUP' ? principalName : null,
       resourceType: row.resourceType,
-      target: meta?.label || row.target,
+      target: row.target,
       resourceId: row.resourceId,
       permission: row.permission,
-      answeredBy: meta?.answeredBy || null,
-      submittedAt: meta?.submittedAt || null,
-      owner: owner,
+      owner,
     };
   });
 }
 
 async function listPermissionCatalog() {
-  const [users, groups, assets, responseMeta] = await Promise.all([
+  const [users, groups, assets] = await Promise.all([
     User.find({}).select('username email').sort({ username: 1 }).lean(),
     Group.find({}).select('name').sort({ name: 1 }).lean(),
-    Asset.find({})
-      .select('name kind createdAt ownerId createdBy')
-      .populate('ownerId', 'username email')
-      .populate('createdBy', 'username email')
-      .sort({ name: 1 })
-      .lean(),
-    buildSurveyResponseMetaMap(),
+    findAssets(
+      {},
+      {
+        populate: [
+          ['ownerId', 'username email'],
+          ['createdBy', 'username email'],
+        ],
+        sort: { name: 1 },
+      }
+    ),
   ]);
 
   const classes = PERMISSION_RESOURCE_TYPES.map((kind) => ({
@@ -211,28 +141,11 @@ async function listPermissionCatalog() {
     objects: assets
       .filter((asset) => String(asset.kind).toUpperCase() === kind)
       .map((asset) => {
-        const id = String(asset._id);
-        if (kind === 'SURVEY_RESPONSE') {
-          const meta = responseMeta.get(id);
-          const surveyName = meta?.surveyName || asset.name || 'Survey response';
-          const answeredBy = meta?.answeredBy || null;
-          const submittedAt = meta?.submittedAt || null;
-          return {
-            id,
-            name: surveyName,
-            label: surveyName,
-            answeredBy,
-            submittedAt,
-            detail: [answeredBy, submittedAt ? new Date(submittedAt).toLocaleString() : null]
-              .filter(Boolean)
-              .join(' · '),
-          };
-        }
         if (kind === 'SURVEY') {
           const owner =
             userDisplayName(asset.ownerId) || userDisplayName(asset.createdBy) || null;
           return {
-            id,
+            id: String(asset._id),
             name: asset.name,
             label: asset.name,
             owner,
@@ -240,7 +153,7 @@ async function listPermissionCatalog() {
           };
         }
         return {
-          id,
+          id: String(asset._id),
           name: asset.name,
           label: asset.name,
         };
@@ -270,7 +183,6 @@ async function listPermissionCatalog() {
 
 module.exports = {
   buildAssetOwnerMap,
-  buildSurveyResponseMetaMap,
   listAllPermissions,
   listPermissionCatalog,
   normalizePrincipal,

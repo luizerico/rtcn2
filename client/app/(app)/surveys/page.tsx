@@ -64,7 +64,7 @@ export default function SurveysPage() {
   const { pushToast } = useToast();
   const { can, isAdmin } = useAccess();
   const canCreate = can('SURVEY:CREATE', { classWideOnly: true });
-  const canViewResults = can('SURVEY_RESPONSE:READ', { allowAnyInstance: true });
+  const canViewResults = isAdmin;
   const columns = useMemo(() => SURVEY_COLUMNS, []);
   const { isVisible, toggle: toggleColumn } = useColumnVisibility('surveys', columns, {
     enabled: isAdmin,

@@ -149,8 +149,8 @@ function groupPermissionsBody(req) {
 function createAssetBody(req) {
   const name = nonEmptyString(req.body?.name, 'Asset name', { maxLength: 200 });
   const kind = String(req.body?.kind || 'DOCUMENT').toUpperCase();
-  if (['SURVEY', 'SURVEY_RESPONSE'].includes(kind)) {
-    throw new ValidationError('Use the surveys API to create Survey or SurveyResponse assets.');
+  if (kind === 'SURVEY') {
+    throw new ValidationError('Use the surveys API to create Survey assets.');
   }
   if (!ASSET_KINDS.includes(kind)) {
     throw new ValidationError('Invalid asset kind.');

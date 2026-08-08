@@ -30,9 +30,9 @@ export default function TakeSurveyPage() {
   const params = useParams<{ id: string }>();
   const surveyId = params.id;
   const { pushToast } = useToast();
-  const { can } = useAccess();
-  const canSubmit = can('SURVEY_RESPONSE:CREATE', { classWideOnly: true });
-  const canViewResults = can('SURVEY_RESPONSE:READ', { allowAnyInstance: true });
+  const { can, isAdmin } = useAccess();
+  const canSubmit = can('SURVEY:READ', { resourceId: surveyId });
+  const canViewResults = isAdmin;
 
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -68,7 +68,7 @@ export default function TakeSurveyPage() {
       pushToast({
         tone: 'success',
         title: 'Response saved',
-        message: 'Your answers were stored as a SurveyResponse asset.',
+        message: 'Your answers were saved.',
       });
       setAnswers({});
     } catch (err) {

@@ -1,8 +1,7 @@
 "use client";
 
-import React, { FormEvent, useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import { AccessIconButton } from '@/components/ui/TableActionIcon';
 import { apiGet } from '@/lib/apiUtils';
 import type { PaginatedList } from '@/lib/listTypes';
@@ -13,6 +12,12 @@ interface UserRecord {
   email: string;
 }
 
+export interface EditMembersSavePayload {
+  addUserIds: string[];
+  removeUserIds: string[];
+}
+
+/** @deprecated Use EditMembersSavePayload */
 export interface EditMembersPayload {
   userId: string;
 }
@@ -22,8 +27,23 @@ interface EditMembersModalProps {
   onClose: () => void;
   groupName?: string;
   memberIds?: string[];
-  onAddUser: (data: EditMembersPayload) => void | Promise<void>;
-  onRemoveUser: (data: EditMembersPayload) => void | Promise<void>;
+  onSave: (data: EditMembersSavePayload) => void | Promise<void>;
+}
+
+function normalizeUserList(payload: unknown): UserRecord[] {
+  if (Array.isArray(payload)) return payload as UserRecord[];
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    Array.isArray((payload as PaginatedList<UserRecord>).items)
+  ) {
+    return (payload as PaginatedList<UserRecord>).items;
+  }
+  return [];
+}
+
+function sortedUniqueIds(ids: Iterable<string>): string[] {
+  return [...new Set([...ids].map(String))].sort();
 }
 
 const EditMembersModal: React.FC<EditMembersModalProps> = ({
@@ -31,37 +51,39 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
   onClose,
   groupName,
   memberIds = [],
-  onAddUser,
-  onRemoveUser,
+  onSave,
 }) => {
   const [users, setUsers] = useState<UserRecord[]>([]);
+  const [draftMemberIds, setDraftMemberIds] = useState<string[]>([]);
+  const [initialMemberIds, setInitialMemberIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState('');
   const [loading, setLoading] = useState(false);
-  const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingRemove, setPendingRemove] = useState<{ userId: string; username: string } | null>(
-    null
-  );
   const searchId = useId();
+  const memberIdsRef = useRef(memberIds);
+  memberIdsRef.current = memberIds;
 
-  const memberIdSet = useMemo(() => new Set(memberIds.map(String)), [memberIds]);
+  const draftMemberIdSet = useMemo(() => new Set(draftMemberIds.map(String)), [draftMemberIds]);
 
   useEffect(() => {
     if (!isOpen) {
       setSearch('');
-      setSelectedUserId('');
       setError(null);
       setUsers([]);
+      setDraftMemberIds([]);
+      setInitialMemberIds([]);
       setLoading(false);
-      setBusyUserId(null);
-      setPendingRemove(null);
+      setSaving(false);
       return;
     }
 
+    const baseline = sortedUniqueIds(memberIdsRef.current);
+    setDraftMemberIds(baseline);
+    setInitialMemberIds(baseline);
     setLoading(true);
-    apiGet<PaginatedList<UserRecord>>('/users?limit=100&sort=username&order=asc')
-      .then((list) => setUsers(Array.isArray(list.items) ? list.items : []))
+    apiGet<PaginatedList<UserRecord> | UserRecord[]>('/users?limit=100&sort=username&order=asc')
+      .then((list) => setUsers(normalizeUserList(list)))
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load users.');
       })
@@ -71,15 +93,15 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
   const currentMembers = useMemo(
     () =>
       users
-        .filter((user) => memberIdSet.has(String(user._id)))
+        .filter((user) => draftMemberIdSet.has(String(user._id)))
         .sort((a, b) => a.username.localeCompare(b.username)),
-    [users, memberIdSet]
+    [users, draftMemberIdSet]
   );
 
-  const searchableUsers = useMemo(() => {
+  const availableUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     return users
-      .filter((user) => !memberIdSet.has(String(user._id)))
+      .filter((user) => !draftMemberIdSet.has(String(user._id)))
       .filter((user) => {
         if (!query) return true;
         return (
@@ -87,95 +109,58 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
           user.email.toLowerCase().includes(query)
         );
       })
+      .sort((a, b) => a.username.localeCompare(b.username))
       .slice(0, 50);
-  }, [users, search, memberIdSet]);
+  }, [users, search, draftMemberIdSet]);
 
-  const selectedUser =
-    searchableUsers.find((user) => user._id === selectedUserId) ||
-    users.find((user) => user._id === selectedUserId);
+  const { addUserIds, removeUserIds, dirty } = useMemo(() => {
+    const initial = new Set(initialMemberIds.map(String));
+    const draft = new Set(draftMemberIds.map(String));
+    const add = [...draft].filter((id) => !initial.has(id));
+    const remove = [...initial].filter((id) => !draft.has(id));
+    return {
+      addUserIds: add,
+      removeUserIds: remove,
+      dirty: add.length > 0 || remove.length > 0,
+    };
+  }, [draftMemberIds, initialMemberIds]);
 
-  const handleAdd = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!selectedUserId) {
-      setError('Select a user from the search results.');
-      return;
-    }
-
-    setBusyUserId(selectedUserId);
+  const handleAdd = (userId: string) => {
+    setDraftMemberIds((prev) => sortedUniqueIds([...prev, userId]));
     setError(null);
-    try {
-      await onAddUser({ userId: selectedUserId });
-      setSelectedUserId('');
-      setSearch('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add member.');
-    } finally {
-      setBusyUserId(null);
-    }
   };
 
-  const handleRemove = (userId: string, username: string) => {
-    setPendingRemove({ userId, username });
+  const handleRemove = (userId: string) => {
+    setDraftMemberIds((prev) => prev.filter((id) => String(id) !== String(userId)));
+    setError(null);
   };
 
-  const confirmRemove = async () => {
-    if (!pendingRemove) return;
-    setBusyUserId(pendingRemove.userId);
+  const handleSave = async () => {
+    if (!dirty || saving) return;
+    setSaving(true);
     setError(null);
     try {
-      await onRemoveUser({ userId: pendingRemove.userId });
-      setPendingRemove(null);
+      await onSave({ addUserIds, removeUserIds });
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove member.');
+      setError(err instanceof Error ? err.message : 'Failed to save members.');
     } finally {
-      setBusyUserId(null);
+      setSaving(false);
     }
   };
 
   const title = groupName ? `Edit members — ${groupName}` : 'Edit members';
+  const listShellClass =
+    'h-56 overflow-y-auto rounded-md border border-[var(--border)]';
+  const searchFieldClass =
+    'w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="lg">
-      <div className="space-y-5">
-        <section>
-          <h4 className="mb-2 text-sm font-medium">Current members ({currentMembers.length})</h4>
-          <ul className="max-h-40 overflow-y-auto rounded-md border border-[var(--border)]">
-            {loading ? (
-              <li className="px-3 py-4 text-sm text-[var(--muted)]">Loading members…</li>
-            ) : currentMembers.length === 0 ? (
-              <li className="px-3 py-4 text-sm text-[var(--muted)]">No members in this group yet.</li>
-            ) : (
-              currentMembers.map((user) => (
-                <li
-                  key={user._id}
-                  className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3 py-2 last:border-0"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{user.username}</p>
-                    <p className="truncate text-xs text-[var(--muted)]">{user.email}</p>
-                  </div>
-                  <AccessIconButton
-                    allowed
-                    icon="delete"
-                    label={busyUserId === user._id ? 'Removing…' : 'Remove member'}
-                    danger
-                    disabled={busyUserId === user._id}
-                    onClick={() => {
-                      handleRemove(user._id, user.username);
-                    }}
-                  />
-                </li>
-              ))
-            )}
-          </ul>
-        </section>
-
-        <form onSubmit={handleAdd} className="space-y-3 border-t border-[var(--border)] pt-4">
-          <h4 className="text-sm font-medium">Create member</h4>
-          <div>
-            <label htmlFor={searchId} className="mb-2 block text-sm font-medium">
-              Search users
-            </label>
+    <Modal isOpen={isOpen} onClose={onClose} title={title} size="xl">
+      <div className="space-y-4">
+        <div className="grid items-start gap-4 md:grid-cols-2">
+          <section className="grid min-w-0 grid-rows-[auto_auto_1fr] gap-2">
+            <h4 className="text-sm font-medium">Available users ({availableUsers.length})</h4>
             <input
               id={searchId}
               type="search"
@@ -183,100 +168,112 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
-                setSelectedUserId('');
                 if (error) setError(null);
               }}
               autoComplete="off"
-              className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+              className={searchFieldClass}
             />
-          </div>
-
-          <div
-            className="max-h-40 overflow-y-auto rounded-md border border-[var(--border)]"
-            role="listbox"
-            aria-label="Search results"
-          >
-            {loading ? (
-              <p className="px-3 py-4 text-sm text-[var(--muted)]">Loading users…</p>
-            ) : searchableUsers.length === 0 ? (
-              <p className="px-3 py-4 text-sm text-[var(--muted)]">
-                {search.trim() ? 'No users match your search.' : 'No users available to add.'}
-              </p>
-            ) : (
-              searchableUsers.map((user) => {
-                const selected = user._id === selectedUserId;
-                return (
-                  <button
+            <ul className={listShellClass} aria-label="Available users">
+              {loading ? (
+                <li className="px-3 py-4 text-sm text-[var(--muted)]">Loading users…</li>
+              ) : availableUsers.length === 0 ? (
+                <li className="px-3 py-4 text-sm text-[var(--muted)]">
+                  {search.trim() ? 'No users match your search.' : 'No users available to add.'}
+                </li>
+              ) : (
+                availableUsers.map((user) => (
+                  <li
                     key={user._id}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => {
-                      setSelectedUserId(user._id);
-                      if (error) setError(null);
-                    }}
-                    className={`flex w-full flex-col px-3 py-2 text-left text-sm ${
-                      selected ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--accent-soft)]/50'
-                    }`}
+                    className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3 py-2 last:border-0"
                   >
-                    <span className="font-medium">{user.username}</span>
-                    <span className="text-xs text-[var(--muted)]">{user.email}</span>
-                  </button>
-                );
-              })
-            )}
-          </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{user.username}</p>
+                      <p className="truncate text-xs text-[var(--muted)]">{user.email}</p>
+                    </div>
+                    <AccessIconButton
+                      allowed
+                      icon="add"
+                      label="Add member"
+                      disabled={saving}
+                      onClick={() => handleAdd(user._id)}
+                    />
+                  </li>
+                ))
+              )}
+            </ul>
+          </section>
 
-          {selectedUser && (
-            <p className="text-sm text-[var(--muted)]">
-              Selected:{' '}
-              <span className="font-medium text-[var(--foreground)]">{selectedUser.username}</span>
-            </p>
-          )}
-
-          {error && (
-            <p role="alert" className="text-sm text-red-600">
-              {error}
-            </p>
-          )}
-
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
+          <section className="grid min-w-0 grid-rows-[auto_auto_1fr] gap-2">
+            <h4 className="text-sm font-medium">Group members ({currentMembers.length})</h4>
+            {/* Spacer matches the search field height so both lists align on desktop. */}
+            <div
+              className={`${searchFieldClass} pointer-events-none invisible hidden select-none md:block`}
+              aria-hidden
             >
-              Close
-            </button>
-            <button
-              type="submit"
-              disabled={!selectedUserId || loading || Boolean(busyUserId)}
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {busyUserId && busyUserId === selectedUserId ? 'Creating…' : 'Create member'}
-            </button>
-          </div>
-        </form>
+              &nbsp;
+            </div>
+            <ul className={listShellClass} aria-label="Group members">
+              {loading ? (
+                <li className="px-3 py-4 text-sm text-[var(--muted)]">Loading members…</li>
+              ) : currentMembers.length === 0 ? (
+                <li className="px-3 py-4 text-sm text-[var(--muted)]">No members in this group yet.</li>
+              ) : (
+                currentMembers.map((user) => (
+                  <li
+                    key={user._id}
+                    className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-3 py-2 last:border-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{user.username}</p>
+                      <p className="truncate text-xs text-[var(--muted)]">{user.email}</p>
+                    </div>
+                    <AccessIconButton
+                      allowed
+                      icon="delete"
+                      label="Remove member"
+                      danger
+                      disabled={saving}
+                      onClick={() => handleRemove(user._id)}
+                    />
+                  </li>
+                ))
+              )}
+            </ul>
+          </section>
+        </div>
+
+        {error && (
+          <p role="alert" className="text-sm text-red-600">
+            {error}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void handleSave();
+            }}
+            disabled={!dirty || saving || loading}
+            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
-      <ConfirmDeleteDialog
-        isOpen={Boolean(pendingRemove)}
-        onClose={() => setPendingRemove(null)}
-        onConfirm={confirmRemove}
-        title="Remove member"
-        itemLabel={pendingRemove?.username}
-        description={
-          pendingRemove
-            ? `Remove “${pendingRemove.username}” from this group?`
-            : undefined
-        }
-        confirmLabel="Remove"
-        busy={Boolean(pendingRemove && busyUserId === pendingRemove.userId)}
-      />
     </Modal>
   );
 };
 
 export default EditMembersModal;
 
-/** @deprecated Use EditMembersPayload */
+/** @deprecated Use EditMembersSavePayload */
 export type AddMemberPayload = EditMembersPayload;

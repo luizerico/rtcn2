@@ -1,8 +1,7 @@
 const {
-  Asset,
-  DocumentAsset,
-  DashboardAsset,
-  DatasetAsset,
+  modelForKind,
+  findAssetById,
+  ASSET_KINDS,
 } = require('../models/assets');
 const { kindToDiscriminator } = require('../constants/assetTypes');
 const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
@@ -18,58 +17,54 @@ function auditFields(userId, existing) {
   };
 }
 
-function modelForKind(kind) {
-  switch (String(kind || '').toUpperCase()) {
-    case 'DASHBOARD':
-      return DashboardAsset;
-    case 'DATASET':
-      return DatasetAsset;
-    case 'DOCUMENT':
-    default:
-      return DocumentAsset;
-  }
-}
+const CREATE_KINDS = new Set(['DOCUMENT', 'DASHBOARD', 'DATASET']);
 
 /**
- * List assets (excludes survey responses by default unless kind filter asks for them).
- * Results are limited to objects the caller can READ.
+ * List assets the caller can READ across concrete collections.
  */
 exports.getAllAssets = async (req, res) => {
   try {
     const { listAccessibleResources } = require('../services/rbacService');
-    const { ASSET_KINDS } = require('../constants/rbac');
 
     const kindFilter = req.query.kind
       ? [String(req.query.kind).toUpperCase()]
-      : req.query.assetType
-        ? null
-        : ASSET_KINDS.filter((k) => k !== 'SURVEY_RESPONSE');
+      : null;
 
-    const orClauses = [];
+    const kindsToCheck = kindFilter || ASSET_KINDS.filter((k) => CREATE_KINDS.has(k) || k === 'SURVEY');
+    const batches = [];
 
-    const kindsToCheck = kindFilter || ASSET_KINDS;
     for (const kind of kindsToCheck) {
+      if (!ASSET_KINDS.includes(kind)) continue;
+      const Model = modelForKind(kind);
+      if (!Model) continue;
+
       const access = await listAccessibleResources(req.user, `${kind}:READ`);
+      const filter = {};
+      if (req.query.assetType) filter.assetType = req.query.assetType;
+
       if (access.all) {
-        const clause = { kind };
-        if (req.query.assetType) clause.assetType = req.query.assetType;
-        orClauses.push(clause);
+        // no id restriction
       } else if (access.ids.length) {
-        orClauses.push({ kind, _id: { $in: access.ids } });
+        filter._id = { $in: access.ids };
+      } else {
+        continue;
       }
+
+      const rows = await Model.find(filter)
+        .populate('createdBy', 'username email')
+        .populate('updatedBy', 'username email')
+        .populate('ownerId', 'username email')
+        .lean();
+      batches.push(...rows);
     }
 
-    if (!orClauses.length) {
-      return res.status(200).json([]);
-    }
+    batches.sort((a, b) => {
+      const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bt = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return bt - at;
+    });
 
-    const assets = await Asset.find({ $or: orClauses })
-      .sort({ updatedAt: -1 })
-      .populate('createdBy', 'username email')
-      .populate('updatedBy', 'username email')
-      .populate('ownerId', 'username email');
-
-    res.status(200).json(assets);
+    res.status(200).json(batches);
   } catch (error) {
     return sendServerError(res, error, 'Error fetching assets');
   }
@@ -80,7 +75,7 @@ exports.createAsset = async (req, res) => {
     const { name, description, kind } = req.validated || req.body;
     const normalizedKind = String(kind || 'DOCUMENT').toUpperCase();
 
-    if (!kindToDiscriminator(normalizedKind)) {
+    if (!CREATE_KINDS.has(normalizedKind) || !kindToDiscriminator(normalizedKind)) {
       return sendError(res, 400, 'Invalid asset kind.', ERROR_CODES.VALIDATION);
     }
 
@@ -89,6 +84,7 @@ exports.createAsset = async (req, res) => {
       name,
       description: description || '',
       kind: normalizedKind,
+      assetType: kindToDiscriminator(normalizedKind),
       ...auditFields(req.user._id),
     });
 
@@ -100,14 +96,17 @@ exports.createAsset = async (req, res) => {
 
 exports.getAssetById = async (req, res) => {
   try {
-    const asset = await Asset.findById(req.params.id)
-      .populate('createdBy', 'username email')
-      .populate('updatedBy', 'username email')
-      .populate('ownerId', 'username email');
-
+    const asset = req.asset || (await findAssetById(req.params.id));
     if (!asset) {
       return sendError(res, 404, 'Asset not found.', ERROR_CODES.NOT_FOUND);
     }
+
+    await asset.populate([
+      { path: 'createdBy', select: 'username email' },
+      { path: 'updatedBy', select: 'username email' },
+      { path: 'ownerId', select: 'username email' },
+    ]);
+
     res.status(200).json(asset);
   } catch (error) {
     return sendServerError(res, error, 'Error fetching asset');
@@ -116,33 +115,29 @@ exports.getAssetById = async (req, res) => {
 
 exports.updateAsset = async (req, res) => {
   try {
-    const { name, description, kind } = req.body;
-    const updates = {
-      ...auditFields(req.user._id, true),
-    };
-    if (name !== undefined) updates.name = name;
-    if (description !== undefined) updates.description = description;
-    if (kind !== undefined) {
-      const normalizedKind = String(kind).toUpperCase();
-      if (['SURVEY', 'SURVEY_RESPONSE'].includes(normalizedKind)) {
-        return sendError(res, 400, 'Cannot change asset kind to a survey type here.', ERROR_CODES.VALIDATION);
-      }
-      if (!kindToDiscriminator(normalizedKind)) {
-        return sendError(res, 400, 'Invalid asset kind.', ERROR_CODES.VALIDATION);
-      }
-      updates.kind = normalizedKind;
-      updates.assetType = kindToDiscriminator(normalizedKind);
-    }
-
-    const updated = await Asset.findByIdAndUpdate(req.params.id, updates, {
-      returnDocument: 'after',
-      runValidators: true,
-    });
-
-    if (!updated) {
+    const asset = req.asset || (await findAssetById(req.params.id));
+    if (!asset) {
       return sendError(res, 404, 'Asset not found.', ERROR_CODES.NOT_FOUND);
     }
-    res.status(200).json(updated);
+
+    const { name, description, kind } = req.body;
+    if (name !== undefined) asset.name = name;
+    if (description !== undefined) asset.description = description;
+    if (kind !== undefined) {
+      const normalizedKind = String(kind).toUpperCase();
+      if (normalizedKind !== String(asset.kind).toUpperCase()) {
+        return sendError(
+          res,
+          400,
+          'Cannot change asset kind across collections. Create a new asset instead.',
+          ERROR_CODES.VALIDATION
+        );
+      }
+    }
+
+    asset.updatedBy = req.user._id;
+    await asset.save();
+    res.status(200).json(asset);
   } catch (error) {
     return sendServerError(res, error, 'Error updating asset');
   }
@@ -150,10 +145,11 @@ exports.updateAsset = async (req, res) => {
 
 exports.deleteAsset = async (req, res) => {
   try {
-    const asset = await Asset.findByIdAndDelete(req.params.id);
+    const asset = req.asset || (await findAssetById(req.params.id));
     if (!asset) {
       return sendError(res, 404, 'Asset not found.', ERROR_CODES.NOT_FOUND);
     }
+    await asset.deleteOne();
     res.status(200).json({ message: 'Asset deleted successfully.' });
   } catch (error) {
     return sendServerError(res, error, 'Error deleting asset');

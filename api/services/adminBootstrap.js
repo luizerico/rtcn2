@@ -14,19 +14,24 @@ const {
  * Rename objects→assets collection if present.
  */
 async function migrateObjectToAsset(mongooseConnection) {
-  await Permission.deleteMany({ resourceType: { $in: ['OBJECT', 'ASSET'] } });
+  await Permission.deleteMany({
+    resourceType: { $in: ['OBJECT', 'ASSET', 'SURVEY_RESPONSE'] },
+  });
 
+  // Legacy: shared assets/objects collections are no longer used.
+  // Concrete types live in documents/dashboards/datasets/surveys/survey_responses.
   try {
     const db = mongooseConnection.db;
-    const existing = await db.listCollections({ name: 'objects' }).toArray();
-    if (existing.length) {
-      const assets = await db.listCollections({ name: 'assets' }).toArray();
-      if (!assets.length) {
-        await db.collection('objects').rename('assets');
+    for (const name of ['objects', 'assets', 'questions']) {
+      const existing = await db.listCollections({ name }).toArray();
+      if (existing.length) {
+        console.warn(
+          `Legacy collection "${name}" is present but unused. Safe to drop after verifying data was migrated.`
+        );
       }
     }
   } catch (error) {
-    console.warn('Collection rename objects→assets skipped:', error.message);
+    console.warn('Legacy collection check skipped:', error.message);
   }
 
   return 0;

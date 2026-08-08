@@ -6,6 +6,7 @@ import type { ButtonHTMLAttributes, ReactNode, SVGProps } from 'react';
 export type TableActionIconName =
   | 'delete'
   | 'edit'
+  | 'add'
   | 'password'
   | 'verify'
   | 'unverify'
@@ -50,6 +51,12 @@ export function TableActionIcon({ name }: { name: TableActionIconName }) {
         <Svg>
           <path d="M12 20h9" />
           <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+        </Svg>
+      );
+    case 'add':
+      return (
+        <Svg>
+          <path d="M12 5v14M5 12h14" />
         </Svg>
       );
     case 'password':

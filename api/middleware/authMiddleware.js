@@ -161,4 +161,22 @@ const attachPermissions = async (req, res, next) => {
   }
 };
 
-module.exports = { protect, authorize, attachPermissions };
+/** Admin-group membership guard (identity admin pattern — not an asset permission row). */
+const requireAdmin = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return authError(res, 401, ERROR_CODES.NO_TOKEN, 'Authorization required.');
+    }
+    const allowed = await userIsAdminGroupMember(req.user);
+    if (!allowed) {
+      return authError(res, 403, 'FORBIDDEN', 'Forbidden: Admin access required.');
+    }
+    req.isAdmin = true;
+    return next();
+  } catch (error) {
+    console.error('Admin authorization Error:', error.message);
+    return authError(res, 403, 'FORBIDDEN', 'Forbidden: Admin access required.');
+  }
+};
+
+module.exports = { protect, authorize, requireAdmin, attachPermissions };

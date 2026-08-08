@@ -103,8 +103,7 @@ export default function SurveyResponsesPage() {
         </p>
         <h1 className="mt-2 text-3xl font-semibold">{survey.name}</h1>
         <p className="mt-2 text-[var(--muted)]">
-          {summary.responseCount} response{summary.responseCount === 1 ? '' : 's'} stored as
-          SurveyResponse assets.
+          {summary.responseCount} response{summary.responseCount === 1 ? '' : 's'}.
         </p>
         <p className="mt-3 text-sm">
           <Link href={`/surveys/${survey._id}`} className="text-[var(--accent)] hover:underline">

@@ -9,7 +9,7 @@ const {
   submitSurveyResponse,
   listSurveyResponses,
 } = require('../controllers/surveyController');
-const { protect, authorize } = require('../middleware/authMiddleware');
+const { protect, authorize, requireAdmin } = require('../middleware/authMiddleware');
 
 router.use(protect);
 
@@ -23,14 +23,12 @@ router.get('/:id', authorize('SURVEY:READ', { param: 'id' }), getSurveyById);
 router.put('/:id', authorize('SURVEY:WRITE', { param: 'id' }), updateSurvey);
 router.delete('/:id', authorize('SURVEY:DELETE', { param: 'id' }), deleteSurvey);
 
-router.get(
-  '/:id/responses',
-  authorize('SURVEY_RESPONSE:READ', { allowAnyInstance: true, attachAccessible: true }),
-  listSurveyResponses
-);
+/** Results: admin group only. */
+router.get('/:id/responses', requireAdmin, listSurveyResponses);
+/** Answering: anyone who can read the survey. */
 router.post(
   '/:id/responses',
-  authorize('SURVEY_RESPONSE:CREATE', { classWideOnly: true }),
+  authorize('SURVEY:READ', { param: 'id' }),
   submitSurveyResponse
 );
 

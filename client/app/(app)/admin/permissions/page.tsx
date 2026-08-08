@@ -45,7 +45,6 @@ const FALLBACK_TABS: CatalogClass[] = [
   { resourceType: 'DASHBOARD', label: 'Dashboards', objects: [] },
   { resourceType: 'DATASET', label: 'Datasets', objects: [] },
   { resourceType: 'SURVEY', label: 'Surveys', objects: [] },
-  { resourceType: 'SURVEY_RESPONSE', label: 'Survey responses', objects: [] },
 ];
 
 const PERMISSION_COLUMNS: ColumnDef[] = [
@@ -203,7 +202,6 @@ export default function AdminPermissionsPage() {
       });
   }, [permissions, activeType]);
 
-  const isSurveyResponseTab = activeType === 'SURVEY_RESPONSE';
   const isSurveyTab = activeType === 'SURVEY';
 
   const catalogById = useMemo(() => {
@@ -309,12 +307,6 @@ export default function AdminPermissionsPage() {
       principalId: null,
     });
     setPolicyModalOpen(true);
-  };
-
-  const formatSubmittedAt = (value: string | null) => {
-    if (!value) return '—';
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
   };
 
   const activeTab = tabs.find((tab) => tab.resourceType === activeType) || tabs[0];
@@ -527,12 +519,6 @@ export default function AdminPermissionsPage() {
                             Owner: {group.owner || '—'}
                           </p>
                         ) : null}
-                        {isSurveyResponseTab ? (
-                          <p className="mt-1 text-xs text-[var(--muted)]">
-                            {group.answeredBy || '—'}
-                            {group.submittedAt ? ` · ${formatSubmittedAt(group.submittedAt)}` : ''}
-                          </p>
-                        ) : null}
                         <p className="mt-1 text-xs text-[var(--muted)]">
                           {group.principals.length} principal
                           {group.principals.length === 1 ? '' : 's'}
@@ -590,15 +576,7 @@ export default function AdminPermissionsPage() {
                   <tr>
                     <th className="w-10 px-4 py-3 font-medium" aria-label="Expand" />
                     {isVisible('asset') ? (
-                      <th className="px-4 py-3 font-medium">
-                        {isSurveyResponseTab ? 'Survey' : 'Asset'}
-                      </th>
-                    ) : null}
-                    {isVisible('owner') && isSurveyResponseTab ? (
-                      <>
-                        <th className="px-4 py-3 font-medium">Answered by</th>
-                        <th className="px-4 py-3 font-medium">Submitted</th>
-                      </>
+                      <th className="px-4 py-3 font-medium">Asset</th>
                     ) : null}
                     {isVisible('owner') && isSurveyTab ? (
                       <th className="px-4 py-3 font-medium">Owner</th>
@@ -620,7 +598,6 @@ export default function AdminPermissionsPage() {
                     const colSpan =
                       1 +
                       (isVisible('asset') ? 1 : 0) +
-                      (isVisible('owner') && isSurveyResponseTab ? 2 : 0) +
                       (isVisible('owner') && isSurveyTab ? 1 : 0) +
                       (isVisible('principals') ? 1 : 0) +
                       (isVisible('grantedTo') ? 1 : 0) +
@@ -665,14 +642,6 @@ export default function AdminPermissionsPage() {
                                 <div className="mt-0.5 text-xs text-[var(--muted)]">{group.detail}</div>
                               ) : null}
                             </td>
-                          ) : null}
-                          {isVisible('owner') && isSurveyResponseTab ? (
-                            <>
-                              <td className="px-4 py-3">{group.answeredBy || '—'}</td>
-                              <td className="whitespace-nowrap px-4 py-3 text-[var(--muted)]">
-                                {formatSubmittedAt(group.submittedAt)}
-                              </td>
-                            </>
                           ) : null}
                           {isVisible('owner') && isSurveyTab ? (
                             <td className="px-4 py-3">{group.owner || '—'}</td>
