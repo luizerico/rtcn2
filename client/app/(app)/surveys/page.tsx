@@ -8,7 +8,13 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useAccess } from '@/components/AccessProvider';
-import { AccessLink, AccessPrimaryButton, AccessTextButton } from '@/components/ui/AccessControls';
+import { AccessPrimaryButton } from '@/components/ui/AccessControls';
+import {
+  AccessIconButton,
+  AccessIconLink,
+  TableActionRow,
+  tableActionRowGroupClass,
+} from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 
 interface SurveyRecord {
@@ -264,27 +270,27 @@ export default function SurveysPage() {
                       {survey.updatedAt ? new Date(survey.updatedAt).toLocaleString() : '—'}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-                    <AccessLink
+                  <TableActionRow alwaysVisible>
+                    <AccessIconLink
                       allowed={can('SURVEY:READ', { resourceId: survey._id })}
                       href={`/surveys/${survey._id}`}
-                    >
-                      Answer
-                    </AccessLink>
-                    <AccessLink
+                      icon="answer"
+                      label="Answer"
+                    />
+                    <AccessIconLink
                       allowed={canViewResults}
                       href={`/surveys/${survey._id}/responses`}
-                    >
-                      Results
-                    </AccessLink>
-                    <AccessTextButton
+                      icon="results"
+                      label="Results"
+                    />
+                    <AccessIconButton
                       allowed={can('SURVEY:DELETE', { resourceId: survey._id })}
+                      icon="delete"
+                      label="Delete"
                       danger
                       onClick={() => setPendingDelete(survey)}
-                    >
-                      Delete
-                    </AccessTextButton>
-                  </div>
+                    />
+                  </TableActionRow>
                 </li>
               ))}
             </ul>
@@ -330,7 +336,10 @@ export default function SurveysPage() {
                 </thead>
                 <tbody>
                   {items.map((survey) => (
-                    <tr key={survey._id} className="border-b border-[var(--border)] last:border-0">
+                    <tr
+                      key={survey._id}
+                      className={`border-b border-[var(--border)] last:border-0 ${tableActionRowGroupClass}`}
+                    >
                       {isVisible('name') ? (
                         <td className="px-4 py-3">
                           <div className="font-medium">{survey.name}</div>
@@ -349,26 +358,28 @@ export default function SurveysPage() {
                         </td>
                       ) : null}
                       {isVisible('actions') ? (
-                        <td className="space-x-3 px-4 py-3 text-right whitespace-nowrap">
-                          <AccessLink
-                            allowed={can('SURVEY:READ', { resourceId: survey._id })}
-                            href={`/surveys/${survey._id}`}
-                          >
-                            Answer
-                          </AccessLink>
-                          <AccessLink
-                            allowed={canViewResults}
-                            href={`/surveys/${survey._id}/responses`}
-                          >
-                            Results
-                          </AccessLink>
-                          <AccessTextButton
-                            allowed={can('SURVEY:DELETE', { resourceId: survey._id })}
-                            danger
-                            onClick={() => setPendingDelete(survey)}
-                          >
-                            Delete
-                          </AccessTextButton>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <TableActionRow>
+                            <AccessIconLink
+                              allowed={can('SURVEY:READ', { resourceId: survey._id })}
+                              href={`/surveys/${survey._id}`}
+                              icon="answer"
+                              label="Answer"
+                            />
+                            <AccessIconLink
+                              allowed={canViewResults}
+                              href={`/surveys/${survey._id}/responses`}
+                              icon="results"
+                              label="Results"
+                            />
+                            <AccessIconButton
+                              allowed={can('SURVEY:DELETE', { resourceId: survey._id })}
+                              icon="delete"
+                              label="Delete"
+                              danger
+                              onClick={() => setPendingDelete(survey)}
+                            />
+                          </TableActionRow>
                         </td>
                       ) : null}
                     </tr>

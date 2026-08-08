@@ -3,6 +3,7 @@
 import React, { FormEvent, useEffect, useId, useMemo, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
+import { AccessIconButton } from '@/components/ui/TableActionIcon';
 import { apiGet } from '@/lib/apiUtils';
 import type { PaginatedList } from '@/lib/listTypes';
 
@@ -153,16 +154,16 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
                     <p className="truncate text-sm font-medium">{user.username}</p>
                     <p className="truncate text-xs text-[var(--muted)]">{user.email}</p>
                   </div>
-                  <button
-                    type="button"
+                  <AccessIconButton
+                    allowed
+                    icon="delete"
+                    label={busyUserId === user._id ? 'Removing…' : 'Remove member'}
+                    danger
+                    disabled={busyUserId === user._id}
                     onClick={() => {
                       handleRemove(user._id, user.username);
                     }}
-                    disabled={busyUserId === user._id}
-                    className="shrink-0 text-sm text-[var(--danger)] hover:underline disabled:opacity-50"
-                  >
-                    {busyUserId === user._id ? 'Removing…' : 'Remove'}
-                  </button>
+                  />
                 </li>
               ))
             )}

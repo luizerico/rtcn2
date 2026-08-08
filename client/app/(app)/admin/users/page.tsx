@@ -10,7 +10,8 @@ import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { useAccess } from '@/components/AccessProvider';
-import { AccessPrimaryButton, AccessTextButton } from '@/components/ui/AccessControls';
+import { AccessPrimaryButton } from '@/components/ui/AccessControls';
+import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 import { buildListParams, type PaginatedList } from '@/lib/listTypes';
 
@@ -379,7 +380,10 @@ export default function AdminUsersPage() {
               </thead>
               <tbody>
                 {users.map((user) => (
-                  <tr key={user._id} className="border-b border-[var(--border)] last:border-0">
+                  <tr
+                    key={user._id}
+                    className={`border-b border-[var(--border)] last:border-0 ${tableActionRowGroupClass}`}
+                  >
                     {isVisible('username') ? (
                       <td className="px-4 py-3 font-medium">
                         <Link
@@ -409,28 +413,35 @@ export default function AdminUsersPage() {
                       <td className="whitespace-nowrap px-4 py-3">{formatDate(user.lastLoginAt)}</td>
                     ) : null}
                     {isVisible('actions') ? (
-                      <td className="space-x-3 px-4 py-3 text-right">
-                        <AccessTextButton
-                          allowed={canWrite}
-                          onClick={() => handleToggleVerified(user)}
-                          disabled={verifyingId === user._id}
-                        >
-                          {verifyingId === user._id
-                            ? 'Updating…'
-                            : user.isVerified
-                              ? 'Unverify'
-                              : 'Verify'}
-                        </AccessTextButton>
-                        <AccessTextButton allowed={canWrite} onClick={() => setPasswordUser(user)}>
-                          Password
-                        </AccessTextButton>
-                        <AccessTextButton
-                          allowed={canDelete}
-                          danger
-                          onClick={() => setPendingDelete(user)}
-                        >
-                          Delete
-                        </AccessTextButton>
+                      <td className="px-4 py-3 text-right">
+                        <TableActionRow>
+                          <AccessIconButton
+                            allowed={canWrite}
+                            icon={user.isVerified ? 'verify' : 'unverify'}
+                            label={
+                              verifyingId === user._id
+                                ? 'Updating…'
+                                : user.isVerified
+                                  ? 'Unverify'
+                                  : 'Verify'
+                            }
+                            onClick={() => handleToggleVerified(user)}
+                            disabled={verifyingId === user._id}
+                          />
+                          <AccessIconButton
+                            allowed={canWrite}
+                            icon="password"
+                            label="Change password"
+                            onClick={() => setPasswordUser(user)}
+                          />
+                          <AccessIconButton
+                            allowed={canDelete}
+                            icon="delete"
+                            label="Delete"
+                            danger
+                            onClick={() => setPendingDelete(user)}
+                          />
+                        </TableActionRow>
                       </td>
                     ) : null}
                   </tr>

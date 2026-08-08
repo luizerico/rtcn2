@@ -310,7 +310,7 @@ exports.googleAuthCallback = async (req, res) => {
     });
     setSessionCookie(req, res, token, session.expiresAt);
 
-    return res.redirect(`${clientUrl}/`);
+    return res.redirect(`${clientUrl}/?nav=minimized`);
   } catch (err) {
     console.error('Google OAuth callback error:', err.message);
     return res.redirect(`${clientUrl}/login?reason=GOOGLE_FAILED`);

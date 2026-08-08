@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import { clearAccessCache } from '@/lib/accessCache';
+import { collapseNavForLogin } from '@/lib/uiPreferences';
 import GoogleAuthButton from '@/components/ui/GoogleAuthButton';
 
 const REASON_COPY: Record<string, { title: string; message: string }> = {
@@ -91,6 +92,7 @@ function LoginForm() {
       localStorage.setItem('sessionId', response.sessionId);
       localStorage.setItem('userUsername', response.user.username);
       clearAccessCache();
+      collapseNavForLogin();
 
       pushToast({
         tone: 'success',

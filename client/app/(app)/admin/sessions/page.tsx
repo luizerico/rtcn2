@@ -7,7 +7,7 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useAccess } from '@/components/AccessProvider';
-import { AccessTextButton } from '@/components/ui/AccessControls';
+import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 import { buildListParams, type ListPagination, type ListSort } from '@/lib/listTypes';
 
@@ -318,7 +318,10 @@ export default function AdminSessionsPage() {
               </thead>
               <tbody>
                 {sessions.map((session) => (
-                  <tr key={session.sessionId} className="border-b border-[var(--border)] last:border-0">
+                  <tr
+                    key={session.sessionId}
+                    className={`border-b border-[var(--border)] last:border-0 ${tableActionRowGroupClass}`}
+                  >
                     {isVisible('user') ? (
                       <td className="px-4 py-3">
                         <div className="font-medium">{session.username}</div>
@@ -343,16 +346,18 @@ export default function AdminSessionsPage() {
                     ) : null}
                     {isVisible('actions') ? (
                       <td className="px-4 py-3 text-right">
-                        <AccessTextButton
-                          allowed={
-                            canDisconnectOthers || String(session.userId) === String(user?.id)
-                          }
-                          danger
-                          onClick={() => setPendingDisconnect(session)}
-                          reason="You can only disconnect your own sessions."
-                        >
-                          Disconnect
-                        </AccessTextButton>
+                        <TableActionRow>
+                          <AccessIconButton
+                            allowed={
+                              canDisconnectOthers || String(session.userId) === String(user?.id)
+                            }
+                            icon="disconnect"
+                            label="Disconnect"
+                            danger
+                            onClick={() => setPendingDisconnect(session)}
+                            reason="You can only disconnect your own sessions."
+                          />
+                        </TableActionRow>
                       </td>
                     ) : null}
                   </tr>

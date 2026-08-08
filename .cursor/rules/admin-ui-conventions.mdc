@@ -19,8 +19,17 @@ Users, groups, sessions, permissions, and logs list pages should provide:
 - Sortable column headers where the API supports sort
 - Column show/hide for admins via `ColumnVisibilityMenu` + `useColumnVisibility`
 - Prefer API-side filtering (`page`, `limit`, `sort`, `order`, `q`, …) with `{ items, pagination, sort }` responses
+- Row actions use icon buttons with tooltips (`AccessIconButton` / `AccessIconLink`), not text links
+- On fine-pointer desktop, row action icons appear on row hover (add `tableActionRowGroupClass` / `group` to `<tr>`); always visible on touch/mobile
 
 ```tsx
 const params = buildListParams({ page, limit, sort, order, filters: applied });
 const result = await apiGet<PaginatedList<T>>(`/users?${params}`);
+```
+
+```tsx
+<TableActionRow>
+  <AccessIconButton allowed={canWrite} icon="edit" label="Edit" onClick={…} />
+  <AccessIconButton allowed={canDelete} icon="delete" label="Delete" danger onClick={…} />
+</TableActionRow>
 ```

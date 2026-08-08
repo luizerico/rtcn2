@@ -9,7 +9,8 @@ import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { useAccess } from '@/components/AccessProvider';
-import { AccessPrimaryButton, AccessTextButton } from '@/components/ui/AccessControls';
+import { AccessPrimaryButton } from '@/components/ui/AccessControls';
+import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 import { buildListParams, type PaginatedList } from '@/lib/listTypes';
 
@@ -310,7 +311,10 @@ export default function AdminGroupsPage() {
               </thead>
               <tbody>
                 {groups.map((group) => (
-                  <tr key={group._id} className="border-b border-[var(--border)] last:border-0">
+                  <tr
+                    key={group._id}
+                    className={`border-b border-[var(--border)] last:border-0 ${tableActionRowGroupClass}`}
+                  >
                     {isVisible('name') ? (
                       <td className="px-4 py-3 font-medium">{group.name}</td>
                     ) : null}
@@ -330,23 +334,25 @@ export default function AdminGroupsPage() {
                       </td>
                     ) : null}
                     {isVisible('actions') ? (
-                      <td className="space-x-3 px-4 py-3 text-right">
-                        <AccessTextButton
-                          allowed={canWrite}
-                          onClick={() => {
-                            setSelectedGroupId(group._id);
-                            setMemberModalOpen(true);
-                          }}
-                        >
-                          Edit members
-                        </AccessTextButton>
-                        <AccessTextButton
-                          allowed={canDelete}
-                          danger
-                          onClick={() => setPendingDelete(group)}
-                        >
-                          Delete
-                        </AccessTextButton>
+                      <td className="px-4 py-3 text-right">
+                        <TableActionRow>
+                          <AccessIconButton
+                            allowed={canWrite}
+                            icon="members"
+                            label="Edit members"
+                            onClick={() => {
+                              setSelectedGroupId(group._id);
+                              setMemberModalOpen(true);
+                            }}
+                          />
+                          <AccessIconButton
+                            allowed={canDelete}
+                            icon="delete"
+                            label="Delete"
+                            danger
+                            onClick={() => setPendingDelete(group)}
+                          />
+                        </TableActionRow>
                       </td>
                     ) : null}
                   </tr>

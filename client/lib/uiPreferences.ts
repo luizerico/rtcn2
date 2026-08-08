@@ -2,6 +2,8 @@ export type ThemeMode = 'light' | 'dark';
 
 export interface UiPreferences {
   theme: ThemeMode;
+  /** Desktop left nav minimized to a slim rail. */
+  navCollapsed: boolean;
 }
 
 export const UI_PREFS_COOKIE = 'ui_prefs';
@@ -9,6 +11,7 @@ export const UI_PREFS_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // 1 year
 
 export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   theme: 'light',
+  navCollapsed: true,
 };
 
 export function isThemeMode(value: unknown): value is ThemeMode {
@@ -25,11 +28,15 @@ export function parseUiPreferences(raw: string | undefined | null): UiPreference
     const parsed = JSON.parse(decoded) as Partial<UiPreferences>;
     return {
       theme: isThemeMode(parsed.theme) ? parsed.theme : DEFAULT_UI_PREFERENCES.theme,
+      navCollapsed:
+        typeof parsed.navCollapsed === 'boolean'
+          ? parsed.navCollapsed
+          : DEFAULT_UI_PREFERENCES.navCollapsed,
     };
   } catch {
     // Legacy plain theme cookie values
     if (isThemeMode(raw)) {
-      return { theme: raw };
+      return { ...DEFAULT_UI_PREFERENCES, theme: raw };
     }
     return { ...DEFAULT_UI_PREFERENCES };
   }
@@ -54,4 +61,11 @@ export function readUiPreferencesFromDocumentCookie(): UiPreferences | null {
 export function writeUiPreferencesCookie(prefs: UiPreferences) {
   if (typeof document === 'undefined') return;
   document.cookie = buildUiPreferencesCookie(prefs);
+}
+
+/** Prefer minimized left nav after a fresh sign-in. */
+export function collapseNavForLogin() {
+  if (typeof document === 'undefined') return;
+  const current = readUiPreferencesFromDocumentCookie() || { ...DEFAULT_UI_PREFERENCES };
+  writeUiPreferencesCookie({ ...current, navCollapsed: true });
 }

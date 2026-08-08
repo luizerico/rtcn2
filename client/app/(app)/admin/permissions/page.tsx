@@ -6,7 +6,8 @@ import PermissionModal from '@/components/ui/PermissionModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useAccess } from '@/components/AccessProvider';
-import { AccessPrimaryButton, AccessTextButton } from '@/components/ui/AccessControls';
+import { AccessPrimaryButton } from '@/components/ui/AccessControls';
+import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 
 interface PermissionRecord {
@@ -541,12 +542,12 @@ export default function AdminPermissionsPage() {
                         </p>
                       </button>
                       <div className="flex shrink-0 flex-col items-end gap-2">
-                        <AccessTextButton
+                        <AccessIconButton
                           allowed={canWrite}
+                          icon="edit"
+                          label="Edit permissions"
                           onClick={() => openEditForAsset(group)}
-                        >
-                          Edit
-                        </AccessTextButton>
+                        />
                         <button
                           type="button"
                           onClick={() =>
@@ -630,7 +631,10 @@ export default function AdminPermissionsPage() {
 
                     return (
                       <Fragment key={group.key}>
-                        <tr className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--accent-soft)]/20">
+                        <tr
+                          key={group.key}
+                          className={`border-b border-[var(--border)] last:border-0 hover:bg-[var(--accent-soft)]/20 ${tableActionRowGroupClass}`}
+                        >
                           <td className="px-4 py-3">
                             <button
                               type="button"
@@ -683,12 +687,14 @@ export default function AdminPermissionsPage() {
                           ) : null}
                           {isVisible('actions') ? (
                             <td className="px-4 py-3 text-right">
-                              <AccessTextButton
-                                allowed={canWrite}
-                                onClick={() => openEditForAsset(group)}
-                              >
-                                Edit
-                              </AccessTextButton>
+                              <TableActionRow>
+                                <AccessIconButton
+                                  allowed={canWrite}
+                                  icon="edit"
+                                  label="Edit permissions"
+                                  onClick={() => openEditForAsset(group)}
+                                />
+                              </TableActionRow>
                             </td>
                           ) : null}
                         </tr>

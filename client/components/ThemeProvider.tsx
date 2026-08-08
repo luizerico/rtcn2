@@ -73,6 +73,8 @@ export function ThemeProvider({
         ...current,
         ...patch,
         theme: isThemeMode(patch.theme) ? patch.theme : current.theme,
+        navCollapsed:
+          typeof patch.navCollapsed === 'boolean' ? patch.navCollapsed : current.navCollapsed,
       };
       writeUiPreferencesCookie(next);
       applyTheme(next.theme);
