@@ -15,7 +15,6 @@ description: >-
 
 ```bash
 npm install
-npm run client:install
 ```
 
 4. Seed admin:

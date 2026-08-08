@@ -21,15 +21,12 @@ Unified **Next.js** application: the UI and `/api` backend run in **one process*
 
 ## Quick start (local)
 
-`postinstall` also installs dependencies under `client/`.
-
 ### 1. Install
 
 ```bash
 git clone <your-repo-url>
 cd Projects
 npm install
-npm run client:install
 ```
 
 ### 2. Configure environment
@@ -170,7 +167,7 @@ Spec: [`docs/openapi.yaml`](docs/openapi.yaml)
 | `npm start` | Run unified app (production) |
 | `npm test` | All Jest suites |
 | `npm run test:api` | API tests only |
-| `npm run client:install` | Install Next.js client dependencies |
+| `npm run lint` | Lint the Next.js client |
 | `npm run api:only` | Legacy API-only server (optional) |
 
 ## Project layout
