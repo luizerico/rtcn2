@@ -78,7 +78,9 @@ const protect = async (req, res, next) => {
       return authError(res, 401, ERROR_CODES.INVALID, 'Authentication failed: token does not match session.');
     }
 
-    req.user = await User.findById(decoded.id).select('-password -resetTokenHash');
+    req.user = await User.findById(decoded.id).select(
+      '-password -resetTokenHash -verificationTokenHash'
+    );
     if (!req.user) {
       return authError(res, 401, ERROR_CODES.USER_NOT_FOUND, 'Authentication failed: user no longer exists.');
     }
@@ -88,7 +90,7 @@ const protect = async (req, res, next) => {
         res,
         403,
         'NOT_VERIFIED',
-        'Account is not verified. An administrator must set isVerified before you can use this session.'
+        'Account is not verified. Check your email for a verification link, or ask an administrator to verify your account.'
       );
     }
 

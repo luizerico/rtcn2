@@ -336,7 +336,7 @@ describe('High-risk authz paths', () => {
 
       const listUsers = await request(app).get('/api/users').set(adminAuth);
       expect(listUsers.status).toBe(200);
-      expect(listUsers.body.some((u) => u.username === 'viewer')).toBe(true);
+      expect(listUsers.body.items.some((u) => u.username === 'viewer')).toBe(true);
 
       const createGroup = await request(app)
         .post('/api/groups')

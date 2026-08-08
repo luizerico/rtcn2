@@ -1,11 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { FormEvent, Fragment, useEffect, useMemo, useState } from 'react';
 import { apiGet } from '@/lib/apiUtils';
 import PermissionModal from '@/components/ui/PermissionModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useAccess } from '@/components/AccessProvider';
 import { AccessPrimaryButton, AccessTextButton } from '@/components/ui/AccessControls';
+import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 
 interface PermissionRecord {
   _id: string;
@@ -45,6 +47,20 @@ const FALLBACK_TABS: CatalogClass[] = [
   { resourceType: 'SURVEY_RESPONSE', label: 'Survey responses', objects: [] },
 ];
 
+const PERMISSION_COLUMNS: ColumnDef[] = [
+  { id: 'asset', label: 'Asset', alwaysVisible: true },
+  { id: 'owner', label: 'Owner / Answered by' },
+  { id: 'principals', label: 'Principals' },
+  { id: 'grantedTo', label: 'Granted to' },
+  { id: 'actions', label: 'Actions', alwaysVisible: true },
+];
+
+const DEFAULT_FILTERS = {
+  q: '',
+  principalType: '',
+  principalName: '',
+};
+
 function groupBy<T>(items: T[], keyFn: (item: T) => string): Record<string, T[]> {
   return items.reduce<Record<string, T[]>>((acc, item) => {
     const key = keyFn(item);
@@ -67,7 +83,7 @@ function principalLabel(row: PermissionRecord): string {
 }
 
 export default function AdminPermissionsPage() {
-  const { can, refresh } = useAccess();
+  const { can, refresh, isAdmin } = useAccess();
   const canWrite = can('GROUP:WRITE');
   const [permissions, setPermissions] = useState<PermissionRecord[]>([]);
   const [tabs, setTabs] = useState<CatalogClass[]>(FALLBACK_TABS);
@@ -88,6 +104,17 @@ export default function AdminPermissionsPage() {
     allObjects: false,
     principalType: null,
     principalId: null,
+  });
+
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [applied, setApplied] = useState(DEFAULT_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+
+  const columns = useMemo(() => PERMISSION_COLUMNS, []);
+  const { isVisible, toggle } = useColumnVisibility('admin-permissions', columns, {
+    enabled: isAdmin,
   });
 
   const loadData = async () => {
@@ -208,6 +235,59 @@ export default function AdminPermissionsPage() {
     });
   }, [activeTargets, catalogById]);
 
+  const filteredGroups = useMemo(() => {
+    const q = applied.q.trim().toLowerCase();
+    return assetGroups.filter((group) => {
+      if (applied.principalType) {
+        if (!group.principals.some((p) => p.principalType === applied.principalType)) return false;
+      }
+      if (applied.principalName.trim()) {
+        const needle = applied.principalName.trim().toLowerCase();
+        if (!group.principals.some((p) => p.principalName.toLowerCase().includes(needle))) {
+          return false;
+        }
+      }
+      if (!q) return true;
+      const haystack = [
+        group.objectLabel,
+        group.detail,
+        group.owner,
+        group.answeredBy,
+        ...group.principals.map((p) => p.principalName),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [assetGroups, applied]);
+
+  const total = filteredGroups.length;
+  const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+  const safePage = totalPages > 0 && page > totalPages ? totalPages : page;
+  const pagedGroups = useMemo(() => {
+    const start = (safePage - 1) * limit;
+    return filteredGroups.slice(start, start + limit);
+  }, [filteredGroups, safePage, limit]);
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
+
+  const hasActiveFilters = Object.values(applied).some(Boolean);
+
+  const onSubmitFilters = (event: FormEvent) => {
+    event.preventDefault();
+    setPage(1);
+    setApplied({ ...filters });
+  };
+
+  const onResetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    setApplied(DEFAULT_FILTERS);
+    setPage(1);
+  };
+
   const openEditForType = () => {
     setEditTarget({
       resourceType: activeType,
@@ -292,6 +372,7 @@ export default function AdminPermissionsPage() {
                   onClick={() => {
                     setActiveType(tab.resourceType);
                     setExpandedKey(null);
+                    setPage(1);
                   }}
                   className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition ${
                     selected
@@ -318,23 +399,112 @@ export default function AdminPermissionsPage() {
         </AccessPrimaryButton>
       </div>
 
+      {showFilters ? (
+        <form
+          onSubmit={onSubmitFilters}
+          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3"
+        >
+          <label className="flex flex-col gap-1 text-sm md:col-span-2">
+            <span className="text-[var(--muted)]">Search</span>
+            <input
+              value={filters.q}
+              onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
+              placeholder="Asset, owner, principal…"
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">Principal type</span>
+            <select
+              value={filters.principalType}
+              onChange={(e) => setFilters((prev) => ({ ...prev, principalType: e.target.value }))}
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            >
+              <option value="">All</option>
+              <option value="USER">User</option>
+              <option value="GROUP">Group</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">Principal name</span>
+            <input
+              value={filters.principalName}
+              onChange={(e) => setFilters((prev) => ({ ...prev, principalName: e.target.value }))}
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            />
+          </label>
+          <div className="flex items-end gap-2 md:col-span-3">
+            <button
+              type="submit"
+              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              Apply filters
+            </button>
+            <button
+              type="button"
+              onClick={onResetFilters}
+              className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]/40"
+            >
+              Reset
+            </button>
+          </div>
+        </form>
+      ) : null}
+
       <section
         className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
         role="tabpanel"
         aria-labelledby={`perm-tab-${activeType}`}
       >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)]">
+          <span>
+            {total === 0
+              ? '0 grants'
+              : `${total} grant${total === 1 ? '' : 's'} · page ${safePage} of ${totalPages || 1}`}
+            {hasActiveFilters ? ' · filters active' : ''}
+          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2">
+              <span>Page size</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="rounded-md border border-[var(--border)] bg-white px-2 py-1 text-[var(--foreground)]"
+              >
+                {[10, 25, 50, 100].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowFilters((prev) => !prev)}
+              className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--foreground)] hover:bg-[var(--accent-soft)]/40"
+              aria-expanded={showFilters}
+            >
+              {showFilters ? 'Hide filters' : 'Show filters'}
+            </button>
+            {isAdmin ? (
+              <ColumnVisibilityMenu columns={columns} isVisible={isVisible} toggle={toggle} />
+            ) : null}
+          </div>
+        </div>
+
         {loading ? (
           <p className="p-5 text-[var(--muted)]">Loading permissions…</p>
-        ) : assetGroups.length === 0 ? (
+        ) : pagedGroups.length === 0 ? (
           <p className="p-5 text-[var(--muted)]">
-            No permissions for {activeTab?.label?.toLowerCase() || 'this type'} yet. Use Add
-            permission to select assets and assign users or groups.
+            No permissions for {activeTab?.label?.toLowerCase() || 'this type'} match these filters.
           </p>
         ) : (
           <>
-            {/* Mobile / tablet cards */}
             <ul className="divide-y divide-[var(--border)] lg:hidden">
-              {assetGroups.map((group) => {
+              {pagedGroups.map((group) => {
                 const expanded = expandedKey === group.key;
                 return (
                   <li key={group.key} className="p-4">
@@ -418,26 +588,42 @@ export default function AdminPermissionsPage() {
                 <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                   <tr>
                     <th className="w-10 px-4 py-3 font-medium" aria-label="Expand" />
-                    <th className="px-4 py-3 font-medium">
-                      {isSurveyResponseTab ? 'Survey' : 'Asset'}
-                    </th>
-                    {isSurveyResponseTab && (
+                    {isVisible('asset') ? (
+                      <th className="px-4 py-3 font-medium">
+                        {isSurveyResponseTab ? 'Survey' : 'Asset'}
+                      </th>
+                    ) : null}
+                    {isVisible('owner') && isSurveyResponseTab ? (
                       <>
                         <th className="px-4 py-3 font-medium">Answered by</th>
                         <th className="px-4 py-3 font-medium">Submitted</th>
                       </>
-                    )}
-                    {isSurveyTab && <th className="px-4 py-3 font-medium">Owner</th>}
-                    <th className="px-4 py-3 font-medium">Principals</th>
-                    <th className="hidden px-4 py-3 font-medium xl:table-cell">Granted to</th>
-                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                    ) : null}
+                    {isVisible('owner') && isSurveyTab ? (
+                      <th className="px-4 py-3 font-medium">Owner</th>
+                    ) : null}
+                    {isVisible('principals') ? (
+                      <th className="px-4 py-3 font-medium">Principals</th>
+                    ) : null}
+                    {isVisible('grantedTo') ? (
+                      <th className="hidden px-4 py-3 font-medium xl:table-cell">Granted to</th>
+                    ) : null}
+                    {isVisible('actions') ? (
+                      <th className="px-4 py-3 font-medium text-right">Actions</th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
-                  {assetGroups.map((group) => {
+                  {pagedGroups.map((group) => {
                     const expanded = expandedKey === group.key;
                     const colSpan =
-                      5 + (isSurveyResponseTab ? 2 : 0) + (isSurveyTab ? 1 : 0);
+                      1 +
+                      (isVisible('asset') ? 1 : 0) +
+                      (isVisible('owner') && isSurveyResponseTab ? 2 : 0) +
+                      (isVisible('owner') && isSurveyTab ? 1 : 0) +
+                      (isVisible('principals') ? 1 : 0) +
+                      (isVisible('grantedTo') ? 1 : 0) +
+                      (isVisible('actions') ? 1 : 0);
                     const summaryPrincipals = group.principals
                       .map((principal) => principal.principalName)
                       .filter(Boolean);
@@ -460,43 +646,51 @@ export default function AdminPermissionsPage() {
                               {expanded ? '▾' : '▸'}
                             </button>
                           </td>
-                          <td className="max-w-xs px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedKey((prev) => (prev === group.key ? null : group.key))
-                              }
-                              className="text-left font-medium hover:underline"
-                            >
-                              {group.objectLabel}
-                            </button>
-                            {group.detail ? (
-                              <div className="mt-0.5 text-xs text-[var(--muted)]">{group.detail}</div>
-                            ) : null}
-                          </td>
-                          {isSurveyResponseTab && (
+                          {isVisible('asset') ? (
+                            <td className="max-w-xs px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedKey((prev) => (prev === group.key ? null : group.key))
+                                }
+                                className="text-left font-medium hover:underline"
+                              >
+                                {group.objectLabel}
+                              </button>
+                              {group.detail ? (
+                                <div className="mt-0.5 text-xs text-[var(--muted)]">{group.detail}</div>
+                              ) : null}
+                            </td>
+                          ) : null}
+                          {isVisible('owner') && isSurveyResponseTab ? (
                             <>
                               <td className="px-4 py-3">{group.answeredBy || '—'}</td>
                               <td className="whitespace-nowrap px-4 py-3 text-[var(--muted)]">
                                 {formatSubmittedAt(group.submittedAt)}
                               </td>
                             </>
-                          )}
-                          {isSurveyTab && (
+                          ) : null}
+                          {isVisible('owner') && isSurveyTab ? (
                             <td className="px-4 py-3">{group.owner || '—'}</td>
-                          )}
-                          <td className="px-4 py-3">{group.principals.length}</td>
-                          <td className="hidden max-w-sm px-4 py-3 text-[var(--muted)] xl:table-cell">
-                            {summaryPrincipals.length ? summaryPrincipals.join(', ') : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <AccessTextButton
-                              allowed={canWrite}
-                              onClick={() => openEditForAsset(group)}
-                            >
-                              Edit
-                            </AccessTextButton>
-                          </td>
+                          ) : null}
+                          {isVisible('principals') ? (
+                            <td className="px-4 py-3">{group.principals.length}</td>
+                          ) : null}
+                          {isVisible('grantedTo') ? (
+                            <td className="hidden max-w-sm px-4 py-3 text-[var(--muted)] xl:table-cell">
+                              {summaryPrincipals.length ? summaryPrincipals.join(', ') : '—'}
+                            </td>
+                          ) : null}
+                          {isVisible('actions') ? (
+                            <td className="px-4 py-3 text-right">
+                              <AccessTextButton
+                                allowed={canWrite}
+                                onClick={() => openEditForAsset(group)}
+                              >
+                                Edit
+                              </AccessTextButton>
+                            </td>
+                          ) : null}
                         </tr>
                         {expanded ? (
                           <tr className="border-b border-[var(--border)] bg-slate-50/80">
@@ -542,6 +736,32 @@ export default function AdminPermissionsPage() {
             </div>
           </>
         )}
+
+        <div className="flex flex-col gap-3 border-t border-[var(--border)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[var(--muted)]">
+            {total === 0
+              ? '0 grants'
+              : `Showing page ${safePage} of ${totalPages || 1} (${total} total)`}
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={safePage <= 1 || loading}
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              className="rounded-md border border-[var(--border)] px-3 py-1.5 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={totalPages === 0 || safePage >= totalPages || loading}
+              onClick={() => setPage((prev) => prev + 1)}
+              className="rounded-md border border-[var(--border)] px-3 py-1.5 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </section>
 
       <PermissionModal

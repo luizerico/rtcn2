@@ -83,6 +83,17 @@ function createMemoryEmailSender() {
       const match = body.match(/\/reset\/([A-Za-z0-9._~-]+)/);
       return match ? match[1] : null;
     },
+    /**
+     * Pull a `/verify/<token>` segment from the last message body.
+     * @returns {string | null}
+     */
+    extractVerifyToken() {
+      const last = messages[messages.length - 1];
+      if (!last) return null;
+      const body = `${last.text || ''}\n${last.html || ''}`;
+      const match = body.match(/\/verify\/([A-Za-z0-9._~-]+)/);
+      return match ? match[1] : null;
+    },
   };
 }
 

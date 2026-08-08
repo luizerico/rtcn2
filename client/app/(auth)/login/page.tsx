@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import { clearAccessCache } from '@/lib/accessCache';
+import GoogleAuthButton from '@/components/ui/GoogleAuthButton';
 
 const REASON_COPY: Record<string, { title: string; message: string }> = {
   NO_TOKEN: {
@@ -38,7 +39,24 @@ const REASON_COPY: Record<string, { title: string; message: string }> = {
   },
   NOT_VERIFIED: {
     title: 'Account not verified',
-    message: 'An administrator must verify this account before you can sign in.',
+    message:
+      'Check your email for a verification link, or ask an administrator to verify your account.',
+  },
+  GOOGLE_NOT_CONFIGURED: {
+    title: 'Google sign-in unavailable',
+    message: 'Google OAuth is not configured on this server.',
+  },
+  GOOGLE_DENIED: {
+    title: 'Google sign-in cancelled',
+    message: 'Google did not authorize the sign-in request.',
+  },
+  GOOGLE_STATE: {
+    title: 'Google sign-in failed',
+    message: 'The sign-in request could not be validated. Try again.',
+  },
+  GOOGLE_FAILED: {
+    title: 'Google sign-in failed',
+    message: 'Could not complete Google authentication. Try again or use a password.',
   },
 };
 
@@ -154,6 +172,14 @@ function LoginForm() {
           {isLoading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+
+      <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-[var(--muted)]">
+        <span className="h-px flex-1 bg-[var(--border)]" />
+        or
+        <span className="h-px flex-1 bg-[var(--border)]" />
+      </div>
+
+      <GoogleAuthButton label="Sign in with Google" />
 
       <p className="mt-6 text-center text-sm text-[var(--muted)]">
         No account?{' '}

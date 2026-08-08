@@ -10,7 +10,9 @@ alwaysApply: false
 - Prefer explicit props interfaces over `any`
 - Handle loading and error states on data pages
 - Prefer existing design tokens in `globals.css` (`--accent`, `--sidebar`, etc.)
-- Reuse `Modal`, `EditMembersModal`, `PermissionModal`, `Breadcrumbs` before inventing new dialogs/nav
+- Reuse `Modal`, `ConfirmDeleteDialog`, `ColumnVisibilityMenu`, `EditMembersModal`, `PermissionModal`, `Breadcrumbs` before inventing new dialogs/nav
+- Always confirm deletes with `ConfirmDeleteDialog` (never delete on first click)
+- Admin/admin-group table viewers get column show/hide via `useColumnVisibility` + `ColumnVisibilityMenu`
 
 ```tsx
 // ✅ Typed API usage

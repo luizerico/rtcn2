@@ -2,12 +2,70 @@ const Group = require('../models/Group');
 const Permission = require('../models/Permission');
 const User = require('../models/User');
 const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
+const {
+  parseListQuery,
+  clampPage,
+  paginatedResponse,
+  textSearchOr,
+  escapeRegex,
+} = require('../utils/listQuery');
+
+const GROUP_SORT_FIELDS = new Set(['name', 'createdAt', 'updatedAt', 'memberCount']);
 
 exports.getAllGroups = async (req, res) => {
   try {
-    const groups = await Group.find({});
-    res.status(200).json(groups);
+    const { page: rawPage, limit, sortField, sortOrder, orderLabel } = parseListQuery(
+      req.query,
+      GROUP_SORT_FIELDS,
+      'name'
+    );
+
+    const filter = {};
+    const qOr = textSearchOr(['name', 'description'], req.query.q);
+    if (qOr) filter.$or = qOr;
+    if (req.query.name) {
+      filter.name = { $regex: escapeRegex(String(req.query.name).trim()), $options: 'i' };
+    }
+
+    const total = await Group.countDocuments(filter);
+    const { page, skip } = clampPage(rawPage, total, limit);
+
+    let items;
+    if (sortField === 'memberCount') {
+      const aggregated = await Group.aggregate([
+        { $match: filter },
+        {
+          $addFields: {
+            memberCount: { $size: { $ifNull: ['$members', []] } },
+          },
+        },
+        { $sort: { memberCount: sortOrder, _id: sortOrder } },
+        { $skip: skip },
+        { $limit: limit },
+      ]);
+      items = aggregated;
+    } else {
+      items = await Group.find(filter)
+        .sort({ [sortField]: sortOrder, _id: sortOrder })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+    }
+
+    res.status(200).json(
+      paginatedResponse({
+        items,
+        total,
+        page,
+        limit,
+        sortField,
+        orderLabel,
+      })
+    );
   } catch (error) {
+    if (error?.name === 'ValidationError' || error?.status === 400) {
+      return sendError(res, 400, error.message, ERROR_CODES.VALIDATION);
+    }
     return sendServerError(res, error, 'Error fetching groups');
   }
 };

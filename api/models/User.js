@@ -1,22 +1,38 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
-// --- 1. User Model ---
-const userSchema = new Schema({
+const userSchema = new Schema(
+  {
     username: { type: String, required: true, unique: true },
     email: { type: String, required: true, unique: true },
-    password: { type: String, required: true }, // Stored as bcrypt hash
-    roleId: { 
-        type: Schema.Types.ObjectId, 
-        ref: 'Group', // Assuming a default role group exists
-        default: null 
+    /** bcrypt hash; optional for Google-only accounts */
+    password: {
+      type: String,
+      required: function requiredPassword() {
+        return !this.googleId;
+      },
     },
-    // Login requires true. Self-register defaults false until an admin verifies;
-    // admin create and bootstrap set true. No email-verification flow yet.
+    roleId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Group',
+      default: null,
+    },
+    /**
+     * Login requires true. Self-register defaults false until email verification
+     * or an admin sets isVerified. Google sign-in and admin create/bootstrap set true.
+     */
     isVerified: { type: Boolean, default: false },
+    /** Google subject id when the account is linked to Google. */
+    googleId: { type: String, unique: true, sparse: true },
+    lastLoginAt: { type: Date, default: null },
     /** SHA-256 of the one-time reset token (raw token is only emailed). */
     resetTokenHash: { type: String, default: null },
-    tokenExpiry: { type: Date, default: null }
-}, { timestamps: true });
+    tokenExpiry: { type: Date, default: null },
+    /** SHA-256 of the email verification token. */
+    verificationTokenHash: { type: String, default: null },
+    verificationTokenExpiry: { type: Date, default: null },
+  },
+  { timestamps: true }
+);
 
 module.exports = mongoose.model('User', userSchema);

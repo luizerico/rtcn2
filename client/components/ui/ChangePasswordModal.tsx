@@ -4,26 +4,33 @@ import React, { FormEvent, useEffect, useId, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { apiPost } from '@/lib/apiUtils';
 
-interface CreateUserModalProps {
+interface ChangePasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreated?: (user: { username: string; email: string }) => void;
+  userId: string;
+  username: string;
+  onUpdated?: () => void;
 }
 
-const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCreated }) => {
+/**
+ * Admin-only dialog to reset another user's password without opening their profile.
+ */
+const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
+  isOpen,
+  onClose,
+  userId,
+  username,
+  onUpdated,
+}) => {
   const formId = useId();
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
-      setUsername('');
-      setEmail('');
-      setPassword('');
+      setNewPassword('');
       setConfirmPassword('');
       setSaving(false);
       setError(null);
@@ -32,77 +39,46 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCr
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (password !== confirmPassword) {
+    if (newPassword !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      await apiPost('/users', { username, email, password });
-      onCreated?.({ username, email });
+      await apiPost(`/users/${userId}/password`, { newPassword });
+      onUpdated?.();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create user.');
+      setError(err instanceof Error ? err.message : 'Failed to update password.');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create user">
+    <Modal isOpen={isOpen} onClose={onClose} title={`Change password — ${username}`}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
             {error}
           </div>
         )}
-
         <div>
-          <label htmlFor={`${formId}-username`} className="mb-1 block text-sm font-medium">
-            Username
+          <label htmlFor={`${formId}-new`} className="mb-1 block text-sm font-medium">
+            New password
           </label>
           <input
-            id={`${formId}-username`}
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            autoComplete="off"
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label htmlFor={`${formId}-email`} className="mb-1 block text-sm font-medium">
-            Email
-          </label>
-          <input
-            id={`${formId}-email`}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="off"
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div>
-          <label htmlFor={`${formId}-password`} className="mb-1 block text-sm font-medium">
-            Password
-          </label>
-          <input
-            id={`${formId}-password`}
+            id={`${formId}-new`}
             type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
             required
             minLength={8}
             autoComplete="new-password"
             className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
           />
         </div>
-
         <div>
           <label htmlFor={`${formId}-confirm`} className="mb-1 block text-sm font-medium">
             Confirm password
@@ -118,7 +94,6 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCr
             className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
           />
         </div>
-
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
@@ -132,7 +107,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCr
             disabled={saving}
             className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
           >
-            {saving ? 'Creating…' : 'Create user'}
+            {saving ? 'Saving…' : 'Update password'}
           </button>
         </div>
       </form>
@@ -140,4 +115,4 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCr
   );
 };
 
-export default CreateUserModal;
+export default ChangePasswordModal;

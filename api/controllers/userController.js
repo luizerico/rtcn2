@@ -1,24 +1,99 @@
 const User = require('../models/User');
+const Group = require('../models/Group');
 const bcrypt = require('bcryptjs');
 const { assertPasswordPolicy } = require('../utils/passwordPolicy');
 const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
+const { USER_PUBLIC_EXCLUDE, attachUserGroups } = require('../utils/userPresentation');
+const { revokeAllUserSessions } = require('../services/sessionService');
+const {
+  parseListQuery,
+  clampPage,
+  paginatedResponse,
+  textSearchOr,
+  escapeRegex,
+} = require('../utils/listQuery');
 
-exports.getAllUsers = async (_req, res) => {
+const USER_SORT_FIELDS = new Set(['username', 'email', 'createdAt', 'lastLoginAt', 'isVerified']);
+
+exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.find({}).select('-password -resetTokenHash -tokenExpiry').sort({ createdAt: -1 });
-    res.status(200).json(users);
+    const { page: rawPage, limit, sortField, sortOrder, orderLabel } = parseListQuery(
+      req.query,
+      USER_SORT_FIELDS,
+      'createdAt'
+    );
+
+    const filter = {};
+    const qOr = textSearchOr(['username', 'email'], req.query.q);
+    if (qOr) filter.$or = qOr;
+
+    if (req.query.username) {
+      filter.username = { $regex: escapeRegex(String(req.query.username).trim()), $options: 'i' };
+    }
+    if (req.query.email) {
+      filter.email = { $regex: escapeRegex(String(req.query.email).trim()), $options: 'i' };
+    }
+
+    if (req.query.isVerified === 'true' || req.query.isVerified === 'false') {
+      filter.isVerified = req.query.isVerified === 'true';
+    }
+
+    const groupId = typeof req.query.groupId === 'string' ? req.query.groupId.trim() : '';
+    if (groupId) {
+      const group = await Group.findById(groupId).select('members');
+      if (!group) {
+        return res.status(200).json(
+          paginatedResponse({
+            items: [],
+            total: 0,
+            page: 1,
+            limit,
+            sortField,
+            orderLabel,
+          })
+        );
+      }
+      const memberIds = [...(group.members || [])];
+      filter._id = { $in: memberIds };
+    }
+
+    const total = await User.countDocuments(filter);
+    const { page, skip } = clampPage(rawPage, total, limit);
+
+    const users = await User.find(filter)
+      .select(USER_PUBLIC_EXCLUDE)
+      .sort({ [sortField]: sortOrder, _id: sortOrder })
+      .skip(skip)
+      .limit(limit);
+
+    const withGroups = await attachUserGroups(users);
+
+    res.status(200).json(
+      paginatedResponse({
+        items: withGroups,
+        total,
+        page,
+        limit,
+        sortField,
+        orderLabel,
+      })
+    );
   } catch (error) {
+    if (error?.name === 'ValidationError' || error?.status === 400) {
+      return sendError(res, 400, error.message, ERROR_CODES.VALIDATION);
+    }
     return sendServerError(res, error, 'Error fetching users');
   }
 };
 
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password -resetTokenHash -tokenExpiry');
+    const user = await User.findById(req.params.id).select(USER_PUBLIC_EXCLUDE);
     if (!user) {
       return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
-    res.status(200).json(user);
+    const withGroups = await attachUserGroups(user);
+    res.status(200).json(withGroups);
   } catch (error) {
     return sendServerError(res, error, 'Error fetching user');
   }
@@ -39,7 +114,6 @@ exports.createUser = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    // Admin-provisioned accounts are trusted and can sign in immediately.
     const user = await User.create({
       username,
       email,
@@ -47,20 +121,16 @@ exports.createUser = async (req, res) => {
       isVerified: true,
     });
 
-    res.status(201).json({
-      _id: user._id,
-      username: user.username,
-      email: user.email,
-      roleId: user.roleId,
-      isVerified: user.isVerified,
-      createdAt: user.createdAt,
-    });
+    const withGroups = await attachUserGroups(
+      await User.findById(user._id).select(USER_PUBLIC_EXCLUDE)
+    );
+
+    res.status(201).json(withGroups);
   } catch (error) {
     return sendServerError(res, error, 'Error creating user');
   }
 };
 
-/** Intentional admin-writable fields only (no password/roleId/reset tokens). */
 const USER_UPDATE_ALLOWED = ['username', 'email', 'isVerified'];
 
 exports.updateUser = async (req, res) => {
@@ -84,16 +154,28 @@ exports.updateUser = async (req, res) => {
       });
     }
 
+    if (Object.prototype.hasOwnProperty.call(updates, 'isVerified')) {
+      if (updates.isVerified) {
+        updates.verificationTokenHash = null;
+        updates.verificationTokenExpiry = null;
+      }
+    }
+
     const user = await User.findByIdAndUpdate(req.params.id, updates, {
       returnDocument: 'after',
       runValidators: true,
-    }).select('-password -resetTokenHash -tokenExpiry');
+    }).select(USER_PUBLIC_EXCLUDE);
 
     if (!user) {
       return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
 
-    res.status(200).json(user);
+    if (updates.isVerified === false) {
+      await revokeAllUserSessions(user._id, 'verification_revoked');
+    }
+
+    const withGroups = await attachUserGroups(user);
+    res.status(200).json(withGroups);
   } catch (error) {
     return sendServerError(res, error, 'Error updating user');
   }
@@ -105,6 +187,8 @@ exports.deleteUser = async (req, res) => {
     if (!user) {
       return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
+    await Group.updateMany({ members: user._id }, { $pull: { members: user._id } });
+    await revokeAllUserSessions(user._id, 'user_deleted');
     res.status(200).json({ message: 'User deleted successfully.' });
   } catch (error) {
     return sendServerError(res, error, 'Error deleting user');

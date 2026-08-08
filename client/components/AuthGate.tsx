@@ -7,7 +7,7 @@ import { useToast } from '@/components/ToastProvider';
 import { useAccess } from '@/components/AccessProvider';
 import { clearAccessCache } from '@/lib/accessCache';
 
-const PUBLIC_PATHS = ['/login', '/register'];
+const PUBLIC_PATHS = ['/login', '/register', '/verify', '/reset'];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));

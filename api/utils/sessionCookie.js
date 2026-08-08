@@ -89,6 +89,7 @@ module.exports = {
   COOKIE_NAME,
   parseCookieHeader,
   readSessionCookie,
+  isSecureRequest,
   setSessionCookie,
   clearSessionCookie,
 };

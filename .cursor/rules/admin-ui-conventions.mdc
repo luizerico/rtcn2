@@ -1,0 +1,26 @@
+---
+description: Confirm before delete; admin table column show/hide; list toolbars
+globs: client/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Admin UI conventions
+
+## Confirm before delete
+
+Never delete a record on the first click. Always open a confirmation dialog (reuse `ConfirmDeleteDialog`) before calling `apiDelete` or any destructive remove.
+
+## Admin list tables (logs-style)
+
+Users, groups, sessions, permissions, and logs list pages should provide:
+
+- Search + filter panel (toggle Show/Hide filters)
+- Page size selector and Previous/Next pagination
+- Sortable column headers where the API supports sort
+- Column show/hide for admins via `ColumnVisibilityMenu` + `useColumnVisibility`
+- Prefer API-side filtering (`page`, `limit`, `sort`, `order`, `q`, …) with `{ items, pagination, sort }` responses
+
+```tsx
+const params = buildListParams({ page, limit, sort, order, filters: applied });
+const result = await apiGet<PaginatedList<T>>(`/users?${params}`);
+```

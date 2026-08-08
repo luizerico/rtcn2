@@ -159,6 +159,45 @@ describe('API endpoints', () => {
       expect(res.body.token).toBeUndefined();
     });
 
+    it('GET /api/auth/verify-email verifies via emailed token and allows login', async () => {
+      mailer.clear();
+      const registered = await request(app).post('/api/auth/register').send({
+        username: 'verifyme',
+        email: 'verifyme@example.com',
+        password: 'Password123!',
+      });
+      expect(registered.status).toBe(201);
+      expect(registered.body.user.isVerified).toBe(false);
+
+      const token = mailer.extractVerifyToken();
+      expect(token).toBeTruthy();
+
+      const deny = await request(app).post('/api/auth/login').send({
+        username: 'verifyme',
+        password: 'Password123!',
+      });
+      expect(deny.status).toBe(403);
+      expect(deny.body.code).toBe('NOT_VERIFIED');
+
+      const verified = await request(app).get(`/api/auth/verify-email/${token}`);
+      expect(verified.status).toBe(200);
+      expect(verified.body.user.isVerified).toBe(true);
+
+      const login = await request(app).post('/api/auth/login').send({
+        username: 'verifyme',
+        password: 'Password123!',
+      });
+      expect(login.status).toBe(200);
+      expect(login.body.token).toBeDefined();
+      expect(login.body.user.lastLoginAt).toBeDefined();
+    });
+
+    it('GET /api/auth/google/status reports whether Google OAuth is configured', async () => {
+      const res = await request(app).get('/api/auth/google/status');
+      expect(res.status).toBe(200);
+      expect(typeof res.body.enabled).toBe('boolean');
+    });
+
     it('POST /api/auth/login accepts email as login id', async () => {
       const res = await request(app).post('/api/auth/login').send({
         email: 'alice@example.com',
@@ -202,6 +241,8 @@ describe('API endpoints', () => {
       expect(list.status).toBe(200);
       expect(list.body.scope).toBe('all');
       expect(list.body.sessions.length).toBeGreaterThanOrEqual(1);
+      expect(list.body.pagination).toBeDefined();
+      expect(list.body.items.length).toBe(list.body.sessions.length);
 
       const sessionId = list.body.sessions[0].sessionId;
       const disconnect = await request(app)
@@ -277,6 +318,7 @@ describe('API endpoints', () => {
     });
 
     it('GET /api/auth/forgot-password does not enumerate unknown emails', async () => {
+      mailer.clear();
       const res = await request(app)
         .get('/api/auth/forgot-password')
         .query({ email: 'missing@example.com' });
@@ -288,6 +330,7 @@ describe('API endpoints', () => {
     it('password reset flow succeeds with hashed token storage', async () => {
       const { hashResetToken } = require('../api/utils/passwordReset');
 
+      mailer.clear();
       const forgot = await request(app)
         .get('/api/auth/forgot-password')
         .query({ email: 'alice@example.com' });
@@ -389,7 +432,8 @@ describe('API endpoints', () => {
         .get('/api/groups')
         .set('Authorization', `Bearer ${authToken}`);
       expect(list.status).toBe(200);
-      expect(list.body.some((group) => group.name === 'editors')).toBe(true);
+      expect(list.body.items.some((group) => group.name === 'editors')).toBe(true);
+      expect(list.body.pagination).toBeDefined();
 
       const groupId = create.body._id;
 
@@ -666,7 +710,8 @@ describe('API endpoints', () => {
         .get('/api/users')
         .set('Authorization', `Bearer ${authToken}`);
       expect(list.status).toBe(200);
-      expect(list.body.length).toBeGreaterThanOrEqual(2);
+      expect(list.body.items.length).toBeGreaterThanOrEqual(2);
+      expect(list.body.pagination.total).toBeGreaterThanOrEqual(2);
 
       const create = await request(app)
         .post('/api/users')

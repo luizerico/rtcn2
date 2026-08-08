@@ -4,17 +4,23 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { apiPost } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
+import GoogleAuthButton from '@/components/ui/GoogleAuthButton';
 
 export default function RegisterPage() {
   const { pushToast } = useToast();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
     setIsLoading(true);
     setError(null);
 
@@ -28,7 +34,7 @@ export default function RegisterPage() {
       pushToast({
         tone: 'success',
         title: 'Account created',
-        message: 'Please sign in with your new credentials.',
+        message: 'Check your email to verify your account before signing in.',
       });
       window.location.href = '/login';
     } catch (err) {
@@ -102,6 +108,22 @@ export default function RegisterPage() {
             />
           </div>
 
+          <div>
+            <label htmlFor="confirm-password" className="mb-2 block text-sm font-medium">
+              Confirm password
+            </label>
+            <input
+              id="confirm-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full rounded-lg border border-[var(--border)] px-4 py-2"
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
+          </div>
+
           <button
             type="submit"
             disabled={isLoading}
@@ -110,6 +132,14 @@ export default function RegisterPage() {
             {isLoading ? 'Creating…' : 'Register'}
           </button>
         </form>
+
+        <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-[var(--muted)]">
+          <span className="h-px flex-1 bg-[var(--border)]" />
+          or
+          <span className="h-px flex-1 bg-[var(--border)]" />
+        </div>
+
+        <GoogleAuthButton label="Register with Google" />
 
         <p className="mt-6 text-center text-sm text-[var(--muted)]">
           Already have an account?{' '}

@@ -123,7 +123,7 @@ describe('RBAC admin full access', () => {
 
     const listUsers = await request(app).get('/api/users').set(auth);
     expect(listUsers.status).toBe(200);
-    expect(listUsers.body.some((user) => user.username === 'managed-user')).toBe(true);
+    expect(listUsers.body.items.some((user) => user.username === 'managed-user')).toBe(true);
 
     const createGroup = await request(app)
       .post('/api/groups')

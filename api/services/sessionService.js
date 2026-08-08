@@ -109,6 +109,74 @@ async function listUserSessions(userId) {
     .select('-tokenHash');
 }
 
+const SESSION_SORT_FIELDS = new Set([
+  'username',
+  'clientApp',
+  'ipAddress',
+  'lastSeenAt',
+  'expiresAt',
+  'createdAt',
+]);
+
+/**
+ * Paginated session list with search/filter.
+ * @param {Record<string, unknown>} query
+ * @param {{ userId?: import('mongoose').Types.ObjectId | string | null }} options
+ */
+async function querySessions(query = {}, { userId = null } = {}) {
+  const {
+    parseListQuery,
+    clampPage,
+    paginatedResponse,
+    textSearchOr,
+    escapeRegex,
+  } = require('../utils/listQuery');
+
+  const { page: rawPage, limit, sortField, sortOrder, orderLabel } = parseListQuery(
+    query,
+    SESSION_SORT_FIELDS,
+    'lastSeenAt'
+  );
+
+  const filter = {
+    revokedAt: null,
+    expiresAt: { $gt: new Date() },
+  };
+
+  if (userId) {
+    filter.userId = userId;
+  }
+
+  const qOr = textSearchOr(['username', 'clientApp', 'ipAddress', 'userAgent'], query.q);
+  if (qOr) filter.$or = qOr;
+
+  if (query.username) {
+    filter.username = { $regex: escapeRegex(String(query.username).trim()), $options: 'i' };
+  }
+  if (query.clientApp) {
+    filter.clientApp = { $regex: escapeRegex(String(query.clientApp).trim()), $options: 'i' };
+  }
+
+  const total = await Session.countDocuments(filter);
+  const { page, skip } = clampPage(rawPage, total, limit);
+
+  const items = await Session.find(filter)
+    .select('-tokenHash')
+    .sort({ [sortField]: sortOrder, _id: sortOrder })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  return paginatedResponse({
+    items,
+    total,
+    page,
+    limit,
+    sortField,
+    orderLabel,
+  });
+}
+
 module.exports = {
   hashToken,
   createSession,
@@ -118,4 +186,5 @@ module.exports = {
   revokeAllUserSessions,
   listActiveSessions,
   listUserSessions,
+  querySessions,
 };

@@ -63,6 +63,19 @@ components:
         isVerified:
           type: boolean
           description: When false, login and session use are rejected (NOT_VERIFIED).
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+        groups:
+          type: array
+          items:
+            type: object
+            properties:
+              _id:
+                type: string
+              name:
+                type: string
 
     RegisterRequest:
       type: object
@@ -457,6 +470,31 @@ components:
           type: string
           format: date-time
 
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+        hasPrev:
+          type: boolean
+        hasNext:
+          type: boolean
+
+    ListSortMeta:
+      type: object
+      properties:
+        field:
+          type: string
+        order:
+          type: string
+          enum: [asc, desc]
+
     ActionLogListResponse:
       type: object
       properties:
@@ -465,28 +503,9 @@ components:
           items:
             $ref: '#/components/schemas/ActionLog'
         pagination:
-          type: object
-          properties:
-            page:
-              type: integer
-            limit:
-              type: integer
-            total:
-              type: integer
-            totalPages:
-              type: integer
-            hasPrev:
-              type: boolean
-            hasNext:
-              type: boolean
+          $ref: '#/components/schemas/PaginationMeta'
         sort:
-          type: object
-          properties:
-            field:
-              type: string
-            order:
-              type: string
-              enum: [asc, desc]
+          $ref: '#/components/schemas/ListSortMeta'
 
 paths:
   /api/health:
@@ -511,8 +530,9 @@ paths:
       tags: [Auth]
       summary: Register a user
       description: |
-        Creates an unverified account (`isVerified: false`). The user cannot sign in until an
-        administrator sets `isVerified` to true.
+        Creates an unverified account (`isVerified: false`). Sends a verification email
+        to the registered address. The user cannot sign in until they verify via the email
+        link or an administrator sets `isVerified` to true.
       operationId: registerUser
       requestBody:
         required: true
@@ -539,6 +559,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
 
+  /api/auth/verify-email/{token}:
+    get:
+      tags: [Auth]
+      summary: Verify email address
+      description: Marks the user verified when the emailed token is valid and not expired.
+      operationId: verifyEmail
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Email verified
+        '400':
+          description: Invalid or expired token
+
+  /api/auth/google/status:
+    get:
+      tags: [Auth]
+      summary: Whether Google OAuth is configured
+      operationId: googleAuthStatus
+      responses:
+        '200':
+          description: Configuration flag
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+
+  /api/auth/google:
+    get:
+      tags: [Auth]
+      summary: Start Google OAuth
+      description: Redirects to Google. Requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
+      operationId: startGoogleAuth
+      responses:
+        '302':
+          description: Redirect to Google
+        '503':
+          description: Google OAuth not configured
+
+  /api/auth/google/callback:
+    get:
+      tags: [Auth]
+      summary: Google OAuth callback
+      operationId: googleAuthCallback
+      responses:
+        '302':
+          description: Redirect to app home or login with reason
+
   /api/auth/login:
     post:
       tags: [Auth]
@@ -553,8 +628,11 @@ paths:
         The JSON `token` field remains for API clients (Postman, scripts).
 
         Login requires `user.isVerified === true`. Self-registered users default to unverified
-        until an administrator sets `isVerified` (for example via `PUT /api/users/{id}`).
-        Admin-created users and the bootstrap admin are verified automatically.
+        until they complete email verification or an administrator sets `isVerified`
+        (for example via `PUT /api/users/{id}`).
+        Admin-created users, Google sign-in (verified Google email), and the bootstrap admin
+        are verified automatically.
+        Successful login updates `lastLoginAt`.
       operationId: loginUser
       requestBody:
         required: true
@@ -684,12 +762,53 @@ paths:
       summary: List active sessions
       description: |
         Users with `USER:READ` see all active sessions. Others see only their own.
+        Supports pagination, search (`q`), and filters. Response includes `items`
+        (alias of `sessions`) plus `pagination` and `sort`.
       operationId: listSessions
       security:
         - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [username, clientApp, ipAddress, lastSeenAt, expiresAt, createdAt]
+            default: lastSeenAt
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search username, clientApp, ipAddress, or userAgent
+        - in: query
+          name: username
+          schema:
+            type: string
+        - in: query
+          name: clientApp
+          schema:
+            type: string
       responses:
         '200':
-          description: Active sessions
+          description: Paginated active sessions
           content:
             application/json:
               schema:
@@ -698,10 +817,19 @@ paths:
                   scope:
                     type: string
                     enum: [all, self]
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SessionRecord'
                   sessions:
                     type: array
                     items:
                       $ref: '#/components/schemas/SessionRecord'
+                    description: Compatibility alias of items
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+                  sort:
+                    $ref: '#/components/schemas/ListSortMeta'
         '401':
           description: Not authenticated
           content:
@@ -809,12 +937,74 @@ paths:
     get:
       tags: [Users]
       summary: List users
+      description: Paginated user list with search, filters, and sort.
       operationId: listUsers
       security:
         - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [username, email, createdAt, lastLoginAt, isVerified]
+            default: createdAt
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search username or email
+        - in: query
+          name: username
+          schema:
+            type: string
+        - in: query
+          name: email
+          schema:
+            type: string
+        - in: query
+          name: isVerified
+          schema:
+            type: boolean
+        - in: query
+          name: groupId
+          schema:
+            type: string
+          description: Only users who are members of this group
       responses:
         '200':
-          description: User list
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+                  sort:
+                    $ref: '#/components/schemas/ListSortMeta'
         '401':
           description: Unauthorized
     post:
@@ -954,18 +1144,61 @@ paths:
     get:
       tags: [Groups]
       summary: List groups
+      description: Paginated group list with search, filters, and sort.
       operationId: listGroups
       security:
         - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [name, createdAt, updatedAt, memberCount]
+            default: name
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search name or description
+        - in: query
+          name: name
+          schema:
+            type: string
       responses:
         '200':
-          description: Group list
+          description: Paginated group list
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Group'
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Group'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+                  sort:
+                    $ref: '#/components/schemas/ListSortMeta'
         '401':
           description: Unauthorized
           content:

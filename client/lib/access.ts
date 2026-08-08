@@ -18,6 +18,9 @@ export interface AccessUser {
   email: string;
   roleId?: string | null;
   isVerified?: boolean;
+  lastLoginAt?: string | null;
+  googleId?: string | null;
+  groups?: Array<{ _id: string; name: string }>;
 }
 
 export interface AccessSnapshot {

@@ -1,12 +1,15 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { apiDelete, apiGet } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
+import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useAccess } from '@/components/AccessProvider';
 import { AccessLink, AccessPrimaryButton, AccessTextButton } from '@/components/ui/AccessControls';
+import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 
 interface SurveyRecord {
   _id: string;
@@ -33,6 +36,14 @@ interface SurveyListResponse {
 
 type SortField = 'name' | 'createdAt' | 'updatedAt' | 'questionCount';
 
+const SURVEY_COLUMNS: ColumnDef[] = [
+  { id: 'name', label: 'Name', alwaysVisible: true },
+  { id: 'questions', label: 'Questions' },
+  { id: 'owner', label: 'Owner' },
+  { id: 'updated', label: 'Updated' },
+  { id: 'actions', label: 'Actions', alwaysVisible: true },
+];
+
 function surveyOwnerName(survey: SurveyRecord): string {
   const pick = (value: SurveyRecord['ownerId']) => {
     if (value && typeof value === 'object') {
@@ -45,9 +56,15 @@ function surveyOwnerName(survey: SurveyRecord): string {
 
 export default function SurveysPage() {
   const { pushToast } = useToast();
-  const { can } = useAccess();
+  const { can, isAdmin } = useAccess();
   const canCreate = can('SURVEY:CREATE', { classWideOnly: true });
   const canViewResults = can('SURVEY_RESPONSE:READ', { allowAnyInstance: true });
+  const columns = useMemo(() => SURVEY_COLUMNS, []);
+  const { isVisible, toggle: toggleColumn } = useColumnVisibility('surveys', columns, {
+    enabled: isAdmin,
+  });
+  const [pendingDelete, setPendingDelete] = useState<SurveyRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [data, setData] = useState<SurveyListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,10 +122,13 @@ export default function SurveysPage() {
     setPage(1);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      await apiDelete(`/surveys/${id}`);
+      await apiDelete(`/surveys/${pendingDelete._id}`);
       pushToast({ tone: 'info', title: 'Survey deleted', message: 'Survey and responses removed.' });
+      setPendingDelete(null);
       await loadSurveys();
     } catch (err) {
       pushToast({
@@ -116,6 +136,8 @@ export default function SurveysPage() {
         title: 'Delete failed',
         message: err instanceof Error ? err.message : 'Could not delete survey.',
       });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -211,6 +233,13 @@ export default function SurveysPage() {
               Create survey
             </AccessPrimaryButton>
           )}
+          {isAdmin ? (
+            <ColumnVisibilityMenu
+              columns={columns}
+              isVisible={isVisible}
+              toggle={toggleColumn}
+            />
+          ) : null}
         </div>
 
         {loading ? (
@@ -251,7 +280,7 @@ export default function SurveysPage() {
                     <AccessTextButton
                       allowed={can('SURVEY:DELETE', { resourceId: survey._id })}
                       danger
-                      onClick={() => handleDelete(survey._id)}
+                      onClick={() => setPendingDelete(survey)}
                     >
                       Delete
                     </AccessTextButton>
@@ -264,66 +293,84 @@ export default function SurveysPage() {
               <table className="min-w-full text-left text-sm">
                 <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                   <tr>
-                    <th className="px-4 py-3 font-medium">
-                      <button type="button" onClick={() => toggleSort('name')} className="hover:text-[var(--foreground)]">
-                        Name{sortMark('name')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-3 font-medium">
-                      <button
-                        type="button"
-                        onClick={() => toggleSort('questionCount')}
-                        className="hover:text-[var(--foreground)]"
-                      >
-                        Questions{sortMark('questionCount')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-3 font-medium">Owner</th>
-                    <th className="hidden px-4 py-3 font-medium lg:table-cell">
-                      <button
-                        type="button"
-                        onClick={() => toggleSort('updatedAt')}
-                        className="hover:text-[var(--foreground)]"
-                      >
-                        Updated{sortMark('updatedAt')}
-                      </button>
-                    </th>
-                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                    {isVisible('name') ? (
+                      <th className="px-4 py-3 font-medium">
+                        <button type="button" onClick={() => toggleSort('name')} className="hover:text-[var(--foreground)]">
+                          Name{sortMark('name')}
+                        </button>
+                      </th>
+                    ) : null}
+                    {isVisible('questions') ? (
+                      <th className="px-4 py-3 font-medium">
+                        <button
+                          type="button"
+                          onClick={() => toggleSort('questionCount')}
+                          className="hover:text-[var(--foreground)]"
+                        >
+                          Questions{sortMark('questionCount')}
+                        </button>
+                      </th>
+                    ) : null}
+                    {isVisible('owner') ? <th className="px-4 py-3 font-medium">Owner</th> : null}
+                    {isVisible('updated') ? (
+                      <th className="hidden px-4 py-3 font-medium lg:table-cell">
+                        <button
+                          type="button"
+                          onClick={() => toggleSort('updatedAt')}
+                          className="hover:text-[var(--foreground)]"
+                        >
+                          Updated{sortMark('updatedAt')}
+                        </button>
+                      </th>
+                    ) : null}
+                    {isVisible('actions') ? (
+                      <th className="px-4 py-3 font-medium text-right">Actions</th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((survey) => (
                     <tr key={survey._id} className="border-b border-[var(--border)] last:border-0">
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{survey.name}</div>
-                        <div className="text-xs text-[var(--muted)]">{survey.description || '—'}</div>
-                      </td>
-                      <td className="px-4 py-3">{survey.questionCount ?? 0}</td>
-                      <td className="px-4 py-3">{surveyOwnerName(survey)}</td>
-                      <td className="hidden px-4 py-3 lg:table-cell">
-                        {survey.updatedAt ? new Date(survey.updatedAt).toLocaleString() : '—'}
-                      </td>
-                      <td className="space-x-3 px-4 py-3 text-right whitespace-nowrap">
-                        <AccessLink
-                          allowed={can('SURVEY:READ', { resourceId: survey._id })}
-                          href={`/surveys/${survey._id}`}
-                        >
-                          Answer
-                        </AccessLink>
-                        <AccessLink
-                          allowed={canViewResults}
-                          href={`/surveys/${survey._id}/responses`}
-                        >
-                          Results
-                        </AccessLink>
-                        <AccessTextButton
-                          allowed={can('SURVEY:DELETE', { resourceId: survey._id })}
-                          danger
-                          onClick={() => handleDelete(survey._id)}
-                        >
-                          Delete
-                        </AccessTextButton>
-                      </td>
+                      {isVisible('name') ? (
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{survey.name}</div>
+                          <div className="text-xs text-[var(--muted)]">{survey.description || '—'}</div>
+                        </td>
+                      ) : null}
+                      {isVisible('questions') ? (
+                        <td className="px-4 py-3">{survey.questionCount ?? 0}</td>
+                      ) : null}
+                      {isVisible('owner') ? (
+                        <td className="px-4 py-3">{surveyOwnerName(survey)}</td>
+                      ) : null}
+                      {isVisible('updated') ? (
+                        <td className="hidden px-4 py-3 lg:table-cell">
+                          {survey.updatedAt ? new Date(survey.updatedAt).toLocaleString() : '—'}
+                        </td>
+                      ) : null}
+                      {isVisible('actions') ? (
+                        <td className="space-x-3 px-4 py-3 text-right whitespace-nowrap">
+                          <AccessLink
+                            allowed={can('SURVEY:READ', { resourceId: survey._id })}
+                            href={`/surveys/${survey._id}`}
+                          >
+                            Answer
+                          </AccessLink>
+                          <AccessLink
+                            allowed={canViewResults}
+                            href={`/surveys/${survey._id}/responses`}
+                          >
+                            Results
+                          </AccessLink>
+                          <AccessTextButton
+                            allowed={can('SURVEY:DELETE', { resourceId: survey._id })}
+                            danger
+                            onClick={() => setPendingDelete(survey)}
+                          >
+                            Delete
+                          </AccessTextButton>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
@@ -358,6 +405,14 @@ export default function SurveysPage() {
           </div>
         </div>
       </section>
+
+      <ConfirmDeleteDialog
+        isOpen={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={handleDelete}
+        itemLabel={pendingDelete?.name}
+        busy={deleting}
+      />
     </div>
   );
 }

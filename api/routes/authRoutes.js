@@ -13,6 +13,10 @@ const {
 
 router.post('/register', validate(registerBody), authController.registerUser);
 router.post('/login', validate(loginBody), authController.loginUser);
+router.get('/verify-email/:token', authController.verifyEmail);
+router.get('/google/status', authController.googleAuthStatus);
+router.get('/google', authController.startGoogleAuth);
+router.get('/google/callback', authController.googleAuthCallback);
 router.get('/forgot-password', validate(forgotPasswordQuery), authController.requestPasswordReset);
 router.post(
   '/reset-password/:token',

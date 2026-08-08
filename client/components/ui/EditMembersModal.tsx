@@ -2,7 +2,9 @@
 
 import React, { FormEvent, useEffect, useId, useMemo, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
+import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import { apiGet } from '@/lib/apiUtils';
+import type { PaginatedList } from '@/lib/listTypes';
 
 interface UserRecord {
   _id: string;
@@ -37,6 +39,9 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<{ userId: string; username: string } | null>(
+    null
+  );
   const searchId = useId();
 
   const memberIdSet = useMemo(() => new Set(memberIds.map(String)), [memberIds]);
@@ -49,12 +54,13 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
       setUsers([]);
       setLoading(false);
       setBusyUserId(null);
+      setPendingRemove(null);
       return;
     }
 
     setLoading(true);
-    apiGet<UserRecord[]>('/users')
-      .then((list) => setUsers(Array.isArray(list) ? list : []))
+    apiGet<PaginatedList<UserRecord>>('/users?limit=100&sort=username&order=asc')
+      .then((list) => setUsers(Array.isArray(list.items) ? list.items : []))
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load users.');
       })
@@ -107,11 +113,17 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
     }
   };
 
-  const handleRemove = async (userId: string) => {
-    setBusyUserId(userId);
+  const handleRemove = (userId: string, username: string) => {
+    setPendingRemove({ userId, username });
+  };
+
+  const confirmRemove = async () => {
+    if (!pendingRemove) return;
+    setBusyUserId(pendingRemove.userId);
     setError(null);
     try {
-      await onRemoveUser({ userId });
+      await onRemoveUser({ userId: pendingRemove.userId });
+      setPendingRemove(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove member.');
     } finally {
@@ -144,7 +156,7 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      void handleRemove(user._id);
+                      handleRemove(user._id, user.username);
                     }}
                     disabled={busyUserId === user._id}
                     className="shrink-0 text-sm text-[var(--danger)] hover:underline disabled:opacity-50"
@@ -245,6 +257,20 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
           </div>
         </form>
       </div>
+      <ConfirmDeleteDialog
+        isOpen={Boolean(pendingRemove)}
+        onClose={() => setPendingRemove(null)}
+        onConfirm={confirmRemove}
+        title="Remove member"
+        itemLabel={pendingRemove?.username}
+        description={
+          pendingRemove
+            ? `Remove “${pendingRemove.username}” from this group?`
+            : undefined
+        }
+        confirmLabel="Remove"
+        busy={Boolean(pendingRemove && busyUserId === pendingRemove.userId)}
+      />
     </Modal>
   );
 };
