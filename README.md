@@ -91,11 +91,14 @@ copy .env.example .env
 docker compose up --build
 ```
 
+Public entry is **nginx** on port `80` (override with `NGINX_HOST_PORT`). Open [http://localhost](http://localhost) and [http://localhost/api/health](http://localhost/api/health).
+
 | Service | Host port (default) | Purpose |
 |---------|---------------------|---------|
+| nginx | `80` | Reverse proxy (public UI + API) |
 | MongoDB | `27178` | Database |
-| App | `3000` | Next.js UI + API |
-| Reports | `8000` | FastAPI GraphQL reports (`/graphql`) |
+| App | *(internal)* | Next.js UI + API behind nginx |
+| Reports | *(internal)* | FastAPI GraphQL; reached via `/api/reports` |
 
 ## Cloud deployment
 
@@ -186,8 +189,10 @@ __tests__/                Component + API tests
 
 Separate FastAPI container that reads the same MongoDB and exposes analytics at `/graphql`.
 
-- Health: [http://localhost:8000/health](http://localhost:8000/health)
-- GraphQL: [http://localhost:8000/graphql](http://localhost:8000/graphql)
+In Docker Compose the reports port is internal; the UI calls same-origin `/api/reports` through nginx → app.
+
+- Via proxy (Compose): [http://localhost/api/reports/health](http://localhost/api/reports/health)
+- Direct (local reports only): `http://localhost:8000/health` and `/graphql`
 - Auth: send `Authorization: Bearer <token>` from the main app login
 - Details: [`reports/README.md`](reports/README.md)
 
