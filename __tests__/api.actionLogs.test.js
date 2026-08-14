@@ -51,7 +51,7 @@ describe('Action logs API', () => {
     });
 
     const adminLogin = await request(app).post('/api/auth/login').send({
-      username: 'admin',
+      email: 'admin@example.com',
       password: 'AdminPassword123!',
     });
     expect(adminLogin.status).toBe(200);
@@ -59,7 +59,7 @@ describe('Action logs API', () => {
 
     const viewer = await seedUnprivilegedUser();
     const viewerLogin = await request(app).post('/api/auth/login').send({
-      username: viewer.user.username,
+      email: viewer.user.email,
       password: viewer.password,
     });
     expect(viewerLogin.status).toBe(200);

@@ -66,7 +66,7 @@ function LoginForm() {
   const reason = searchParams.get('reason') || '';
   const { pushToast } = useToast();
 
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,9 +81,9 @@ function LoginForm() {
     try {
       const response = await apiPost<{
         sessionId: string;
-        user: { username: string };
+        user: { username: string; email: string };
       }>('/auth/login', {
-        username,
+        email,
         password,
       });
 
@@ -118,7 +118,7 @@ function LoginForm() {
     <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-sm">
       <h2 className="mb-2 text-center text-3xl font-semibold text-[var(--foreground)]">Sign in</h2>
       <p className="mb-6 text-center text-sm text-[var(--muted)]">
-        Admin features require the seeded <strong>admin</strong> account from{' '}
+        Sign in with your registered email. Admin features require the seeded account from{' '}
         <code className="rounded bg-[var(--accent-soft)] px-1">npm run db:init</code>.
       </p>
 
@@ -137,17 +137,17 @@ function LoginForm() {
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label htmlFor="username" className="mb-2 block text-sm font-medium">
-            Username
+          <label htmlFor="email" className="mb-2 block text-sm font-medium">
+            Email
           </label>
           <input
-            id="username"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-lg border border-[var(--border)] px-4 py-2"
             required
-            autoComplete="username"
+            autoComplete="email"
           />
         </div>
 

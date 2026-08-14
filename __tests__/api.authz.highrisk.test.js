@@ -22,8 +22,8 @@ const {
 } = require('./helpers/apiTestUtils');
 const { replaceGroupPermissions } = require('../api/services/rbacService');
 
-async function login(app, username, password) {
-  const res = await request(app).post('/api/auth/login').send({ username, password });
+async function login(app, email, password) {
+  const res = await request(app).post('/api/auth/login').send({ email, password });
   expect(res.status).toBe(200);
   expect(res.body.token).toBeDefined();
   return res.body.token;
@@ -66,14 +66,14 @@ describe('High-risk authz paths', () => {
       password: 'AdminPassword123!',
     });
     adminUser = seeded.adminUser;
-    adminToken = await login(app, 'admin', 'AdminPassword123!');
+    adminToken = await login(app, 'admin@example.com', 'AdminPassword123!');
 
     viewer = await seedUnprivilegedUser({
       username: 'viewer',
       email: 'viewer@example.com',
       password: 'Password123!',
     });
-    viewerToken = await login(app, 'viewer', 'Password123!');
+    viewerToken = await login(app, 'viewer@example.com', 'Password123!');
   });
 
   describe('Survey responses', () => {
@@ -113,7 +113,7 @@ describe('High-risk authz paths', () => {
         },
       ]);
 
-      const token = await login(app, 'viewer', 'Password123!');
+      const token = await login(app, 'viewer@example.com', 'Password123!');
       const auth = { Authorization: `Bearer ${token}` };
 
       const submit = await request(app)
@@ -168,7 +168,7 @@ describe('High-risk authz paths', () => {
         },
       ]);
 
-      const token = await login(app, 'viewer', 'Password123!');
+      const token = await login(app, 'viewer@example.com', 'Password123!');
       const auth = { Authorization: `Bearer ${token}` };
 
       const submitA = await request(app)
@@ -340,13 +340,13 @@ describe('High-risk authz paths', () => {
       expect(allowed.status).toBe(200);
 
       const oldLogin = await request(app).post('/api/auth/login').send({
-        username: 'viewer',
+        email: 'viewer@example.com',
         password: 'Password123!',
       });
       expect(oldLogin.status).toBe(401);
 
       const newLogin = await request(app).post('/api/auth/login').send({
-        username: 'viewer',
+        email: 'viewer@example.com',
         password: 'ViewerNewPass123!',
       });
       expect(newLogin.status).toBe(200);

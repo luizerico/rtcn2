@@ -64,7 +64,7 @@ describe('Survey response access (no SURVEY_RESPONSE RBAC)', () => {
       password: 'AdminPassword123!',
     });
     const adminLogin = await request(app).post('/api/auth/login').send({
-      username: 'admin',
+      email: 'admin@example.com',
       password: 'AdminPassword123!',
     });
     expect(adminLogin.status).toBe(200);
@@ -72,7 +72,7 @@ describe('Survey response access (no SURVEY_RESPONSE RBAC)', () => {
 
     viewer = await seedUnprivilegedUser();
     const viewerLogin = await request(app).post('/api/auth/login').send({
-      username: viewer.user.username,
+      email: viewer.user.email,
       password: viewer.password,
     });
     expect(viewerLogin.status).toBe(200);
@@ -110,7 +110,7 @@ describe('Survey response access (no SURVEY_RESPONSE RBAC)', () => {
     ]);
 
     const login = await request(app).post('/api/auth/login').send({
-      username: viewer.user.username,
+      email: viewer.user.email,
       password: viewer.password,
     });
     const auth = { Authorization: `Bearer ${login.body.token}` };

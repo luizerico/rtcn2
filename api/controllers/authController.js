@@ -197,13 +197,11 @@ exports.verifyEmail = async (req, res) => {
 };
 
 exports.loginUser = async (req, res) => {
-  const loginId = req.validated?.loginId || req.body.username || req.body.email;
+  const email = (req.validated?.email || String(req.body.email || '')).trim().toLowerCase();
   const password = req.validated?.password || req.body.password;
 
   try {
-    const user = await User.findOne({
-      $or: [{ username: loginId }, { email: loginId }],
-    });
+    const user = await User.findOne({ email });
 
     const passwordOk =
       user &&
@@ -271,8 +269,9 @@ exports.googleAuthCallback = async (req, res) => {
     const tokens = await exchangeCodeForTokens(String(code));
     const profile = await fetchGoogleProfile(tokens.access_token);
 
+    const googleEmail = String(profile.email).trim().toLowerCase();
     let user = await User.findOne({
-      $or: [{ googleId: profile.sub }, { email: profile.email }],
+      $or: [{ googleId: profile.sub }, { email: googleEmail }],
     });
 
     if (user) {
@@ -287,10 +286,10 @@ exports.googleAuthCallback = async (req, res) => {
       }
       await user.save();
     } else {
-      const username = await uniqueUsernameFromEmail(User, profile.email);
+      const username = await uniqueUsernameFromEmail(User, googleEmail);
       user = await User.create({
         username,
-        email: profile.email,
+        email: googleEmail,
         googleId: profile.sub,
         isVerified: profile.email_verified !== false,
         password: undefined,

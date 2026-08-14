@@ -96,11 +96,8 @@ components:
 
     LoginRequest:
       type: object
-      required: [password]
+      required: [email, password]
       properties:
-        username:
-          type: string
-          example: alice
         email:
           type: string
           format: email
@@ -627,6 +624,7 @@ paths:
         call APIs with `credentials: include` and does not need to store the JWT in localStorage.
         The JSON `token` field remains for API clients (Postman, scripts).
 
+        Authenticate with the registered `email` and `password` (username is not accepted).
         Login requires `user.isVerified === true`. Self-registered users default to unverified
         until they complete email verification or an administrator sets `isVerified`
         (for example via `PUT /api/users/{id}`).

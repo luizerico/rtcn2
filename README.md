@@ -62,6 +62,8 @@ docker run -d --name projects-mongo -p 27017:27017 mongo:7.0
 npm run db:init
 ```
 
+Sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` (username is not used for login).
+
 ### 5. Start the app (UI + API together)
 
 ```bash
@@ -158,7 +160,7 @@ Spec: [`docs/openapi.yaml`](docs/openapi.yaml)
 
 1. Postman → **Import** → select `docs/openapi.yaml`
 2. Set `baseUrl` to `http://localhost:3000`
-3. Login via `POST /api/auth/login`, copy `token` (or use the `rbac_session` cookie)
+3. Login via `POST /api/auth/login` with `{ email, password }`, copy `token` (or use the `rbac_session` cookie)
 4. Collection auth → Bearer Token (browser apps use the httpOnly cookie with credentials)
 
 ## Useful scripts

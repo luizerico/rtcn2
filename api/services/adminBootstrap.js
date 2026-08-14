@@ -51,6 +51,8 @@ async function ensureAdminBootstrap({
     throw new Error('ADMIN_PASSWORD is required to bootstrap the admin account.');
   }
 
+  adminEmail = String(adminEmail).trim().toLowerCase();
+
   await migrateObjectToAsset(mongooseConnection);
   await migratePermissionPrincipals();
 
