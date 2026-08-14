@@ -71,7 +71,7 @@ describe('API endpoints', () => {
     await User.findByIdAndUpdate(secondaryUserId, { isVerified: true });
 
     const loginRes = await request(app).post('/api/auth/login').send({
-      username: 'alice',
+      email: 'alice@example.com',
       password: 'Password123!',
     });
     authToken = loginRes.body.token;
@@ -138,7 +138,7 @@ describe('API endpoints', () => {
 
     it('POST /api/auth/login rejects invalid credentials', async () => {
       const res = await request(app).post('/api/auth/login').send({
-        username: 'alice',
+        email: 'alice@example.com',
         password: 'wrong-password',
       });
       expect(res.status).toBe(401);
@@ -151,7 +151,7 @@ describe('API endpoints', () => {
     it('POST /api/auth/login rejects unverified accounts', async () => {
       await User.findByIdAndUpdate(userId, { isVerified: false });
       const res = await request(app).post('/api/auth/login').send({
-        username: 'alice',
+        email: 'alice@example.com',
         password: 'Password123!',
       });
       expect(res.status).toBe(403);
@@ -173,7 +173,7 @@ describe('API endpoints', () => {
       expect(token).toBeTruthy();
 
       const deny = await request(app).post('/api/auth/login').send({
-        username: 'verifyme',
+        email: 'verifyme@example.com',
         password: 'Password123!',
       });
       expect(deny.status).toBe(403);
@@ -184,7 +184,7 @@ describe('API endpoints', () => {
       expect(verified.body.user.isVerified).toBe(true);
 
       const login = await request(app).post('/api/auth/login').send({
-        username: 'verifyme',
+        email: 'verifyme@example.com',
         password: 'Password123!',
       });
       expect(login.status).toBe(200);
@@ -198,15 +198,27 @@ describe('API endpoints', () => {
       expect(typeof res.body.enabled).toBe('boolean');
     });
 
-    it('POST /api/auth/login accepts email as login id', async () => {
+    it('POST /api/auth/login authenticates with email', async () => {
       const res = await request(app).post('/api/auth/login').send({
-        email: 'alice@example.com',
+        email: 'Alice@Example.com',
         password: 'Password123!',
       });
       expect(res.status).toBe(200);
       expect(res.body.token).toBeDefined();
       expect(res.body.sessionId).toBeDefined();
       expect(res.body.expiresAt).toBeDefined();
+    });
+
+    it('POST /api/auth/login rejects username-only credentials', async () => {
+      const res = await request(app).post('/api/auth/login').send({
+        username: 'alice',
+        password: 'Password123!',
+      });
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({
+        message: 'Please provide email and password.',
+        code: 'VALIDATION',
+      });
     });
 
     it('GET /api/auth/me and validate require an active DB session', async () => {
@@ -274,7 +286,7 @@ describe('API endpoints', () => {
       expect(revokedMe.body.code).toBe('REVOKED');
 
       const relogin = await request(app).post('/api/auth/login').send({
-        username: 'alice',
+        email: 'alice@example.com',
         password: 'ChangedPass123!',
       });
       expect(relogin.status).toBe(200);
@@ -287,13 +299,13 @@ describe('API endpoints', () => {
       expect(adminReset.status).toBe(200);
 
       const bobOld = await request(app).post('/api/auth/login').send({
-        username: 'bob',
+        email: 'bob@example.com',
         password: 'Password123!',
       });
       expect(bobOld.status).toBe(401);
 
       const bobNew = await request(app).post('/api/auth/login').send({
-        username: 'bob',
+        email: 'bob@example.com',
         password: 'BobNewPass123!',
       });
       expect(bobNew.status).toBe(200);
@@ -355,13 +367,13 @@ describe('API endpoints', () => {
       expect(reset.status).toBe(200);
 
       const oldLogin = await request(app).post('/api/auth/login').send({
-        username: 'alice',
+        email: 'alice@example.com',
         password: 'Password123!',
       });
       expect(oldLogin.status).toBe(401);
 
       const newLogin = await request(app).post('/api/auth/login').send({
-        username: 'alice',
+        email: 'alice@example.com',
         password: 'NewPassword123!',
       });
       expect(newLogin.status).toBe(200);
@@ -370,7 +382,7 @@ describe('API endpoints', () => {
 
     it('accepts httpOnly session cookie without Authorization header', async () => {
       const login = await request(app).post('/api/auth/login').send({
-        username: 'alice',
+        email: 'alice@example.com',
         password: 'Password123!',
       });
       expect(login.status).toBe(200);
@@ -737,7 +749,7 @@ describe('API endpoints', () => {
       const daveId = registered.body.user.id;
 
       const denyLogin = await request(app).post('/api/auth/login').send({
-        username: 'dave',
+        email: 'dave@example.com',
         password: 'Password123!',
       });
       expect(denyLogin.status).toBe(403);
@@ -752,7 +764,7 @@ describe('API endpoints', () => {
       expect(String(verify.body.roleId || '')).not.toBe(String(userId));
 
       const allowLogin = await request(app).post('/api/auth/login').send({
-        username: 'dave',
+        email: 'dave@example.com',
         password: 'Password123!',
       });
       expect(allowLogin.status).toBe(200);

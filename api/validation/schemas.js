@@ -28,18 +28,13 @@ function registerBody(req) {
 
 /** Auth: POST /api/auth/login */
 function loginBody(req) {
-  const loginId = req.body?.username || req.body?.email;
-  if (!loginId || isBlankLocal(req.body?.password)) {
-    throw new ValidationError('Please provide username and password.');
-  }
+  requireFields(req.body, ['email', 'password'], {
+    message: 'Please provide email and password.',
+  });
   return {
-    loginId: String(loginId).trim(),
+    email: emailString(req.body.email),
     password: String(req.body.password),
   };
-}
-
-function isBlankLocal(value) {
-  return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
 }
 
 /** Auth: POST /api/auth/change-password */

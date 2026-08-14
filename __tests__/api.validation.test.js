@@ -77,9 +77,15 @@ describe('route schemas', () => {
     });
   });
 
-  it('loginBody accepts username or email', () => {
-    expect(loginBody({ body: { email: 'a@b.com', password: 'x' } }).loginId).toBe('a@b.com');
-    expect(() => loginBody({ body: { username: 'a' } })).toThrow(/username and password/);
+  it('loginBody requires email and password', () => {
+    expect(loginBody({ body: { email: 'Alice@Example.com', password: 'x' } })).toEqual({
+      email: 'alice@example.com',
+      password: 'x',
+    });
+    expect(() => loginBody({ body: { username: 'a', password: 'x' } })).toThrow(
+      /email and password/
+    );
+    expect(() => loginBody({ body: { email: 'a@b.com' } })).toThrow(/email and password/);
   });
 
   it('changePasswordBody enforces new password length', () => {

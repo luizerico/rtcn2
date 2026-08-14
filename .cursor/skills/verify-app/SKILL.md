@@ -32,7 +32,7 @@ npm run dev
 6. Check:
    - UI: `http://localhost:3000`
    - Health: `http://localhost:3000/api/health`
-   - Login with seeded admin, open `/admin/users|groups|permissions`
+   - Login with seeded admin email (`ADMIN_EMAIL`), open `/admin/users|groups|permissions`
 
 7. Tests:
 

@@ -50,7 +50,7 @@ describe('RBAC admin full access', () => {
     adminUser = seeded.adminUser;
 
     const adminLogin = await request(app).post('/api/auth/login').send({
-      username: 'admin',
+      email: 'admin@example.com',
       password: 'AdminPassword123!',
     });
     expect(adminLogin.status).toBe(200);
@@ -59,7 +59,7 @@ describe('RBAC admin full access', () => {
     const viewer = await seedUnprivilegedUser();
     viewerUser = viewer.user;
     const viewerLogin = await request(app).post('/api/auth/login').send({
-      username: viewer.user.username,
+      email: viewer.user.email,
       password: viewer.password,
     });
     expect(viewerLogin.status).toBe(200);
@@ -253,7 +253,7 @@ describe('RBAC admin full access', () => {
     ]);
 
     const login = await request(app).post('/api/auth/login').send({
-      username: 'viewer',
+      email: 'viewer@example.com',
       password: 'Password123!',
     });
     const auth = { Authorization: `Bearer ${login.body.token}` };
