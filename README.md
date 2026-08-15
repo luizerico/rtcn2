@@ -60,9 +60,10 @@ docker run -d --name projects-mongo -p 27017:27017 mongo:7.0
 
 ```bash
 npm run db:init
+npm run db:seed-geo
 ```
 
-Sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` (username is not used for login).
+Sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` (username is not used for login). `db:seed-geo` imports IBGE region, state, microregion, biome, and county sample data (reference catalog, not an RBAC asset class). County status series and emissions are stored in separate collections; the large counties file is streamed.
 
 ### 5. Start the app (UI + API together)
 
@@ -174,6 +175,8 @@ Spec: [`docs/openapi.yaml`](docs/openapi.yaml)
 | `npm run test:api` | API tests only |
 | `npm run lint` | Lint the Next.js client |
 | `npm run api:only` | Legacy API-only server (optional) |
+| `npm run db:init` | Seed admin user/group/permissions |
+| `npm run db:seed-geo` | Idempotent import of region/state/microregion/biome/county sample JSON (streams counties; status + emissions split) |
 
 ## Project layout
 
@@ -207,6 +210,7 @@ In Docker Compose the reports port is internal; the UI calls same-origin `/api/r
 - `authorize('RESOURCE:ACTION')` resolves the caller’s groups (`roleId` + membership) and loads matching permission rows.
 - `ADMIN` on a resource type grants every action; `WRITE` also covers `CREATE`.
 - `npm run db:init` upserts the **admin** group and writes the full permission matrix into `permissions`.
+- Geography (region/state/microregion/biome/county) is reference catalog data, not an RBAC asset class. Import with `npm run db:seed-geo`. County `hidroRisk`, `endangeredPeople`, and `disasterRate` live in `county_status`; each emission row lives in `county_emissions`.
 
 ## Account verification
 

@@ -27,6 +27,7 @@ type NavIconName =
   | 'sessions'
   | 'logs'
   | 'reports'
+  | 'geography'
   | 'profile'
   | 'switchAccount'
   | 'logout';
@@ -41,6 +42,7 @@ const NAV_ICON_BY_HREF: Record<string, NavIconName> = {
   '/admin/sessions': 'sessions',
   '/admin/logs': 'logs',
   '/admin/reports': 'reports',
+  '/admin/geography': 'geography',
   '/account': 'profile',
   '/login': 'switchAccount',
 };
@@ -125,6 +127,15 @@ function NavIcon({ name, className = 'h-5 w-5' }: { name: NavIconName; className
           <path {...stroke} d="M16 17v-4" />
         </svg>
       );
+    case 'geography':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" {...stroke} />
+          <path {...stroke} d="M3 12h18" />
+          <path {...stroke} d="M12 3a14 14 0 0 1 0 18" />
+          <path {...stroke} d="M12 3a14 14 0 0 0 0 18" />
+        </svg>
+      );
     case 'profile':
       return (
         <svg {...common}>
@@ -190,6 +201,12 @@ const links: NavItem[] = [
   {
     href: '/admin/reports',
     label: 'Reports',
+    indent: true,
+    visible: (_c, isAdmin) => isAdmin,
+  },
+  {
+    href: '/admin/geography',
+    label: 'Geography',
     indent: true,
     visible: (_c, isAdmin) => isAdmin,
   },
