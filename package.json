@@ -15,7 +15,8 @@
     "test:api": "jest --config=jest.config.js --selectProjects api",
     "test:components": "jest --config=jest.config.js --selectProjects components",
     "api:only": "node api/server.js",
-    "db:init": "node api/database-init.js"
+    "db:init": "node api/database-init.js",
+    "db:seed-geo": "node api/scripts/seed-geo.js"
   },
   "license": "ISC",
   "dependencies": {

@@ -27,6 +27,11 @@ tags:
   - name: Assets
   - name: Surveys
   - name: Logs
+  - name: Regions
+  - name: States
+  - name: Microregions
+  - name: Biomes
+  - name: Counties
 
 components:
   securitySchemes:
@@ -499,6 +504,237 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ActionLog'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+        sort:
+          $ref: '#/components/schemas/ListSortMeta'
+
+    GeoRef:
+      type: object
+      description: Populated parent geography document (code + name).
+      properties:
+        _id:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+
+    Region:
+      type: object
+      properties:
+        _id:
+          type: string
+        code:
+          type: string
+          example: NE
+        name:
+          type: string
+          example: Nordeste
+        isDeleted:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    State:
+      allOf:
+        - $ref: '#/components/schemas/Region'
+        - type: object
+          properties:
+            region:
+              oneOf:
+                - type: string
+                - $ref: '#/components/schemas/GeoRef'
+
+    Microregion:
+      type: object
+      properties:
+        _id:
+          type: string
+        code:
+          type: string
+          nullable: true
+          example: BA01
+        name:
+          type: string
+          example: Salvador
+        region:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/GeoRef'
+        state:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/GeoRef'
+        isDeleted:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RegionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Region'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+        sort:
+          $ref: '#/components/schemas/ListSortMeta'
+
+    StateListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/State'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+        sort:
+          $ref: '#/components/schemas/ListSortMeta'
+
+    MicroregionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Microregion'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+        sort:
+          $ref: '#/components/schemas/ListSortMeta'
+
+    Biome:
+      $ref: '#/components/schemas/Region'
+
+    BiomeListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Biome'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+        sort:
+          $ref: '#/components/schemas/ListSortMeta'
+
+    YearlyValue:
+      type: object
+      properties:
+        value:
+          type: number
+        year:
+          type: integer
+
+    EndangeredPeople:
+      type: object
+      properties:
+        value:
+          type: number
+        year:
+          type: integer
+        riskType:
+          type: string
+
+    CountyStatus:
+      type: object
+      properties:
+        endangeredPeople:
+          type: array
+          items:
+            $ref: '#/components/schemas/EndangeredPeople'
+        disasterRate:
+          type: array
+          items:
+            $ref: '#/components/schemas/YearlyValue'
+        hidroRisk:
+          type: array
+          items:
+            $ref: '#/components/schemas/YearlyValue'
+
+    County:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        IBGECode:
+          type: string
+        population:
+          type: number
+        region:
+          $ref: '#/components/schemas/GeoRef'
+        state:
+          $ref: '#/components/schemas/GeoRef'
+        microregion:
+          $ref: '#/components/schemas/GeoRef'
+        biome:
+          $ref: '#/components/schemas/GeoRef'
+        status:
+          $ref: '#/components/schemas/CountyStatus'
+
+    CountyListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/County'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+        sort:
+          $ref: '#/components/schemas/ListSortMeta'
+
+    CountyEmission:
+      type: object
+      properties:
+        _id:
+          type: string
+        county:
+          type: string
+        actionType:
+          type: string
+        gasType:
+          type: string
+        value:
+          type: number
+        year:
+          type: integer
+        sector:
+          type: string
+        category:
+          type: string
+        subCategory:
+          type: string
+        product:
+          type: string
+        detail:
+          type: string
+        activity:
+          type: string
+
+    CountyEmissionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CountyEmission'
         pagination:
           $ref: '#/components/schemas/PaginationMeta'
         sort:
@@ -1977,3 +2213,505 @@ paths:
           description: Not authenticated
         '403':
           description: Forbidden
+
+  /api/regions:
+    get:
+      tags: [Regions]
+      summary: List regions
+      description: |
+        Paginated IBGE region catalog. Any verified session may read.
+        Geography is reference data, not an RBAC asset class.
+      operationId: listRegions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [code, name]
+            default: name
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search code or name
+      responses:
+        '200':
+          description: Paginated regions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegionListResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/regions/{id}:
+    get:
+      tags: [Regions]
+      summary: Get region by ID
+      operationId: getRegion
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Region found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Region'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/states:
+    get:
+      tags: [States]
+      summary: List states
+      description: Paginated UF catalog. Filter by `regionId`. Any verified session may read.
+      operationId: listStates
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [code, name]
+            default: name
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search code or name
+        - in: query
+          name: regionId
+          schema:
+            type: string
+          description: Filter by parent region ObjectId
+      responses:
+        '200':
+          description: Paginated states
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StateListResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/states/{id}:
+    get:
+      tags: [States]
+      summary: Get state by ID
+      operationId: getState
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: State found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/State'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/microregions:
+    get:
+      tags: [Microregions]
+      summary: List microregions
+      description: Paginated IBGE microregion catalog. Filter by `regionId` and `stateId`.
+      operationId: listMicroregions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [code, name]
+            default: name
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search code or name
+        - in: query
+          name: regionId
+          schema:
+            type: string
+        - in: query
+          name: stateId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated microregions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MicroregionListResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/microregions/{id}:
+    get:
+      tags: [Microregions]
+      summary: Get microregion by ID
+      operationId: getMicroregion
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Microregion found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Microregion'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  /api/biomes:
+    get:
+      tags: [Biomes]
+      summary: List biomes
+      description: Paginated IBGE biome catalog. Any verified session may read.
+      operationId: listBiomes
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [code, name]
+            default: name
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated biomes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BiomeListResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/biomes/{id}:
+    get:
+      tags: [Biomes]
+      summary: Get biome by ID
+      operationId: getBiome
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Biome found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Biome'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Not found
+
+  /api/counties:
+    get:
+      tags: [Counties]
+      summary: List counties
+      description: Paginated municipality catalog. Status and emissions are not included.
+      operationId: listCounties
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [name, code, IBGECode, population]
+            default: name
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - in: query
+          name: q
+          schema:
+            type: string
+        - in: query
+          name: regionId
+          schema:
+            type: string
+        - in: query
+          name: stateId
+          schema:
+            type: string
+        - in: query
+          name: microregionId
+          schema:
+            type: string
+        - in: query
+          name: biomeId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated counties
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountyListResponse'
+        '401':
+          description: Not authenticated
+
+  /api/counties/{id}:
+    get:
+      tags: [Counties]
+      summary: Get county by ID
+      description: Includes embedded status (endangeredPeople, disasterRate, hidroRisk). Emissions are a separate endpoint.
+      operationId: getCounty
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: County found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/County'
+        '401':
+          description: Not authenticated
+        '404':
+          description: Not found
+
+  /api/counties/{id}/emissions:
+    get:
+      tags: [Counties]
+      summary: List county emissions
+      operationId: listCountyEmissions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [year, value, sector, category, subCategory, product, activity, actionType, gasType, detail]
+            default: year
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: q
+          schema:
+            type: string
+        - in: query
+          name: year
+          schema:
+            type: integer
+        - in: query
+          name: sector
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated emissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountyEmissionListResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: County not found

@@ -5,12 +5,25 @@ const assetRoutes = require('./routes/assetRoutes');
 const surveyRoutes = require('./routes/surveyRoutes');
 const userRoutes = require('./routes/userRoutes');
 const actionLogRoutes = require('./routes/actionLogRoutes');
+const { createGeoRouter } = require('./routes/geoRoutes');
+const {
+  listRegions,
+  getRegionById,
+  listStates,
+  getStateById,
+  listMicroregions,
+  getMicroregionById,
+  listBiomes,
+  getBiomeById,
+} = require('./controllers/geoController');
+const countyRoutes = require('./routes/countyRoutes');
 const { actionLogMiddleware } = require('./middleware/actionLogMiddleware');
 const { securityHeaders, apiRateLimiter, authRateLimiter } = require('./middleware/security');
 const { errorHandler } = require('./middleware/errorMiddleware');
 
 // Register concrete Asset subclass models once for the API process.
 require('./models/assets');
+require('./models/geo');
 
 const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '100kb';
 
@@ -44,6 +57,27 @@ function createApp({ fallback } = {}) {
   app.use('/api/surveys', surveyRoutes);
   app.use('/api/permissions', require('./routes/permissionRoutes'));
   app.use('/api/logs', actionLogRoutes);
+  app.use(
+    '/api/regions',
+    createGeoRouter({ list: listRegions, getById: getRegionById, idLabel: 'Region id' })
+  );
+  app.use(
+    '/api/states',
+    createGeoRouter({ list: listStates, getById: getStateById, idLabel: 'State id' })
+  );
+  app.use(
+    '/api/microregions',
+    createGeoRouter({
+      list: listMicroregions,
+      getById: getMicroregionById,
+      idLabel: 'Microregion id',
+    })
+  );
+  app.use(
+    '/api/biomes',
+    createGeoRouter({ list: listBiomes, getById: getBiomeById, idLabel: 'Biome id' })
+  );
+  app.use('/api/counties', countyRoutes);
   app.use('/api/reports', require('./routes/reportsProxyRoutes'));
 
   if (typeof fallback === 'function') {

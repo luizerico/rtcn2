@@ -43,6 +43,12 @@ const adminSections = [
     visible: (_can: ReturnType<typeof useAccess>['can'], isAdmin: boolean) => isAdmin,
   },
   {
+    href: '/admin/geography',
+    title: 'Geography',
+    description: 'Browse the IBGE region, state, and microregion catalog (read-only).',
+    visible: (_can: ReturnType<typeof useAccess>['can'], isAdmin: boolean) => isAdmin,
+  },
+  {
     href: '/surveys',
     title: 'Surveys',
     description: 'Create Survey assets with questions and visualize SurveyResponse answers.',
