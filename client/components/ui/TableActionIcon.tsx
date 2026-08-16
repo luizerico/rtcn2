@@ -13,7 +13,8 @@ export type TableActionIconName =
   | 'members'
   | 'disconnect'
   | 'answer'
-  | 'results';
+  | 'results'
+  | 'view';
 
 type IconProps = SVGProps<SVGSVGElement>;
 
@@ -113,6 +114,13 @@ export function TableActionIcon({ name }: { name: TableActionIconName }) {
           <path d="M8 17V10" />
           <path d="M12 17V7" />
           <path d="M16 17v-4" />
+        </Svg>
+      );
+    case 'view':
+      return (
+        <Svg>
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+          <circle cx="12" cy="12" r="3" />
         </Svg>
       );
     default:

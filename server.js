@@ -21,6 +21,8 @@ const handle = nextApp.getRequestHandler();
 
 async function start() {
   await connectDB();
+  const { startSyncStatusWatchdog } = require('./api/services/geoSyncService');
+  startSyncStatusWatchdog();
   await nextApp.prepare();
 
   const server = createApp({

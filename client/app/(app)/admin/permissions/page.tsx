@@ -4,7 +4,7 @@ import { FormEvent, Fragment, useEffect, useMemo, useState } from 'react';
 import { apiGet } from '@/lib/apiUtils';
 import PermissionModal from '@/components/ui/PermissionModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
-import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
+import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useAccess } from '@/components/AccessProvider';
 import { AccessPrimaryButton } from '@/components/ui/AccessControls';
 import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
@@ -474,17 +474,13 @@ export default function AdminPermissionsPage() {
                 ))}
               </select>
             </label>
-            <button
-              type="button"
-              onClick={() => setShowFilters((prev) => !prev)}
-              className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--foreground)] hover:bg-[var(--accent-soft)]/40"
-              aria-expanded={showFilters}
-            >
-              {showFilters ? 'Hide filters' : 'Show filters'}
-            </button>
-            {isAdmin ? (
-              <ColumnVisibilityMenu columns={columns} isVisible={isVisible} toggle={toggle} />
-            ) : null}
+            <TableOptionsMenu
+              columns={isAdmin ? columns : []}
+              isVisible={isAdmin ? isVisible : undefined}
+              toggle={isAdmin ? toggle : undefined}
+              showFilters={showFilters}
+              onToggleFilters={() => setShowFilters((prev) => !prev)}
+            />
           </div>
         </div>
 

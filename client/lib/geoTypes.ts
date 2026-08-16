@@ -87,6 +87,65 @@ export interface CountyEmissionRecord {
   activity?: string;
 }
 
+export interface GeoIndicatorRecord {
+  _id: string;
+  kind: 'county' | 'state' | 'region';
+  subjectId: string;
+  ibgeId: string;
+  source: string;
+  series: string;
+  year: number;
+  value: number;
+  unit?: string;
+  categoryId?: string;
+  category?: string;
+  fetchedAt?: string;
+}
+
+export interface GeoDisasterRecord {
+  _id: string;
+  sourceId: string;
+  county?: string;
+  ibgeId: string;
+  occurredAt?: string;
+  cobrade?: string;
+  typeLabel?: string;
+  recognition?: 'none' | 'emergency' | 'calamity';
+  affectedPeople?: number;
+  damages?: number;
+}
+
+export interface GeoAmendmentRecord {
+  _id: string;
+  sourceId: string;
+  kind: 'county' | 'state' | 'region';
+  subjectId: string;
+  ibgeId: string;
+  county?: string;
+  state?: string;
+  region?: string;
+  year: number;
+  code?: string;
+  author?: string;
+  authorType?: string;
+  amendmentType?: 'individual' | 'bancada' | 'comissao' | 'relator' | 'other';
+  function?: string;
+  functionName?: string;
+  subfunction?: string;
+  subfunctionName?: string;
+  grupo?: string;
+  expenseGroup?: string;
+  purpose?: string;
+  action?: string;
+  actionName?: string;
+  target?: string;
+  targetCode?: string;
+  targetType?: string;
+  committed?: number;
+  paid?: number;
+  empenhado?: number;
+}
+
 export function geoLabel(ref?: GeoRef | string | null): string {
   if (!ref) return '—';
   if (typeof ref === 'string') return ref;

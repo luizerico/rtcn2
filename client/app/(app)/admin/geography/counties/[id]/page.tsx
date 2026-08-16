@@ -16,6 +16,9 @@ import {
   type CountyRecord,
   type YearlyValue,
 } from '@/lib/geoTypes';
+import GeoMapPanel from '@/components/geo/GeoMapPanel';
+import GeoIndicatorPanels from '@/components/geo/GeoIndicatorPanels';
+import SortableDetailTable, { type SortableColumn } from '@/components/geo/SortableDetailTable';
 
 type EmissionSortField =
   | 'year'
@@ -39,7 +42,7 @@ const EMISSION_COLUMNS: ColumnDef[] = [
   { id: 'actionType', label: 'Action type', defaultVisible: false },
   { id: 'gasType', label: 'Gas type', defaultVisible: false },
   { id: 'detail', label: 'Detail', defaultVisible: false },
-  { id: 'value', label: 'Value', align: 'right' },
+  { id: 'value', label: 'Tons', align: 'right' },
 ];
 
 const EMPTY_EMISSION_FILTERS = { q: '', year: '', sector: '' };
@@ -80,33 +83,50 @@ function YearlyTable({
   extraHeader?: string;
   extraCell?: (row: YearlyValue & { riskType?: string }) => string;
 }) {
+  const columns = useMemo<Array<SortableColumn<YearlyValue & { riskType?: string }>>>(() => {
+    const cols: Array<SortableColumn<YearlyValue & { riskType?: string }>> = [
+      {
+        id: 'year',
+        label: 'Year',
+        type: 'number',
+        getValue: (row) => row.year ?? null,
+        format: (row) => (row.year != null ? String(row.year) : '—'),
+        className: 'tabular-nums',
+      },
+      {
+        id: 'value',
+        label: 'Value',
+        type: 'number',
+        getValue: (row) => row.value ?? null,
+        format: (row) => (row.value != null ? String(row.value) : '—'),
+        className: 'tabular-nums',
+      },
+    ];
+    if (extraHeader) {
+      cols.push({
+        id: 'extra',
+        label: extraHeader,
+        type: 'text',
+        getValue: (row) => extraCell?.(row) || '',
+        format: (row) => extraCell?.(row) || '—',
+      });
+    }
+    return cols;
+  }, [extraHeader, extraCell]);
+
   return (
     <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
       <div className="border-b border-[var(--border)] px-4 py-3">
         <h2 className="font-semibold">{title}</h2>
       </div>
-      {rows.length === 0 ? (
-        <p className="p-4 text-sm text-[var(--muted)]">No records.</p>
-      ) : (
-        <table className="min-w-full text-left text-sm">
-          <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
-            <tr>
-              <th className="px-4 py-2 font-medium">Year</th>
-              <th className="px-4 py-2 font-medium">Value</th>
-              {extraHeader ? <th className="px-4 py-2 font-medium">{extraHeader}</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr key={`${row.year}-${index}`} className="border-b border-[var(--border)] last:border-0">
-                <td className="px-4 py-2">{row.year ?? '—'}</td>
-                <td className="px-4 py-2">{row.value ?? '—'}</td>
-                {extraHeader ? <td className="px-4 py-2">{extraCell?.(row) || '—'}</td> : null}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <SortableDetailTable
+        rows={rows}
+        columns={columns}
+        rowKey={(row, index) => `${row.year}-${index}`}
+        empty="No records."
+        defaultSort="year"
+        defaultOrder="desc"
+      />
     </section>
   );
 }
@@ -232,6 +252,12 @@ export default function CountyDetailPage() {
 
       {county ? (
         <>
+          <GeoMapPanel
+            kind="county"
+            code={county.IBGECode}
+            label={county.name}
+            marker={county.location}
+          />
           <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
             <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>
@@ -291,6 +317,8 @@ export default function CountyDetailPage() {
             <YearlyTable title="Disaster rate" rows={status?.disasterRate || []} />
             <YearlyTable title="Hidro risk" rows={status?.hidroRisk || []} />
           </div>
+
+          <GeoIndicatorPanels kind="county" id={county._id} />
 
           <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)]">

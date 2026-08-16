@@ -16,6 +16,7 @@ function MicroregionsList() {
       showState
       showRegionFilter
       showStateFilter
+      countiesHref={(row) => `/admin/geography/counties?microregionId=${row._id}`}
     />
   );
 }

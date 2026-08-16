@@ -51,15 +51,22 @@ function actionLogMiddleware(req, res, next) {
         req.body?.username ||
         req.body?.email ||
         '',
+      action: req.actionLogContext?.action,
+      resourceType: req.actionLogContext?.resourceType,
+      resourceId: req.actionLogContext?.resourceId,
       method: req.method,
       path: (req.originalUrl || req.url || '').split('?')[0],
       statusCode: res.statusCode,
       success: res.statusCode >= 200 && res.statusCode < 400,
+      message: req.actionLogContext?.message,
       ...meta,
       meta: {
         durationMs: Date.now() - startedAt,
         bodyKeys,
         query: req.query || {},
+        ...(req.actionLogContext?.meta && typeof req.actionLogContext.meta === 'object'
+          ? req.actionLogContext.meta
+          : {}),
       },
     });
   });

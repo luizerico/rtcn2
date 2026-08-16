@@ -9,6 +9,8 @@ export default function RegionDetailPage() {
       endpoint="/regions"
       listHref="/admin/geography/regions"
       listLabel="Regions"
+      mapKind="region"
+      indicatorKind="region"
       childLinks={(record) => [
         { label: 'States in this region', href: `/admin/geography/states?regionId=${record._id}` },
         {

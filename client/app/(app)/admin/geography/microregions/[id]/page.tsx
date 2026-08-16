@@ -11,6 +11,12 @@ export default function MicroregionDetailPage() {
       listLabel="Microregions"
       showRegion
       showState
+      childLinks={(record) => [
+        {
+          label: 'Counties in this microregion',
+          href: `/admin/geography/counties?microregionId=${record._id}`,
+        },
+      ]}
     />
   );
 }

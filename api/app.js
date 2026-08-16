@@ -78,6 +78,8 @@ function createApp({ fallback } = {}) {
     createGeoRouter({ list: listBiomes, getById: getBiomeById, idLabel: 'Biome id' })
   );
   app.use('/api/counties', countyRoutes);
+  app.use('/api/geo/malhas', require('./routes/malhasRoutes'));
+  app.use('/api/geo', require('./routes/geoSyncRoutes'));
   app.use('/api/reports', require('./routes/reportsProxyRoutes'));
 
   if (typeof fallback === 'function') {
