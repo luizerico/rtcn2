@@ -32,6 +32,8 @@ tags:
   - name: Microregions
   - name: Biomes
   - name: Counties
+  - name: Malhas
+  - name: GeoIndicators
 
 components:
   securitySchemes:
@@ -2715,3 +2717,393 @@ paths:
           description: Not authenticated
         '404':
           description: County not found
+
+  /api/geo/malhas/{kind}/{code}:
+    get:
+      tags: [Malhas]
+      summary: Get IBGE boundary GeoJSON
+      description: |
+        Proxies IBGE malhas (v3) GeoJSON for a county, state, or region.
+        Any verified session may read. Geography is reference data, not an RBAC asset class.
+        Region letter codes (N, NE, SE, S, CO) are mapped to IBGE ids 1–5.
+        Responses may be served from an in-memory or Mongo (`geo_malhas`) cache filled on first fetch.
+      operationId: getGeoMalha
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: kind
+          required: true
+          schema:
+            type: string
+            enum: [county, state, region]
+        - in: path
+          name: code
+          required: true
+          schema:
+            type: string
+          description: County IBGECode (7 digits), state UF, or region letter/id
+      responses:
+        '200':
+          description: GeoJSON Feature or FeatureCollection from IBGE
+          content:
+            application/geo+json:
+              schema:
+                type: object
+        '400':
+          description: Invalid kind or code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: IBGE boundary not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/geo/malhas/stats:
+    get:
+      tags: [Malhas]
+      summary: Map cache coverage
+      description: Admin-only counts of cached IBGE polygons vs catalog rows.
+      operationId: getGeoMalhaStats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cached vs catalog counts by kind
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cached:
+                    type: object
+                    properties:
+                      region: { type: integer }
+                      state: { type: integer }
+                      county: { type: integer }
+                  catalog:
+                    type: object
+                    properties:
+                      region: { type: integer }
+                      state: { type: integer }
+                      county: { type: integer }
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin required
+
+  /api/geo/malhas/sync:
+    post:
+      tags: [Malhas]
+      summary: Sync map cache from IBGE
+      description: |
+        Admin-only. Fetches IBGE malhas for catalog regions, states, and counties
+        (those with an IBGECode) and upserts `geo_malhas`. Skips rows already cached
+        unless `force` is true. Processes up to 40 IBGE fetches per request; repeat
+        until `done` is true.
+      operationId: syncGeoMalhas
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  default: false
+                kinds:
+                  type: array
+                  items:
+                    type: string
+                    enum: [region, state, county]
+      responses:
+        '200':
+          description: Batch sync result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  done: { type: boolean }
+                  force: { type: boolean }
+                  catalog: { type: integer }
+                  skipped: { type: integer }
+                  fetched: { type: integer }
+                  failed: { type: integer }
+                  remaining: { type: integer }
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin required
+        '409':
+          description: Sync already running
+
+  /api/geo/sync/status:
+    get:
+      tags: [GeoIndicators]
+      summary: Geography source sync status
+      description: |
+        Admin-only. Reads `geo_sync_state` for each geography source.
+        By default also probes IBGE SIDRA metadata (or S2ID CKAN / map-cache coverage)
+        to flag newer origin data. Pass `probe=0` for a cheap stored-only read (UI polling).
+        Leftover `syncing` rows are reset on server start. Each started sync also
+        arms a 30-minute timeout; if that job is still running it is reset so a
+        new sync can be started.
+      operationId: getGeoSyncStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: probe
+          schema:
+            type: string
+            enum: ['0', '1']
+            default: '1'
+          description: Set to `0` to skip origin probes and return stored sync state only.
+      responses:
+        '200':
+          description: Per-source freshness and last sync
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        source: { type: string }
+                        label: { type: string }
+                        description: { type: string }
+                        status: { type: string }
+                        upToDate: { type: boolean }
+                        lastSyncedAt: { type: string, format: date-time, nullable: true }
+                        lastSuccessAt: { type: string, format: date-time, nullable: true }
+                        originPeriod: { type: string }
+                        rowCount: { type: integer }
+                        lastError: { type: string }
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin required
+
+  /api/geo/sync:
+    post:
+      tags: [GeoIndicators]
+      summary: Sync one geography source
+      description: |
+        Admin-only. Starts a background sync for a single source (`malhas`, `pib`, `pam`,
+        `ppm`, `cempre`, `pia`, `munic`, `s2id`, `siconfi`, `transfers`, `emendas`) and returns immediately. Poll
+        `GET /api/geo/sync/status?probe=0` until `status` leaves `syncing`.
+        Skips the bulk download when the origin period or fingerprint is unchanged
+        unless `force` is true. SIDRA sources fetch only years newer than the last
+        successful `originPeriod` (up to 5 years on first run).
+        Each start is written to action logs as `geo.sync_start`; completion (updated,
+        skipped, or failed) is written as `geo.sync` with `fetched`, `failed`, `rowCount`,
+        `originPeriod`, the upstream `url` plus query `params`, and a `stages` trail
+        (`fetch`, `process`, `database`, `save`). Set `DEBUG=true` (or `GEO_SYNC_DEBUG=true`)
+        to include the full error stack in `meta.debugError`.
+      operationId: syncGeoSource
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source]
+              properties:
+                source:
+                  type: string
+                  enum: [malhas, pib, pam, ppm, cempre, pia, munic, s2id, siconfi, transfers, emendas]
+                force:
+                  type: boolean
+                  default: false
+      responses:
+        '202':
+          description: Sync accepted and running in the background
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  source: { type: string }
+                  accepted: { type: boolean }
+                  status: { type: string, enum: [syncing] }
+        '400':
+          description: Invalid source
+        '401':
+          description: Not authenticated
+        '403':
+          description: Admin required
+        '409':
+          description: This source is already syncing
+
+  /api/geo/indicators:
+    get:
+      tags: [GeoIndicators]
+      summary: List cached IBGE indicators
+      description: Paginated SIDRA, SICONFI, transfer, and emenda series for a county, state, or region. Any verified session may read.
+      operationId: listGeoIndicators
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: kind
+          schema:
+            type: string
+            enum: [county, state, region]
+        - in: query
+          name: id
+          schema:
+            type: string
+          description: County, state, or region ObjectId (`subjectId`)
+        - in: query
+          name: source
+          schema:
+            type: string
+            enum: [pib, pam, ppm, cempre, pia, munic, siconfi, transfers, emendas]
+        - in: query
+          name: series
+          schema:
+            type: string
+        - in: query
+          name: year
+          schema:
+            type: integer
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [year, series, source, value]
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Paginated indicators
+        '401':
+          description: Not authenticated
+
+  /api/geo/disasters:
+    get:
+      tags: [GeoIndicators]
+      summary: List cached S2ID disaster events
+      description: Paginated recent disaster records keyed by municipal IBGE code. Any verified session may read.
+      operationId: listGeoDisasters
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: countyId
+          schema:
+            type: string
+        - in: query
+          name: ibgeId
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Paginated disasters
+        '401':
+          description: Not authenticated
+
+  /api/geo/amendments:
+    get:
+      tags: [GeoIndicators]
+      summary: List cached parliamentary amendments
+      description: Paginated emenda records for a county, state, or region. Any verified session may read.
+      operationId: listGeoAmendments
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: kind
+          schema:
+            type: string
+            enum: [county, state, region]
+        - in: query
+          name: id
+          schema:
+            type: string
+          description: County, state, or region ObjectId
+        - in: query
+          name: ibgeId
+          schema:
+            type: string
+        - in: query
+          name: year
+          schema:
+            type: integer
+        - in: query
+          name: amendmentType
+          schema:
+            type: string
+            enum: [individual, bancada, comissao, relator, other]
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [year, author, amendmentType, function, subfunction, grupo, purpose, action, committed, paid, code, target]
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Paginated amendments
+        '401':
+          description: Not authenticated
+

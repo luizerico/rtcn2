@@ -15,6 +15,7 @@ import {
   geoLabel,
   type BiomeRecord,
   type CountyRecord,
+  type MicroregionRecord,
   type RegionRecord,
   type StateRecord,
 } from '@/lib/geoTypes';
@@ -26,6 +27,7 @@ const COLUMNS: ColumnDef[] = [
   { id: 'IBGECode', label: 'IBGE' },
   { id: 'code', label: 'Code' },
   { id: 'state', label: 'State' },
+  { id: 'microregion', label: 'Microregion' },
   { id: 'region', label: 'Region' },
   { id: 'biome', label: 'Biome' },
   { id: 'population', label: 'Population' },
@@ -41,6 +43,7 @@ export default function CountyCatalogList() {
       q: searchParams.get('q') || '',
       regionId: searchParams.get('regionId') || '',
       stateId: searchParams.get('stateId') || '',
+      microregionId: searchParams.get('microregionId') || '',
       biomeId: searchParams.get('biomeId') || '',
     }),
     [searchParams]
@@ -58,6 +61,7 @@ export default function CountyCatalogList() {
   const [error, setError] = useState<string | null>(null);
   const [regionOptions, setRegionOptions] = useState<RegionRecord[]>([]);
   const [stateOptions, setStateOptions] = useState<StateRecord[]>([]);
+  const [microregionOptions, setMicroregionOptions] = useState<MicroregionRecord[]>([]);
   const [biomeOptions, setBiomeOptions] = useState<BiomeRecord[]>([]);
 
   const { isVisible, toggle } = useColumnVisibility('admin-geo-counties', COLUMNS, {
@@ -103,6 +107,36 @@ export default function CountyCatalogList() {
   }, [loadOptions]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadMicroregions() {
+      try {
+        const params = new URLSearchParams({ limit: '100', sort: 'name', order: 'asc' });
+        if (filters.stateId) params.set('stateId', filters.stateId);
+        const result = await apiGet<PaginatedList<MicroregionRecord>>(`/microregions?${params}`);
+        let items = result.items || [];
+        const selectedId = filters.microregionId;
+        if (selectedId && !items.some((row) => row._id === selectedId)) {
+          try {
+            const extra = await apiGet<MicroregionRecord>(`/microregions/${selectedId}`);
+            items = [extra, ...items];
+          } catch {
+            // Keep the raw id in the select even if the label fetch fails.
+          }
+        }
+        if (!cancelled) setMicroregionOptions(items);
+      } catch {
+        if (!cancelled) setMicroregionOptions([]);
+      }
+    }
+
+    void loadMicroregions();
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.microregionId, filters.stateId]);
+
+  useEffect(() => {
     void loadRows();
   }, [loadRows]);
 
@@ -113,7 +147,7 @@ export default function CountyCatalogList() {
   };
 
   const onReset = () => {
-    const empty = { q: '', regionId: '', stateId: '', biomeId: '' };
+    const empty = { q: '', regionId: '', stateId: '', microregionId: '', biomeId: '' };
     setFilters(empty);
     setApplied(empty);
     setSort('name');
@@ -186,13 +220,34 @@ export default function CountyCatalogList() {
             <span className="text-[var(--muted)]">State</span>
             <select
               value={filters.stateId}
-              onChange={(e) => setFilters((prev) => ({ ...prev, stateId: e.target.value }))}
+              onChange={(e) =>
+                setFilters((prev) => ({ ...prev, stateId: e.target.value, microregionId: '' }))
+              }
               className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
             >
               <option value="">All</option>
               {stateOptions.map((state) => (
                 <option key={state._id} value={state._id}>
                   {state.code} · {state.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">Microregion</span>
+            <select
+              value={filters.microregionId}
+              onChange={(e) => setFilters((prev) => ({ ...prev, microregionId: e.target.value }))}
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            >
+              <option value="">All</option>
+              {filters.microregionId &&
+              !microregionOptions.some((row) => row._id === filters.microregionId) ? (
+                <option value={filters.microregionId}>{filters.microregionId}</option>
+              ) : null}
+              {microregionOptions.map((micro) => (
+                <option key={micro._id} value={micro._id}>
+                  {micro.code ? `${micro.code} · ${micro.name}` : micro.name}
                 </option>
               ))}
             </select>
@@ -305,6 +360,7 @@ export default function CountyCatalogList() {
                     </th>
                   ) : null}
                   {isVisible('state') ? <th className="px-4 py-3 font-medium">State</th> : null}
+                  {isVisible('microregion') ? <th className="px-4 py-3 font-medium">Microregion</th> : null}
                   {isVisible('region') ? <th className="px-4 py-3 font-medium">Region</th> : null}
                   {isVisible('biome') ? <th className="px-4 py-3 font-medium">Biome</th> : null}
                   {isVisible('population') ? (
@@ -352,6 +408,20 @@ export default function CountyCatalogList() {
                           </Link>
                         ) : (
                           geoLabel(row.state)
+                        )}
+                      </td>
+                    ) : null}
+                    {isVisible('microregion') ? (
+                      <td className="px-4 py-3">
+                        {geoId(row.microregion) ? (
+                          <Link
+                            href={`/admin/geography/microregions/${geoId(row.microregion)}`}
+                            className="text-[var(--accent)] hover:underline"
+                          >
+                            {geoLabel(row.microregion)}
+                          </Link>
+                        ) : (
+                          geoLabel(row.microregion)
                         )}
                       </td>
                     ) : null}

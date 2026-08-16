@@ -9,6 +9,8 @@ export interface ColumnDef {
   defaultVisible?: boolean;
   /** Cannot be hidden (e.g. primary name column). */
   alwaysVisible?: boolean;
+  /** Alignment of the column. */
+  align?: 'left' | 'right' | 'center';
 }
 
 function storageKey(tableId: string) {

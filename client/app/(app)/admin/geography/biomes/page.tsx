@@ -12,6 +12,7 @@ function BiomesList() {
       endpoint="/biomes"
       tableId="admin-geo-biomes"
       detailBase="/admin/geography/biomes"
+      countiesHref={(row) => `/admin/geography/counties?biomeId=${row._id}`}
     />
   );
 }

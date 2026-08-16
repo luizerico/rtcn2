@@ -6,7 +6,7 @@ import { useToast } from '@/components/ToastProvider';
 import EditMembersModal, { EditMembersSavePayload } from '@/components/ui/EditMembersModal';
 import CreateGroupModal from '@/components/ui/CreateGroupModal';
 import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
-import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
+import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { useAccess } from '@/components/AccessProvider';
 import { AccessPrimaryButton } from '@/components/ui/AccessControls';
@@ -253,17 +253,13 @@ export default function AdminGroupsPage() {
             <span>
               Sorted by {sort} ({order})
             </span>
-            <button
-              type="button"
-              onClick={() => setShowFilters((prev) => !prev)}
-              className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--foreground)] hover:bg-[var(--accent-soft)]/40"
-              aria-expanded={showFilters}
-            >
-              {showFilters ? 'Hide filters' : 'Show filters'}
-            </button>
-            {isAdmin ? (
-              <ColumnVisibilityMenu columns={columns} isVisible={isVisible} toggle={toggle} />
-            ) : null}
+            <TableOptionsMenu
+              columns={isAdmin ? columns : []}
+              isVisible={isAdmin ? isVisible : undefined}
+              toggle={isAdmin ? toggle : undefined}
+              showFilters={showFilters}
+              onToggleFilters={() => setShowFilters((prev) => !prev)}
+            />
           </div>
         </div>
 

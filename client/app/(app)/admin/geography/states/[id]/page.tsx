@@ -10,6 +10,8 @@ export default function StateDetailPage() {
       listHref="/admin/geography/states"
       listLabel="States"
       showRegion
+      mapKind="state"
+      indicatorKind="state"
       childLinks={(record) => [
         {
           label: 'Microregions in this state',

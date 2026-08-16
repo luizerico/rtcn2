@@ -10,11 +10,14 @@ function escapeRegex(value) {
  * @param {string} defaultSort
  * @returns {{ page: number, limit: number, sortField: string, sortOrder: 1|-1, orderLabel: 'asc'|'desc' }}
  */
-function parseListQuery(query, sortableFields, defaultSort = 'createdAt') {
+function parseListQuery(query, sortableFields, defaultSort = 'createdAt', options = {}) {
   const allowed = sortableFields instanceof Set ? sortableFields : new Set(sortableFields);
   const sortField = allowed.has(query.sort) ? String(query.sort) : defaultSort;
   const sortOrder = String(query.order || 'desc').toLowerCase() === 'asc' ? 1 : -1;
-  const { page, limit } = parsePagination(query, { defaultLimit: 25, maxLimit: 100 });
+  const { page, limit } = parsePagination(query, {
+    defaultLimit: options.defaultLimit || 25,
+    maxLimit: options.maxLimit || 100,
+  });
   return {
     page,
     limit,

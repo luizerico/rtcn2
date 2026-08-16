@@ -12,6 +12,7 @@ function RegionsList() {
       endpoint="/regions"
       tableId="admin-geo-regions"
       detailBase="/admin/geography/regions"
+      countiesHref={(row) => `/admin/geography/counties?regionId=${row._id}`}
     />
   );
 }

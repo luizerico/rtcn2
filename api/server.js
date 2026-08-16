@@ -10,6 +10,8 @@ dotenv.config();
 
 async function startServer() {
   await connectDB();
+  const { startSyncStatusWatchdog } = require('./services/geoSyncService');
+  startSyncStatusWatchdog();
 
   const app = createApp();
   const PORT = process.env.API_PORT || process.env.PORT || 5000;
