@@ -61,9 +61,10 @@ docker run -d --name projects-mongo -p 27017:27017 mongo:7.0
 ```bash
 npm run db:init
 npm run db:seed-geo
+npm run db:import-data
 ```
 
-Sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` (username is not used for login). `db:seed-geo` imports IBGE region, state, microregion, biome, and county sample data (reference catalog, not an RBAC asset class). County status series and emissions are stored in separate collections; the large counties file is streamed.
+Sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` (username is not used for login). `db:seed-geo` imports IBGE region, state, microregion, biome, and county sample data (reference catalog, not an RBAC asset class). County status series and emissions are stored in separate collections; the large counties file is streamed. `db:import-data` upserts sponsors, opportunities, and projects from `01_sample_data` into the matching collections (run `db:init` first so imported assets have an owner). Source rows with `isDeleted: true` are skipped unless `IMPORT_DELETED=1`. Geography, users, and legacy permission dumps are not imported by this command.
 
 ### 5. Start the app (UI + API together)
 
@@ -177,6 +178,7 @@ Spec: [`docs/openapi.yaml`](docs/openapi.yaml)
 | `npm run api:only` | Legacy API-only server (optional) |
 | `npm run db:init` | Seed admin user/group/permissions |
 | `npm run db:seed-geo` | Idempotent import of region/state/microregion/biome/county sample JSON (streams counties; status + emissions split) |
+| `npm run db:import-data` | Upsert sponsors, opportunities, and projects from `01_sample_data` (set `IMPORT_DELETED=1` to include source-deleted rows) |
 
 ## Project layout
 

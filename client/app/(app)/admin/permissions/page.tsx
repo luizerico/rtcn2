@@ -45,6 +45,9 @@ const FALLBACK_TABS: CatalogClass[] = [
   { resourceType: 'DASHBOARD', label: 'Dashboards', objects: [] },
   { resourceType: 'DATASET', label: 'Datasets', objects: [] },
   { resourceType: 'SURVEY', label: 'Surveys', objects: [] },
+  { resourceType: 'SPONSOR', label: 'Sponsors', objects: [] },
+  { resourceType: 'OPPORTUNITY', label: 'Opportunities', objects: [] },
+  { resourceType: 'PROJECT', label: 'Projects', objects: [] },
 ];
 
 const PERMISSION_COLUMNS: ColumnDef[] = [

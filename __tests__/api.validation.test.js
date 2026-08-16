@@ -110,6 +110,11 @@ describe('route schemas', () => {
 
   it('createAssetBody rejects survey kinds and empty name', () => {
     expect(() => createAssetBody({ body: { kind: 'SURVEY', name: 'x' } })).toThrow(/surveys API/);
+    expect(() => createAssetBody({ body: { kind: 'SPONSOR', name: 'x' } })).toThrow(/sponsors API/);
+    expect(() => createAssetBody({ body: { kind: 'OPPORTUNITY', name: 'x' } })).toThrow(
+      /opportunities API/
+    );
+    expect(() => createAssetBody({ body: { kind: 'PROJECT', name: 'x' } })).toThrow(/projects API/);
     expect(() => createAssetBody({ body: { kind: 'WIDGET', name: 'x' } })).toThrow(/Invalid asset kind/);
     expect(createAssetBody({ body: { name: ' Doc ' } }).kind).toBe('DOCUMENT');
   });

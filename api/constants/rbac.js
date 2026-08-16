@@ -18,6 +18,9 @@ const RESOURCE_TYPE_LABELS = {
   DASHBOARD: 'Dashboards',
   DATASET: 'Datasets',
   SURVEY: 'Surveys',
+  SPONSOR: 'Sponsors',
+  OPPORTUNITY: 'Opportunities',
+  PROJECT: 'Projects',
 };
 
 const ACTION_LABELS = {

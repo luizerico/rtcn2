@@ -20,6 +20,9 @@ type NavItem = {
 type NavIconName =
   | 'home'
   | 'surveys'
+  | 'sponsors'
+  | 'opportunities'
+  | 'projects'
   | 'admin'
   | 'users'
   | 'groups'
@@ -35,6 +38,9 @@ type NavIconName =
 const NAV_ICON_BY_HREF: Record<string, NavIconName> = {
   '/': 'home',
   '/surveys': 'surveys',
+  '/sponsors': 'sponsors',
+  '/opportunities': 'opportunities',
+  '/projects': 'projects',
   '/admin': 'admin',
   '/admin/users': 'users',
   '/admin/groups': 'groups',
@@ -71,6 +77,28 @@ function NavIcon({ name, className = 'h-5 w-5' }: { name: NavIconName; className
           <path {...stroke} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
           <path {...stroke} d="M14 2v6h6" />
           <path {...stroke} d="M8 13h8M8 17h5" />
+        </svg>
+      );
+    case 'sponsors':
+      return (
+        <svg {...common}>
+          <path {...stroke} d="M3 21h18" />
+          <path {...stroke} d="M5 21V8l7-5 7 5v13" />
+          <path {...stroke} d="M9 21v-6h6v6" />
+        </svg>
+      );
+    case 'opportunities':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" {...stroke} />
+          <path {...stroke} d="M12 8v8M8 12h8" />
+        </svg>
+      );
+    case 'projects':
+      return (
+        <svg {...common}>
+          <path {...stroke} d="M4 7h16v12H4z" />
+          <path {...stroke} d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
         </svg>
       );
     case 'admin':
@@ -173,11 +201,29 @@ const links: NavItem[] = [
     visible: (can) => can('SURVEY:READ', { allowAnyInstance: true }),
   },
   {
+    href: '/sponsors',
+    label: 'Sponsors',
+    visible: (can) => can('SPONSOR:READ', { allowAnyInstance: true }),
+  },
+  {
+    href: '/opportunities',
+    label: 'Opportunities',
+    visible: (can) => can('OPPORTUNITY:READ', { allowAnyInstance: true }),
+  },
+  {
+    href: '/projects',
+    label: 'Projects',
+    visible: (can) => can('PROJECT:READ', { allowAnyInstance: true }),
+  },
+  {
     href: '/admin',
     label: 'Admin',
     visible: (can, isAdmin) =>
       isAdmin ||
       can('SURVEY:READ', { allowAnyInstance: true }) ||
+      can('SPONSOR:READ', { allowAnyInstance: true }) ||
+      can('OPPORTUNITY:READ', { allowAnyInstance: true }) ||
+      can('PROJECT:READ', { allowAnyInstance: true }) ||
       can('USER:READ') ||
       can('GROUP:READ') ||
       can('LOG:READ'),

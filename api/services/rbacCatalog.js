@@ -86,9 +86,7 @@ async function listAllPermissions() {
   if (!permissions.length) return [];
 
   const { userNameById, groupNameById } = await resolvePrincipalNames(permissions);
-  const surveyIds = permissions
-    .filter((row) => row.resourceType === 'SURVEY' && row.resourceId)
-    .map((row) => row.resourceId);
+  const surveyIds = permissions.filter((row) => row.resourceId).map((row) => row.resourceId);
   const surveyOwners = await buildAssetOwnerMap(surveyIds);
 
   return permissions.map((row) => {
@@ -98,10 +96,7 @@ async function listAllPermissions() {
         ? userNameById.get(principal.principalId) || 'Unknown user'
         : groupNameById.get(principal.principalId) || 'Unknown group';
 
-    const owner =
-      row.resourceType === 'SURVEY' && row.resourceId
-        ? surveyOwners.get(String(row.resourceId)) || null
-        : null;
+    const owner = row.resourceId ? surveyOwners.get(String(row.resourceId)) || null : null;
 
     return {
       _id: row._id,
@@ -141,21 +136,14 @@ async function listPermissionCatalog() {
     objects: assets
       .filter((asset) => String(asset.kind).toUpperCase() === kind)
       .map((asset) => {
-        if (kind === 'SURVEY') {
-          const owner =
-            userDisplayName(asset.ownerId) || userDisplayName(asset.createdBy) || null;
-          return {
-            id: String(asset._id),
-            name: asset.name,
-            label: asset.name,
-            owner,
-            detail: owner ? `Owner: ${owner}` : undefined,
-          };
-        }
+        const owner =
+          userDisplayName(asset.ownerId) || userDisplayName(asset.createdBy) || null;
         return {
           id: String(asset._id),
           name: asset.name,
           label: asset.name,
+          owner,
+          detail: owner ? `Owner: ${owner}` : undefined,
         };
       }),
   }));

@@ -26,6 +26,9 @@ tags:
   - name: Permissions
   - name: Assets
   - name: Surveys
+  - name: Sponsors
+  - name: Opportunities
+  - name: Projects
   - name: Logs
   - name: Regions
   - name: States
@@ -265,7 +268,7 @@ components:
           example: [READ, WRITE]
         resourceType:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY]
+          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
         allObjects:
           type: boolean
           description: When true, grants class-wide (*) access for this group only.
@@ -289,7 +292,7 @@ components:
       properties:
         resourceType:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY]
+          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
         allObjects:
           type: boolean
           description: When true, replaces class-wide (*) ACL rows for this resource type.
@@ -330,7 +333,7 @@ components:
           type: string
         resourceType:
           type: string
-          enum: [USER, GROUP, ASSET, DOCUMENT, DASHBOARD, DATASET, SURVEY]
+          enum: [USER, GROUP, ASSET, DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
         resourceId:
           type: string
           nullable: true
@@ -353,10 +356,10 @@ components:
           type: string
         kind:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY]
+          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
         assetType:
           type: string
-          enum: [Document, Dashboard, Dataset, Survey]
+          enum: [Document, Dashboard, Dataset, Survey, Sponsor, Opportunity, Project]
         createdBy:
           type: string
         updatedBy:
@@ -428,6 +431,271 @@ components:
                 type: string
               value:
                 description: Text, Yes/No, or multiple-choice option
+
+    Sponsor:
+      allOf:
+        - $ref: '#/components/schemas/AssetResource'
+        - type: object
+          required: [orgEmail, origem, contact, phone]
+          properties:
+            orgEmail:
+              type: string
+            origem:
+              type: string
+              enum:
+                - emp_com_fins_lucrativos
+                - emp_publica
+                - ent_sem_fins_lucrativos
+                - fundacoes
+                - gov_estadual
+                - gov_federal
+                - gov_municipal
+                - institutos
+                - org_internacional
+                - pessoa_fisica
+                - sociedade_economia_mista
+            orgUnit:
+              type: string
+            webpage:
+              type: string
+            email:
+              type: string
+            socialMedia:
+              type: string
+            contact:
+              type: string
+            phone:
+              type: string
+            address:
+              type: string
+            city:
+              type: string
+            state:
+              type: string
+            zipCode:
+              type: string
+            country:
+              type: string
+            obs:
+              type: string
+
+    CreateSponsorRequest:
+      type: object
+      required: [name, orgEmail, origem, contact, phone]
+      properties:
+        name:
+          type: string
+        orgName:
+          type: string
+          description: Alias for name
+        orgEmail:
+          type: string
+        origem:
+          type: string
+        contact:
+          type: string
+        phone:
+          type: string
+        description:
+          type: string
+
+    Opportunity:
+      allOf:
+        - $ref: '#/components/schemas/AssetResource'
+        - type: object
+          required: [sponsor, type, category, eligibility, website, submissionMethod, startDate, budget]
+          properties:
+            sponsor:
+              description: Sponsor id or populated sponsor
+            type:
+              type: string
+              enum: [financial, technical, educational, other]
+            category:
+              type: string
+              enum:
+                - call
+                - financing
+                - award
+                - competition
+                - scholarship
+                - cooperation
+                - tax_incentive_law
+                - sponsorship
+                - donation
+                - emergency_transfer
+                - financial_incentive
+                - transfer_fund_to_fund
+                - special_transfers
+                - legal_discretionary_transfers
+                - partnership_management_transfer
+                - special_state_transfer
+                - new_pac
+                - funds
+                - other
+            eligibility:
+              type: string
+              enum:
+                - municipal_public_administration
+                - state_public_administration
+                - public_consortiums
+                - nonprofit_entities
+                - for_profit_companies
+                - icts_heis
+                - startups
+                - s_system
+                - other
+            website:
+              type: string
+            submissionMethod:
+              type: string
+            startDate:
+              type: string
+              format: date-time
+            endDate:
+              type: string
+              format: date-time
+              nullable: true
+            continuous:
+              type: boolean
+            budget:
+              type: number
+            totalBudget:
+              type: number
+              nullable: true
+            currency:
+              type: string
+              example: R$ BRL
+            obs:
+              type: array
+              items:
+                type: string
+            documents:
+              type: array
+              items:
+                type: string
+            areas:
+              type: array
+              items:
+                type: string
+              description: Optional Question ids (catalog not implemented)
+
+    CreateOpportunityRequest:
+      type: object
+      required: [name, description, sponsor, type, category, eligibility, website, submissionMethod, startDate, budget]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        sponsor:
+          type: string
+        type:
+          type: string
+        category:
+          type: string
+        eligibility:
+          type: string
+        website:
+          type: string
+        submissionMethod:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        continuous:
+          type: boolean
+        budget:
+          type: number
+        totalBudget:
+          type: number
+        currency:
+          type: string
+
+    Project:
+      allOf:
+        - $ref: '#/components/schemas/AssetResource'
+        - type: object
+          required: [projWebsite, projStartDate, projBudget, projStatus]
+          properties:
+            opportunity:
+              nullable: true
+            relatedEntity:
+              type: object
+              properties:
+                entityType:
+                  type: string
+                  enum: [county, state, biome, region, microregion]
+                entityId:
+                  type: array
+                  items:
+                    type: string
+            relatedEntities:
+              type: array
+              items:
+                type: object
+            projWebsite:
+              type: string
+            projStartDate:
+              type: string
+              format: date-time
+            projEndDate:
+              type: string
+              format: date-time
+              nullable: true
+            projBudget:
+              type: number
+            currency:
+              type: string
+            projStatus:
+              type: string
+            projComments:
+              type: array
+              items:
+                type: string
+            projDocuments:
+              type: array
+              items:
+                type: string
+            obs:
+              type: string
+            areas:
+              type: array
+              items:
+                type: string
+
+    CreateProjectRequest:
+      type: object
+      required: [name, description, projWebsite, projStartDate, projBudget, projStatus]
+      properties:
+        name:
+          type: string
+        projName:
+          type: string
+          description: Alias for name
+        description:
+          type: string
+        opportunity:
+          type: string
+          nullable: true
+        relatedEntity:
+          type: object
+        projWebsite:
+          type: string
+        projStartDate:
+          type: string
+          format: date-time
+        projEndDate:
+          type: string
+          format: date-time
+        projBudget:
+          type: number
+        currency:
+          type: string
+        projStatus:
+          type: string
 
     ActionLog:
       type: object
@@ -1659,7 +1927,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY]
+            enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
         - in: query
           name: allObjects
           schema:
@@ -2081,6 +2349,337 @@ paths:
           description: Response saved
         '400':
           description: Validation error
+
+  /api/sponsors:
+    get:
+      tags: [Sponsors]
+      summary: List sponsors
+      operationId: listSponsors
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [name, createdAt, updatedAt, origem], default: updatedAt }
+        - in: query
+          name: order
+          schema: { type: string, enum: [asc, desc], default: desc }
+        - in: query
+          name: createdBy
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated sponsor list
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+    post:
+      tags: [Sponsors]
+      summary: Create a sponsor
+      operationId: createSponsor
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSponsorRequest'
+      responses:
+        '201':
+          description: Sponsor created
+        '400':
+          description: Validation error
+        '403':
+          description: Forbidden
+
+  /api/sponsors/{id}:
+    get:
+      tags: [Sponsors]
+      summary: Get sponsor by ID
+      operationId: getSponsor
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sponsor found
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    put:
+      tags: [Sponsors]
+      summary: Update sponsor
+      operationId: updateSponsor
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSponsorRequest'
+      responses:
+        '200':
+          description: Sponsor updated
+        '403':
+          description: Forbidden
+    delete:
+      tags: [Sponsors]
+      summary: Delete sponsor
+      operationId: deleteSponsor
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Deleted
+        '403':
+          description: Forbidden
+
+  /api/opportunities:
+    get:
+      tags: [Opportunities]
+      summary: List opportunities
+      operationId: listOpportunities
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [name, createdAt, updatedAt, startDate, budget], default: updatedAt }
+        - in: query
+          name: order
+          schema: { type: string, enum: [asc, desc], default: desc }
+        - in: query
+          name: sponsor
+          schema: { type: string }
+          description: Filter by sponsor id
+        - in: query
+          name: createdBy
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated opportunity list
+        '403':
+          description: Forbidden
+    post:
+      tags: [Opportunities]
+      summary: Create an opportunity
+      operationId: createOpportunity
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOpportunityRequest'
+      responses:
+        '201':
+          description: Opportunity created
+        '400':
+          description: Validation error
+        '403':
+          description: Forbidden
+
+  /api/opportunities/{id}:
+    get:
+      tags: [Opportunities]
+      summary: Get opportunity by ID
+      operationId: getOpportunity
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Opportunity found
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    put:
+      tags: [Opportunities]
+      summary: Update opportunity
+      operationId: updateOpportunity
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOpportunityRequest'
+      responses:
+        '200':
+          description: Opportunity updated
+    delete:
+      tags: [Opportunities]
+      summary: Delete opportunity
+      operationId: deleteOpportunity
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Deleted
+
+  /api/projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      operationId: listProjects
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [name, createdAt, updatedAt, projStartDate, projBudget, projStatus], default: updatedAt }
+        - in: query
+          name: order
+          schema: { type: string, enum: [asc, desc], default: desc }
+        - in: query
+          name: opportunity
+          schema: { type: string }
+        - in: query
+          name: createdBy
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated project list
+        '403':
+          description: Forbidden
+    post:
+      tags: [Projects]
+      summary: Create a project
+      operationId: createProject
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: Project created
+        '400':
+          description: Validation error
+        '403':
+          description: Forbidden
+
+  /api/projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Get project by ID
+      operationId: getProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Project found
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    put:
+      tags: [Projects]
+      summary: Update project
+      operationId: updateProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '200':
+          description: Project updated
+    delete:
+      tags: [Projects]
+      summary: Delete project
+      operationId: deleteProject
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Deleted
 
   /api/logs:
     get:

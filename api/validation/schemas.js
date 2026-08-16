@@ -140,12 +140,19 @@ function groupPermissionsBody(req) {
   };
 }
 
+const DEDICATED_ASSET_APIS = {
+  SURVEY: 'Use the surveys API to create Survey assets.',
+  SPONSOR: 'Use the sponsors API to create Sponsor assets.',
+  OPPORTUNITY: 'Use the opportunities API to create Opportunity assets.',
+  PROJECT: 'Use the projects API to create Project assets.',
+};
+
 /** Assets: POST /api/assets */
 function createAssetBody(req) {
   const name = nonEmptyString(req.body?.name, 'Asset name', { maxLength: 200 });
   const kind = String(req.body?.kind || 'DOCUMENT').toUpperCase();
-  if (kind === 'SURVEY') {
-    throw new ValidationError('Use the surveys API to create Survey assets.');
+  if (DEDICATED_ASSET_APIS[kind]) {
+    throw new ValidationError(DEDICATED_ASSET_APIS[kind]);
   }
   if (!ASSET_KINDS.includes(kind)) {
     throw new ValidationError('Invalid asset kind.');
