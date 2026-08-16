@@ -4,7 +4,15 @@
  * SurveyResponse is storage-only and is not an RBAC permission resource.
  */
 
-const ASSET_KINDS = ['DOCUMENT', 'DASHBOARD', 'DATASET', 'SURVEY'];
+const ASSET_KINDS = [
+  'DOCUMENT',
+  'DASHBOARD',
+  'DATASET',
+  'SURVEY',
+  'SPONSOR',
+  'OPPORTUNITY',
+  'PROJECT',
+];
 
 /** Human-readable type labels stored on documents as assetType (not discriminators). */
 const ASSET_TYPE_LABELS = {
@@ -12,6 +20,9 @@ const ASSET_TYPE_LABELS = {
   DASHBOARD: 'Dashboard',
   DATASET: 'Dataset',
   SURVEY: 'Survey',
+  SPONSOR: 'Sponsor',
+  OPPORTUNITY: 'Opportunity',
+  PROJECT: 'Project',
 };
 
 /** @deprecated Use ASSET_TYPE_LABELS — kept as alias for older imports. */

@@ -55,6 +55,9 @@ function createApp({ fallback } = {}) {
   app.use('/api/groups', groupRoutes);
   app.use('/api/assets', assetRoutes);
   app.use('/api/surveys', surveyRoutes);
+  app.use('/api/sponsors', require('./routes/sponsorRoutes'));
+  app.use('/api/opportunities', require('./routes/opportunityRoutes'));
+  app.use('/api/projects', require('./routes/projectRoutes'));
   app.use('/api/permissions', require('./routes/permissionRoutes'));
   app.use('/api/logs', actionLogRoutes);
   app.use(

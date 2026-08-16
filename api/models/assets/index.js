@@ -7,6 +7,9 @@ const DashboardAsset = require('./Dashboard');
 const DatasetAsset = require('./Dataset');
 const Survey = require('./Survey');
 const SurveyResponse = require('./SurveyResponse');
+const Sponsor = require('./Sponsor');
+const Opportunity = require('./Opportunity');
+const Project = require('./Project');
 const { ASSET_KINDS, ASSET_TYPE_LABELS, ASSET_DISCRIMINATORS } = require('../../constants/assetTypes');
 
 const KIND_MODELS = {
@@ -14,6 +17,9 @@ const KIND_MODELS = {
   DASHBOARD: DashboardAsset,
   DATASET: DatasetAsset,
   SURVEY: Survey,
+  SPONSOR: Sponsor,
+  OPPORTUNITY: Opportunity,
+  PROJECT: Project,
 };
 
 function modelForKind(kind) {
@@ -77,6 +83,9 @@ module.exports = {
   DatasetAsset,
   Survey,
   SurveyResponse,
+  Sponsor,
+  Opportunity,
+  Project,
   ASSET_KINDS,
   ASSET_TYPE_LABELS,
   ASSET_DISCRIMINATORS,

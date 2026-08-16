@@ -857,6 +857,23 @@ describe('API endpoints', () => {
       expect(invalid.status).toBe(400);
       expect(invalid.body.message).toMatch(/Invalid asset kind/i);
     });
+
+    it('rejects SPONSOR, OPPORTUNITY, and PROJECT kinds on generic asset create', async () => {
+      const auth = { Authorization: `Bearer ${authToken}` };
+      const cases = [
+        ['SPONSOR', /sponsors API/i],
+        ['OPPORTUNITY', /opportunities API/i],
+        ['PROJECT', /projects API/i],
+      ];
+      for (const [kind, message] of cases) {
+        const res = await request(app)
+          .post('/api/assets')
+          .set(auth)
+          .send({ name: `via-assets-${kind}`, kind });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(message);
+      }
+    });
   });
 
   describe('Surveys', () => {
