@@ -31,29 +31,31 @@ const RESOURCE_ALIASES = {
   surveys: 'SURVEY',
   permissions: 'PERMISSION',
   logs: 'LOG',
+  geo: 'GEO',
 };
 
-function sanitizeMeta(value, depth = 0) {
+function sanitizeMeta(value, depth = 0, key = '') {
   if (value == null || depth > 4) return undefined;
   if (Array.isArray(value)) {
-    return value.slice(0, 20).map((item) => sanitizeMeta(item, depth + 1));
+    return value.slice(0, 50).map((item) => sanitizeMeta(item, depth + 1, key));
   }
   if (typeof value !== 'object') {
-    if (typeof value === 'string' && value.length > 500) {
-      return `${value.slice(0, 500)}…`;
+    if (typeof value === 'string') {
+      const max = key === 'debugError' || key === 'stack' ? 8000 : 500;
+      if (value.length > max) return `${value.slice(0, max)}…`;
     }
     return value;
   }
 
   const out = {};
-  for (const [key, nested] of Object.entries(value)) {
-    if (SENSITIVE_KEYS.has(key) || SENSITIVE_KEYS.has(key.toLowerCase())) {
-      out[key] = '[redacted]';
+  for (const [nestedKey, nested] of Object.entries(value)) {
+    if (SENSITIVE_KEYS.has(nestedKey) || SENSITIVE_KEYS.has(nestedKey.toLowerCase())) {
+      out[nestedKey] = '[redacted]';
       continue;
     }
-    const cleaned = sanitizeMeta(nested, depth + 1);
+    const cleaned = sanitizeMeta(nested, depth + 1, nestedKey);
     if (cleaned !== undefined) {
-      out[key] = cleaned;
+      out[nestedKey] = cleaned;
     }
   }
   return out;
@@ -85,7 +87,9 @@ function deriveResource(path) {
     resourceId = parts[1];
   } else if (parts[1] && parts[2] && looksLikeObjectId(parts[2])) {
     resourceId = parts[2];
-  } else if (parts[1] && !['members', 'permissions', 'password', 'sessions', 'responses'].includes(parts[1])) {
+  } else if (root === 'geo' && parts[1] === 'sync') {
+    resourceId = null;
+  } else if (parts[1] && !['members', 'permissions', 'password', 'sessions', 'responses', 'sync'].includes(parts[1])) {
     resourceId = parts[1];
   }
 
@@ -97,6 +101,14 @@ function deriveAction(method, path) {
   const root = (parts[0] || '').toLowerCase();
   const leaf = (parts[parts.length - 1] || '').toLowerCase();
   const upperMethod = String(method || 'GET').toUpperCase();
+  const verb =
+    {
+      POST: 'create',
+      PUT: 'update',
+      PATCH: 'update',
+      DELETE: 'delete',
+      GET: 'read',
+    }[upperMethod] || upperMethod.toLowerCase();
 
   if (root === 'auth') {
     if (leaf === 'login') return 'auth.login';
@@ -120,18 +132,10 @@ function deriveAction(method, path) {
   if (parts.includes('password') && upperMethod === 'POST') {
     return 'user.password_change';
   }
-  if (parts.includes('responses') && upperMethod === 'POST') {
-    return 'survey.response_submit';
+  if (root === 'geo') {
+    if (leaf === 'sync' && upperMethod === 'POST') return 'geo.sync_start';
+    return `geo.${leaf || verb}`;
   }
-
-  const verb =
-    {
-      POST: 'create',
-      PUT: 'update',
-      PATCH: 'update',
-      DELETE: 'delete',
-      GET: 'read',
-    }[upperMethod] || upperMethod.toLowerCase();
 
   const resource = RESOURCE_ALIASES[root]
     ? RESOURCE_ALIASES[root].toLowerCase()

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { apiGet } from '@/lib/apiUtils';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import GeoMapPanel, { type GeoMapKind } from '@/components/geo/GeoMapPanel';
+import GeoIndicatorPanels from '@/components/geo/GeoIndicatorPanels';
 import { geoId, geoLabel, type GeoRef } from '@/lib/geoTypes';
 
 interface GeoDetailRecord {
@@ -27,6 +29,8 @@ interface GeoDetailProps {
   listLabel: string;
   showRegion?: boolean;
   showState?: boolean;
+  mapKind?: GeoMapKind;
+  indicatorKind?: 'county' | 'state' | 'region';
   childLinks?: (record: GeoDetailRecord) => ChildLink[];
 }
 
@@ -37,6 +41,8 @@ export default function GeoDetail({
   listLabel,
   showRegion = false,
   showState = false,
+  mapKind,
+  indicatorKind,
   childLinks,
 }: GeoDetailProps) {
   const params = useParams<{ id: string }>();
@@ -67,7 +73,7 @@ export default function GeoDetail({
   const links = record && childLinks ? childLinks(record) : [];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs
           items={[
@@ -90,7 +96,9 @@ export default function GeoDetail({
       ) : null}
 
       {record ? (
-        <section className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <>
+          {mapKind ? <GeoMapPanel kind={mapKind} code={record.code} label={record.name} /> : null}
+          <section className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
           <dl className="grid gap-4 sm:grid-cols-2">
             <div>
               <dt className="text-xs uppercase tracking-wide text-[var(--muted)]">Code</dt>
@@ -150,6 +158,8 @@ export default function GeoDetail({
             </div>
           ) : null}
         </section>
+          {indicatorKind ? <GeoIndicatorPanels kind={indicatorKind} id={record._id} /> : null}
+        </>
       ) : null}
     </div>
   );

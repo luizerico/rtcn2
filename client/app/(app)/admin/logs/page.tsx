@@ -3,6 +3,7 @@
 import { FormEvent, Fragment, useCallback, useEffect, useState } from 'react';
 import { apiGet } from '@/lib/apiUtils';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 
 interface ActionLogRecord {
   _id: string;
@@ -326,14 +327,10 @@ export default function AdminLogsPage() {
             <span>
               Sorted by {sort} ({order})
             </span>
-            <button
-              type="button"
-              onClick={() => setShowFilters((prev) => !prev)}
-              className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--foreground)] hover:bg-[var(--accent-soft)]/40"
-              aria-expanded={showFilters}
-            >
-              {showFilters ? 'Hide filters' : 'Show filters'}
-            </button>
+            <TableOptionsMenu
+              showFilters={showFilters}
+              onToggleFilters={() => setShowFilters((prev) => !prev)}
+            />
           </div>
         </div>
 

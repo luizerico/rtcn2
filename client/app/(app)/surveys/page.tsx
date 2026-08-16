@@ -6,7 +6,7 @@ import { apiDelete, apiGet } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
-import ColumnVisibilityMenu from '@/components/ui/ColumnVisibilityMenu';
+import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useAccess } from '@/components/AccessProvider';
 import { AccessPrimaryButton } from '@/components/ui/AccessControls';
 import {
@@ -79,6 +79,7 @@ export default function SurveysPage() {
   const [createdByInput, setCreatedByInput] = useState('');
   const [search, setSearch] = useState('');
   const [createdBy, setCreatedBy] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [sort, setSort] = useState<SortField>('updatedAt');
@@ -172,37 +173,51 @@ export default function SurveysPage() {
         </div>
       )}
 
+      {showFilters ? (
+        <form
+          onSubmit={handleSearch}
+          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3"
+        >
+          <label className="flex flex-col gap-1 text-sm md:col-span-2">
+            <span className="text-[var(--muted)]">Search</span>
+            <input
+              id="survey-search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Name or description"
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">Created by (user id)</span>
+            <input
+              id="survey-created-by"
+              value={createdByInput}
+              onChange={(e) => setCreatedByInput(e.target.value)}
+              placeholder="Optional filter"
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            />
+          </label>
+          <div className="flex items-end gap-2 md:col-span-3">
+            <button
+              type="submit"
+              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              Apply filters
+            </button>
+          </div>
+        </form>
+      ) : null}
+
       <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <div className="flex flex-col gap-3 border-b border-[var(--border)] p-4 lg:flex-row lg:items-end lg:justify-between">
-          <form onSubmit={handleSearch} className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="min-w-[12rem] flex-1">
-              <label className="mb-1 block text-xs font-medium text-[var(--muted)]" htmlFor="survey-search">
-                Search
-              </label>
-              <input
-                id="survey-search"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Name or description"
-                className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="sm:w-48">
-              <label className="mb-1 block text-xs font-medium text-[var(--muted)]" htmlFor="survey-created-by">
-                Created by (user id)
-              </label>
-              <input
-                id="survey-created-by"
-                value={createdByInput}
-                onChange={(e) => setCreatedByInput(e.target.value)}
-                placeholder="Optional filter"
-                className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="sm:w-28">
-              <label className="mb-1 block text-xs font-medium text-[var(--muted)]" htmlFor="survey-limit">
-                Page size
-              </label>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)]">
+          <span>
+            {total === 0 ? '0 surveys' : `${total} survey${total === 1 ? '' : 's'} · page ${page} of ${totalPages || 1}`}
+            {search || createdBy ? ' · filters active' : ''}
+          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2">
+              <span>Page size</span>
               <select
                 id="survey-limit"
                 value={limit}
@@ -210,7 +225,7 @@ export default function SurveysPage() {
                   setLimit(Number(e.target.value));
                   setPage(1);
                 }}
-                className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
+                className="rounded-md border border-[var(--border)] bg-white px-2 py-1 text-[var(--foreground)]"
               >
                 {[5, 10, 20, 50].map((size) => (
                   <option key={size} value={size}>
@@ -218,34 +233,25 @@ export default function SurveysPage() {
                   </option>
                 ))}
               </select>
-            </div>
-            <button
-              type="submit"
-              className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
-            >
-              Apply
-            </button>
-          </form>
-
-          {canCreate ? (
-            <Link
-              href="/surveys/new"
-              className="inline-flex w-full items-center justify-center rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] sm:w-auto"
-            >
-              Create survey
-            </Link>
-          ) : (
-            <AccessPrimaryButton allowed={false} className="w-full sm:w-auto">
-              Create survey
-            </AccessPrimaryButton>
-          )}
-          {isAdmin ? (
-            <ColumnVisibilityMenu
-              columns={columns}
-              isVisible={isVisible}
-              toggle={toggleColumn}
+            </label>
+            {canCreate ? (
+              <Link
+                href="/surveys/new"
+                className="inline-flex items-center justify-center rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
+              >
+                Create survey
+              </Link>
+            ) : (
+              <AccessPrimaryButton allowed={false}>Create survey</AccessPrimaryButton>
+            )}
+            <TableOptionsMenu
+              columns={isAdmin ? columns : []}
+              isVisible={isAdmin ? isVisible : undefined}
+              toggle={isAdmin ? toggleColumn : undefined}
+              showFilters={showFilters}
+              onToggleFilters={() => setShowFilters((prev) => !prev)}
             />
-          ) : null}
+          </div>
         </div>
 
         {loading ? (

@@ -15,11 +15,12 @@ const {
   seedAdminUser,
   seedUnprivilegedUser,
 } = require('./helpers/apiTestUtils');
-const { Region, State, Biome, County, CountyStatus, CountyEmission } = require('../api/models/geo');
+const { Region, State, Biome, MicroRegion, County, CountyStatus, CountyEmission } = require('../api/models/geo');
 
 const REGION_CO = new mongoose.Types.ObjectId('67a901807b83a190fbc92261');
 const STATE_GO = new mongoose.Types.ObjectId('67a901807b83a190fbc9229b');
 const BIOME_CER = new mongoose.Types.ObjectId('67a901807b83a190fbc92264');
+const MICRO_GO = new mongoose.Types.ObjectId('67a901807b83a190fbc92270');
 const COUNTY_A = new mongoose.Types.ObjectId('6760693b325518ff8dc09834');
 const COUNTY_B = new mongoose.Types.ObjectId('6760693b325518ff8dc09835');
 const UNKNOWN_ID = '67a901807b83a190fbc9ffff';
@@ -34,6 +35,14 @@ async function seedCountyFixtures() {
     isDeleted: false,
   });
   await Biome.create({ _id: BIOME_CER, code: 'CER', name: 'Cerrado', isDeleted: false });
+  await MicroRegion.create({
+    _id: MICRO_GO,
+    code: 'GO01',
+    name: 'Goiânia',
+    region: REGION_CO,
+    state: STATE_GO,
+    isDeleted: false,
+  });
   await County.create([
     {
       _id: COUNTY_A,
@@ -43,6 +52,7 @@ async function seedCountyFixtures() {
       population: 19128,
       state: STATE_GO,
       region: REGION_CO,
+      microregion: MICRO_GO,
       biome: BIOME_CER,
       isDeleted: false,
     },
@@ -200,5 +210,15 @@ describe('County catalog API', () => {
     expect(res.status).toBe(200);
     expect(res.body.items).toHaveLength(1);
     expect(res.body.items[0]._id).toBe(String(COUNTY_A));
+  });
+
+  it('filters counties by microregion', async () => {
+    const res = await request(app)
+      .get(`/api/counties?microregionId=${MICRO_GO}`)
+      .set('Authorization', `Bearer ${viewerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]._id).toBe(String(COUNTY_A));
+    expect(res.body.items[0].microregion).toEqual(expect.objectContaining({ name: 'Goiânia' }));
   });
 });

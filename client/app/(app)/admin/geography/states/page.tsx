@@ -14,6 +14,7 @@ function StatesList() {
       detailBase="/admin/geography/states"
       showRegion
       showRegionFilter
+      countiesHref={(row) => `/admin/geography/counties?stateId=${row._id}`}
     />
   );
 }

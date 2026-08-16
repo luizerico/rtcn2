@@ -33,6 +33,7 @@ interface GeoCatalogListProps {
   showState?: boolean;
   showRegionFilter?: boolean;
   showStateFilter?: boolean;
+  countiesHref?: (row: GeoListRow) => string | null;
 }
 
 const BASE_COLUMNS: ColumnDef[] = [
@@ -52,6 +53,7 @@ export default function GeoCatalogList({
   showState = false,
   showRegionFilter = false,
   showStateFilter = false,
+  countiesHref,
 }: GeoCatalogListProps) {
   const searchParams = useSearchParams();
   const { isAdmin } = useAccess();
@@ -327,6 +329,7 @@ export default function GeoCatalogList({
                 {rows.map((row) => {
                   const regionHref = geoId(row.region);
                   const stateHref = geoId(row.state);
+                  const countiesLink = countiesHref?.(row) || null;
                   return (
                     <tr
                       key={row._id}
@@ -379,6 +382,14 @@ export default function GeoCatalogList({
                               icon="view"
                               label={`View ${row.name}`}
                             />
+                            {countiesLink ? (
+                              <AccessIconLink
+                                allowed
+                                href={countiesLink}
+                                icon="results"
+                                label={`Counties in ${row.name}`}
+                              />
+                            ) : null}
                           </TableActionRow>
                         </td>
                       ) : null}
