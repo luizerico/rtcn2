@@ -1,7 +1,6 @@
 const Group = require('../models/Group');
-const Permission = require('../models/Permission');
-const User = require('../models/User');
 const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
+const { activeFilter, applyTrash } = require('../services/trash');
 const {
   parseListQuery,
   clampPage,
@@ -20,7 +19,7 @@ exports.getAllGroups = async (req, res) => {
       'name'
     );
 
-    const filter = {};
+    const filter = activeFilter();
     const qOr = textSearchOr(['name', 'description'], req.query.q);
     if (qOr) filter.$or = qOr;
     if (req.query.name) {
@@ -74,7 +73,7 @@ exports.createGroup = async (req, res) => {
   try {
     const { name, description } = req.validated || req.body;
 
-    const existing = await Group.findOne({ name });
+    const existing = await Group.findOne(activeFilter({ name }));
     if (existing) {
       return sendError(res, 400, 'Group name already exists.', ERROR_CODES.CONFLICT);
     }
@@ -88,7 +87,7 @@ exports.createGroup = async (req, res) => {
 
 exports.getGroupById = async (req, res) => {
   try {
-    const group = await Group.findById(req.params.id);
+    const group = await Group.findOne(activeFilter({ _id: req.params.id }));
     if (!group) {
       return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
@@ -117,7 +116,7 @@ exports.updateGroup = async (req, res) => {
       );
     }
 
-    const updatedGroup = await Group.findByIdAndUpdate(req.params.id, updates, {
+    const updatedGroup = await Group.findOneAndUpdate(activeFilter({ _id: req.params.id }), updates, {
       returnDocument: 'after',
       runValidators: true,
     });
@@ -134,21 +133,20 @@ exports.updateGroup = async (req, res) => {
 exports.deleteGroup = async (req, res) => {
   try {
     const groupId = req.params.id;
-    const group = await Group.findById(groupId);
+    const group = await Group.findOne(activeFilter({ _id: groupId }));
 
     if (!group) {
       return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
 
-    // Remove ACL rows for this group (modern principal + legacy groupId).
-    await Permission.deleteMany({
-      $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
-    });
-    // Clear users that still point at this group as their role.
-    await User.updateMany({ roleId: groupId }, { $set: { roleId: null } });
-    await Group.findByIdAndDelete(groupId);
+    if (String(group.name).toLowerCase() === 'admin') {
+      return sendError(res, 400, 'The admin group cannot be moved to the recycle bin.', ERROR_CODES.BAD_REQUEST);
+    }
 
-    res.status(200).json({ message: 'Group deleted successfully.' });
+    applyTrash(group, req.user._id);
+    await group.save();
+
+    res.status(200).json({ message: 'Group moved to recycle bin.' });
   } catch (error) {
     return sendServerError(res, error, 'Error deleting group');
   }

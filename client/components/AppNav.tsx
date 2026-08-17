@@ -29,6 +29,7 @@ type NavIconName =
   | 'permissions'
   | 'sessions'
   | 'logs'
+  | 'bin'
   | 'reports'
   | 'geography'
   | 'profile'
@@ -47,6 +48,7 @@ const NAV_ICON_BY_HREF: Record<string, NavIconName> = {
   '/admin/permissions': 'permissions',
   '/admin/sessions': 'sessions',
   '/admin/logs': 'logs',
+  '/admin/bin': 'bin',
   '/admin/reports': 'reports',
   '/admin/geography': 'geography',
   '/account': 'profile',
@@ -143,6 +145,15 @@ function NavIcon({ name, className = 'h-5 w-5' }: { name: NavIconName; className
         <svg {...common}>
           <path {...stroke} d="M8 6h13M8 12h13M8 18h13" />
           <path {...stroke} d="M3 6h.01M3 12h.01M3 18h.01" />
+        </svg>
+      );
+    case 'bin':
+      return (
+        <svg {...common}>
+          <path {...stroke} d="M4 7h16" />
+          <path {...stroke} d="M10 11v6M14 11v6" />
+          <path {...stroke} d="M6 7l1 13h10l1-13" />
+          <path {...stroke} d="M9 7V4h6v3" />
         </svg>
       );
     case 'reports':
@@ -244,6 +255,7 @@ const links: NavItem[] = [
     visible: () => true,
   },
   { href: '/admin/logs', label: 'Logs', indent: true, visible: (_c, isAdmin) => isAdmin },
+  { href: '/admin/bin', label: 'Recycle bin', indent: true, visible: (_c, isAdmin) => isAdmin },
   {
     href: '/admin/reports',
     label: 'Reports',

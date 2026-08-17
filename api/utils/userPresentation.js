@@ -16,6 +16,7 @@ async function attachUserGroups(users) {
 
   const ids = list.map((u) => u._id);
   const groups = await Group.find({
+    deletedAt: null,
     $or: [{ members: { $in: ids } }, { _id: { $in: list.map((u) => u.roleId).filter(Boolean) } }],
   }).select('_id name members');
 

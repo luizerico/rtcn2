@@ -18,9 +18,12 @@ async function getUserGroupIds(user) {
   if (!user?._id) return [];
 
   const groupIds = new Set();
-  if (user.roleId) groupIds.add(String(user.roleId));
+  if (user.roleId) {
+    const roleGroup = await Group.findOne({ _id: user.roleId, deletedAt: null }).select('_id');
+    if (roleGroup) groupIds.add(String(roleGroup._id));
+  }
 
-  const memberGroups = await Group.find({ members: user._id }).select('_id');
+  const memberGroups = await Group.find({ members: user._id, deletedAt: null }).select('_id');
   for (const group of memberGroups) {
     groupIds.add(String(group._id));
   }
@@ -78,6 +81,7 @@ async function userIsAdminGroupMember(user) {
   if (!groupIds.length) return false;
   const adminGroup = await Group.findOne({
     name: 'admin',
+    deletedAt: null,
     _id: { $in: groupIds },
   }).select('_id');
   return Boolean(adminGroup);

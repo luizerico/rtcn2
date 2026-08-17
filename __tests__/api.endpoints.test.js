@@ -473,7 +473,7 @@ describe('API endpoints', () => {
       expect(missing.status).toBe(404);
     });
 
-    it('deletes related permissions and clears roleId on group delete', async () => {
+    it('keeps related permissions and roleId until the group is purged from the recycle bin', async () => {
       const create = await request(app)
         .post('/api/groups')
         .set('Authorization', `Bearer ${authToken}`)
@@ -503,10 +503,23 @@ describe('API endpoints', () => {
         .set('Authorization', `Bearer ${authToken}`);
       expect(remove.status).toBe(200);
 
-      const after = await Permission.countDocuments({
+      const afterTrash = await Permission.countDocuments({
         $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
       });
-      expect(after).toBe(0);
+      expect(afterTrash).toBe(before);
+
+      const secondaryAfterTrash = await User.findById(secondaryUserId);
+      expect(String(secondaryAfterTrash.roleId)).toBe(String(groupId));
+
+      const purged = await request(app)
+        .delete(`/api/bin/GROUP/${groupId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(purged.status).toBe(200);
+
+      const afterPurge = await Permission.countDocuments({
+        $or: [{ principalType: 'GROUP', principalId: groupId }, { groupId }],
+      });
+      expect(afterPurge).toBe(0);
 
       const secondary = await User.findById(secondaryUserId);
       expect(secondary.roleId).toBeNull();

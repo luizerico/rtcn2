@@ -4,6 +4,7 @@ const Survey = require('../models/assets/Survey');
 const SurveyResponse = require('../models/assets/SurveyResponse');
 const { QUESTION_TYPES } = require('../constants/assetTypes');
 const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
+const { activeFilter, applyTrash } = require('../services/trash');
 
 function normalizeQuestions(rawQuestions) {
   if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) {
@@ -193,7 +194,7 @@ function parseListQuery(query = {}) {
 exports.listSurveys = async (req, res) => {
   try {
     const { page, limit, search, sortField, order, createdBy } = parseListQuery(req.query);
-    const filter = {};
+    const filter = activeFilter();
 
     const access = req.accessibleResources;
     if (access && !access.all) {
@@ -302,7 +303,7 @@ exports.createSurvey = async (req, res) => {
 
 exports.getSurveyById = async (req, res) => {
   try {
-    const survey = await Survey.findById(req.params.id)
+    const survey = await Survey.findOne(activeFilter({ _id: req.params.id }))
       .populate('ownerId', 'username email')
       .populate('createdBy', 'username email')
       .populate('updatedBy', 'username email');
@@ -319,7 +320,7 @@ exports.getSurveyById = async (req, res) => {
 
 exports.updateSurvey = async (req, res) => {
   try {
-    const survey = await Survey.findById(req.params.id);
+    const survey = await Survey.findOne(activeFilter({ _id: req.params.id }));
     if (!survey) {
       return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
@@ -345,12 +346,13 @@ exports.updateSurvey = async (req, res) => {
 
 exports.deleteSurvey = async (req, res) => {
   try {
-    const survey = await Survey.findByIdAndDelete(req.params.id);
+    const survey = await Survey.findOne(activeFilter({ _id: req.params.id }));
     if (!survey) {
       return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
-    await SurveyResponse.deleteMany({ surveyId: survey._id });
-    res.status(200).json({ message: 'Survey and related responses deleted.' });
+    applyTrash(survey, req.user._id);
+    await survey.save();
+    res.status(200).json({ message: 'Survey moved to recycle bin.' });
   } catch (error) {
     return sendServerError(res, error, 'Error deleting survey');
   }
@@ -358,7 +360,7 @@ exports.deleteSurvey = async (req, res) => {
 
 exports.submitSurveyResponse = async (req, res) => {
   try {
-    const survey = await Survey.findById(req.params.id);
+    const survey = await Survey.findOne(activeFilter({ _id: req.params.id }));
     if (!survey) {
       return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }
@@ -395,7 +397,7 @@ exports.submitSurveyResponse = async (req, res) => {
 
 exports.listSurveyResponses = async (req, res) => {
   try {
-    const survey = await Survey.findById(req.params.id);
+    const survey = await Survey.findOne(activeFilter({ _id: req.params.id }));
     if (!survey) {
       return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
     }

@@ -127,7 +127,11 @@ export default function AdminGroupsPage() {
     setError(null);
     try {
       await apiDelete(`/groups/${pendingDelete._id}`);
-      pushToast({ tone: 'info', title: 'Group deleted', message: 'The group was removed.' });
+      pushToast({
+        tone: 'info',
+        title: 'Group moved to recycle bin',
+        message: 'The group can be restored from Recycle bin.',
+      });
       setPendingDelete(null);
       await loadGroups();
     } catch (err) {
@@ -412,7 +416,14 @@ export default function AdminGroupsPage() {
         isOpen={Boolean(pendingDelete)}
         onClose={() => setPendingDelete(null)}
         onConfirm={handleDelete}
+        title="Move to recycle bin"
         itemLabel={pendingDelete?.name}
+        description={
+          pendingDelete
+            ? `Move “${pendingDelete.name}” to the recycle bin? An administrator can restore it later.`
+            : undefined
+        }
+        confirmLabel="Move to bin"
         busy={deleting}
       />
     </div>

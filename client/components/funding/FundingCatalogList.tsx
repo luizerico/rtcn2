@@ -132,8 +132,8 @@ export default function FundingCatalogList<T extends { _id: string; name: string
       await apiDelete(`${endpoint}/${pendingDelete._id}`);
       pushToast({
         tone: 'info',
-        title: `${noun} deleted`,
-        message: `${pendingDelete.name} was removed.`,
+        title: `${noun} moved to recycle bin`,
+        message: `${pendingDelete.name} can be restored from Admin → Recycle bin.`,
       });
       setPendingDelete(null);
       await load();
@@ -374,7 +374,14 @@ export default function FundingCatalogList<T extends { _id: string; name: string
         isOpen={Boolean(pendingDelete)}
         onClose={() => setPendingDelete(null)}
         onConfirm={handleDelete}
+        title={`Move ${noun} to recycle bin`}
         itemLabel={pendingDelete?.name}
+        description={
+          pendingDelete
+            ? `Move “${pendingDelete.name}” to the recycle bin? An administrator can restore it later.`
+            : undefined
+        }
+        confirmLabel="Move to bin"
         busy={deleting}
       />
     </div>

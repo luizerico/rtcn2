@@ -81,7 +81,7 @@ const protect = async (req, res, next) => {
     req.user = await User.findById(decoded.id).select(
       '-password -resetTokenHash -verificationTokenHash'
     );
-    if (!req.user) {
+    if (!req.user || req.user.deletedAt) {
       return authError(res, 401, ERROR_CODES.USER_NOT_FOUND, 'Authentication failed: user no longer exists.');
     }
 

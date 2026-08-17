@@ -12,6 +12,7 @@ import OpportunityForm, {
   opportunityPayload,
   type OpportunityFormValue,
 } from '@/components/funding/OpportunityForm';
+import AttachedFilesPanel from '@/components/files/AttachedFilesPanel';
 import { enumLabel, refName, type OpportunityRecord } from '@/lib/fundingTypes';
 
 export default function OpportunityDetailPage() {
@@ -102,6 +103,13 @@ export default function OpportunityDetailPage() {
             <dd>{record.description}</dd>
           </div>
         </dl>
+      ) : null}
+      {record ? (
+        <AttachedFilesPanel
+          listEndpoint={`/opportunities/${params.id}/files`}
+          canWrite={canWrite}
+          title="Attached files"
+        />
       ) : null}
       <Link href="/opportunities" className="text-sm text-[var(--accent)] hover:underline">
         Back to opportunities

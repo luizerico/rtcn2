@@ -116,8 +116,8 @@ async function listAllPermissions() {
 
 async function listPermissionCatalog() {
   const [users, groups, assets] = await Promise.all([
-    User.find({}).select('username email').sort({ username: 1 }).lean(),
-    Group.find({}).select('name').sort({ name: 1 }).lean(),
+    User.find({ deletedAt: null }).select('username email').sort({ username: 1 }).lean(),
+    Group.find({ deletedAt: null }).select('name').sort({ name: 1 }).lean(),
     findAssets(
       {},
       {

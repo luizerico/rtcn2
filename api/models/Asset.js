@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const { ASSET_KINDS, ASSET_TYPE_LABELS } = require('../constants/assetTypes');
+const { trashFields } = require('../services/trash');
 
 /**
  * Abstract Asset superclass — shared fields only. Not persisted.
@@ -38,6 +39,7 @@ const assetBaseFields = {
     required: true,
     index: true,
   },
+  ...trashFields,
 };
 
 /**
@@ -81,6 +83,7 @@ function createAssetSchema(extraFields = {}, options = {}) {
   });
 
   schema.index({ createdAt: -1 });
+  schema.index({ deletedAt: 1, createdAt: -1 });
   return schema;
 }
 

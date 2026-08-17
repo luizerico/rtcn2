@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
 const { ValidationError } = require('../validation');
+const { activeFilter, applyTrash } = require('../services/trash');
 
 const USER_POPULATE = [
   ['ownerId', 'username email'],
@@ -79,7 +80,7 @@ function createDomainAssetHandlers({
         req.query,
         sortableFields
       );
-      const filter = {};
+      const filter = activeFilter();
       const access = req.accessibleResources;
       if (applyAccessFilter(filter, access).empty) {
         return res.status(200).json({
@@ -167,7 +168,10 @@ function createDomainAssetHandlers({
 
   async function getById(req, res) {
     try {
-      const doc = await applyPopulate(Model.findById(req.params.id), extraPopulate);
+      const doc = await applyPopulate(
+        Model.findOne(activeFilter({ _id: req.params.id })),
+        extraPopulate
+      );
       if (!doc) {
         return sendError(res, 404, notFound, ERROR_CODES.NOT_FOUND);
       }
@@ -179,7 +183,7 @@ function createDomainAssetHandlers({
 
   async function update(req, res) {
     try {
-      const doc = await Model.findById(req.params.id);
+      const doc = await Model.findOne(activeFilter({ _id: req.params.id }));
       if (!doc) {
         return sendError(res, 404, notFound, ERROR_CODES.NOT_FOUND);
       }
@@ -198,11 +202,13 @@ function createDomainAssetHandlers({
 
   async function remove(req, res) {
     try {
-      const doc = await Model.findByIdAndDelete(req.params.id);
+      const doc = await Model.findOne(activeFilter({ _id: req.params.id }));
       if (!doc) {
         return sendError(res, 404, notFound, ERROR_CODES.NOT_FOUND);
       }
-      return res.status(200).json({ message: `${noun} deleted.` });
+      applyTrash(doc, req.user._id);
+      await doc.save();
+      return res.status(200).json({ message: `${noun} moved to recycle bin.`, _id: String(doc._id) });
     } catch (error) {
       return handleControllerError(res, error, `Error deleting ${noun.toLowerCase()}`);
     }

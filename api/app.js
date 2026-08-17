@@ -24,6 +24,7 @@ const { errorHandler } = require('./middleware/errorMiddleware');
 // Register concrete Asset subclass models once for the API process.
 require('./models/assets');
 require('./models/geo');
+require('./models/StoredFile');
 
 const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '100kb';
 
@@ -57,6 +58,8 @@ function createApp({ fallback } = {}) {
   app.use('/api/surveys', surveyRoutes);
   app.use('/api/sponsors', require('./routes/sponsorRoutes'));
   app.use('/api/opportunities', require('./routes/opportunityRoutes'));
+  app.use('/api/files', require('./routes/storedFileRoutes'));
+  app.use('/api/bin', require('./routes/recycleBinRoutes'));
   app.use('/api/projects', require('./routes/projectRoutes'));
   app.use('/api/permissions', require('./routes/permissionRoutes'));
   app.use('/api/logs', actionLogRoutes);

@@ -86,7 +86,7 @@ async function uniqueUsernameFromEmail(User, email) {
     .slice(0, 24) || 'user';
   let candidate = local;
   let n = 0;
-  while (await User.findOne({ username: candidate }).select('_id')) {
+  while (await User.findOne({ username: candidate, deletedAt: null }).select('_id')) {
     n += 1;
     candidate = `${local}${n}`.slice(0, 32);
   }

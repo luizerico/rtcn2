@@ -5,6 +5,7 @@ const {
 } = require('../models/assets');
 const { kindToDiscriminator } = require('../constants/assetTypes');
 const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
+const { activeFilter, applyTrash } = require('../services/trash');
 
 function auditFields(userId, existing) {
   if (existing) {
@@ -39,7 +40,7 @@ exports.getAllAssets = async (req, res) => {
       if (!Model) continue;
 
       const access = await listAccessibleResources(req.user, `${kind}:READ`);
-      const filter = {};
+      const filter = activeFilter();
       if (req.query.assetType) filter.assetType = req.query.assetType;
 
       if (access.all) {
@@ -149,8 +150,9 @@ exports.deleteAsset = async (req, res) => {
     if (!asset) {
       return sendError(res, 404, 'Asset not found.', ERROR_CODES.NOT_FOUND);
     }
-    await asset.deleteOne();
-    res.status(200).json({ message: 'Asset deleted successfully.' });
+    applyTrash(asset, req.user._id);
+    await asset.save();
+    res.status(200).json({ message: 'Asset moved to recycle bin.' });
   } catch (error) {
     return sendServerError(res, error, 'Error deleting asset');
   }
