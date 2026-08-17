@@ -23,6 +23,7 @@ const {
   isSecureRequest,
 } = require('../utils/sessionCookie');
 const { attachUserGroups, USER_PUBLIC_EXCLUDE } = require('../utils/userPresentation');
+const { activeFilter } = require('../services/trash');
 const {
   googleConfigured,
   buildGoogleAuthUrl,
@@ -115,7 +116,7 @@ exports.registerUser = async (req, res) => {
   }
 
   try {
-    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+    const existingUser = await User.findOne(activeFilter({ $or: [{ username }, { email }] }));
     if (existingUser) {
       return sendError(res, 400, 'User or Email already registered.', ERROR_CODES.CONFLICT);
     }
@@ -201,7 +202,7 @@ exports.loginUser = async (req, res) => {
   const password = req.validated?.password || req.body.password;
 
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne(activeFilter({ email }));
 
     const passwordOk =
       user &&
@@ -270,9 +271,11 @@ exports.googleAuthCallback = async (req, res) => {
     const profile = await fetchGoogleProfile(tokens.access_token);
 
     const googleEmail = String(profile.email).trim().toLowerCase();
-    let user = await User.findOne({
-      $or: [{ googleId: profile.sub }, { email: googleEmail }],
-    });
+    let user = await User.findOne(
+      activeFilter({
+        $or: [{ googleId: profile.sub }, { email: googleEmail }],
+      })
+    );
 
     if (user) {
       if (!user.googleId) {
@@ -339,7 +342,7 @@ exports.requestPasswordReset = async (req, res) => {
   const email = req.validated?.email || req.query.email;
 
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne(activeFilter({ email }));
     if (user) {
       const { raw, hash, expiresAt } = createResetToken();
       user.resetTokenHash = hash;

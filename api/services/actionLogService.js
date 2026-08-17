@@ -31,6 +31,8 @@ const RESOURCE_ALIASES = {
   surveys: 'SURVEY',
   sponsors: 'SPONSOR',
   opportunities: 'OPPORTUNITY',
+  files: 'FILE',
+  bin: 'BIN',
   projects: 'PROJECT',
   permissions: 'PERMISSION',
   logs: 'LOG',
@@ -92,7 +94,7 @@ function deriveResource(path) {
     resourceId = parts[2];
   } else if (root === 'geo' && parts[1] === 'sync') {
     resourceId = null;
-  } else if (parts[1] && !['members', 'permissions', 'password', 'sessions', 'responses', 'sync'].includes(parts[1])) {
+  } else if (parts[1] && !['members', 'permissions', 'password', 'sessions', 'responses', 'sync', 'bin'].includes(parts[1])) {
     resourceId = parts[1];
   }
 

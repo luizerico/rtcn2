@@ -28,6 +28,8 @@ tags:
   - name: Surveys
   - name: Sponsors
   - name: Opportunities
+  - name: Files
+  - name: Recycle bin
   - name: Projects
   - name: Logs
   - name: Regions
@@ -613,6 +615,86 @@ components:
           type: number
         currency:
           type: string
+
+    StoredFile:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+          description: Display name (editable label)
+        displayName:
+          type: string
+        originalName:
+          type: string
+        storedName:
+          type: string
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+        sha256:
+          type: string
+        ownerType:
+          type: string
+          enum: [opportunity, project, sponsor]
+        ownerId:
+          type: string
+        obs:
+          type: string
+        storageDriver:
+          type: string
+          enum: [tmp, azure, aws, gcs]
+        uploadedBy:
+          type: object
+        updatedBy:
+          type: object
+          nullable: true
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deletedBy:
+          type: object
+          nullable: true
+        ownerLabel:
+          type: string
+          description: Parent record name captured when the file was moved to the bin
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RecycleBinItem:
+      type: object
+      required: [itemType, _id, name]
+      properties:
+        itemType:
+          type: string
+          enum: [FILE, USER, GROUP, DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+        _id:
+          type: string
+        name:
+          type: string
+        detail:
+          type: string
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deletedBy:
+          type: object
+          nullable: true
+          properties:
+            _id:
+              type: string
+            username:
+              type: string
+            email:
+              type: string
 
     Project:
       allOf:
@@ -1594,7 +1676,7 @@ paths:
           description: Not found
     delete:
       tags: [Users]
-      summary: Delete user
+      summary: Move user to recycle bin
       operationId: deleteUser
       security:
         - bearerAuth: []
@@ -1606,7 +1688,7 @@ paths:
             type: string
       responses:
         '200':
-          description: User deleted
+          description: User moved to recycle bin
         '401':
           description: Unauthorized
         '404':
@@ -1796,7 +1878,7 @@ paths:
           description: Not found
     delete:
       tags: [Groups]
-      summary: Delete group
+      summary: Move group to recycle bin
       operationId: deleteGroup
       security:
         - bearerAuth: []
@@ -1808,7 +1890,7 @@ paths:
             type: string
       responses:
         '200':
-          description: Group deleted
+          description: Group moved to recycle bin
         '401':
           description: Unauthorized
         '404':
@@ -2133,7 +2215,7 @@ paths:
           description: Not found
     delete:
       tags: [Assets]
-      summary: Delete asset
+      summary: Move asset to recycle bin
       operationId: deleteAsset
       security:
         - bearerAuth: []
@@ -2145,7 +2227,7 @@ paths:
             type: string
       responses:
         '200':
-          description: Asset deleted
+          description: Asset moved to recycle bin
         '401':
           description: Unauthorized
         '404':
@@ -2296,7 +2378,7 @@ paths:
           description: Survey updated
     delete:
       tags: [Surveys]
-      summary: Delete survey and its responses
+      summary: Move survey to recycle bin
       operationId: deleteSurvey
       security:
         - bearerAuth: []
@@ -2449,7 +2531,7 @@ paths:
           description: Forbidden
     delete:
       tags: [Sponsors]
-      summary: Delete sponsor
+      summary: Move sponsor to recycle bin
       operationId: deleteSponsor
       security:
         - bearerAuth: []
@@ -2560,7 +2642,7 @@ paths:
           description: Opportunity updated
     delete:
       tags: [Opportunities]
-      summary: Delete opportunity
+      summary: Move opportunity to recycle bin
       operationId: deleteOpportunity
       security:
         - bearerAuth: []
@@ -2572,6 +2654,386 @@ paths:
       responses:
         '200':
           description: Deleted
+
+  /api/opportunities/{id}/files:
+    get:
+      tags: [Opportunities, Files]
+      summary: List files attached to an opportunity
+      operationId: listOpportunityFiles
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: File metadata list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StoredFile'
+        '403':
+          description: Forbidden
+        '404':
+          description: Opportunity not found
+    post:
+      tags: [Opportunities, Files]
+      summary: Upload PDF, DOCX, or image files onto an opportunity
+      operationId: uploadOpportunityFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                displayName:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional labels, one per file, in the same order as file
+                obs:
+                  type: string
+                  description: Optional notes applied to every file in the upload
+      responses:
+        '201':
+          description: Files stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StoredFile'
+        '400':
+          description: Unsupported type or validation error
+        '403':
+          description: Forbidden
+        '413':
+          description: File too large
+
+  /api/files/bin:
+    get:
+      tags: [Files]
+      summary: List files in the recycle bin (admin only)
+      operationId: listFileBin
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Trashed file metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StoredFile'
+        '403':
+          description: Forbidden
+    delete:
+      tags: [Files]
+      summary: Permanently delete every file in the recycle bin (admin only)
+      operationId: emptyFileBin
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Bin emptied
+        '403':
+          description: Forbidden
+
+  /api/files/bin/{id}/restore:
+    post:
+      tags: [Files]
+      summary: Restore a file from the recycle bin (admin only)
+      operationId: restoreBinnedFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: File restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredFile'
+        '403':
+          description: Forbidden
+        '404':
+          description: File or parent record not found
+
+  /api/files/bin/{id}:
+    delete:
+      tags: [Files]
+      summary: Permanently delete a file in the recycle bin (admin only)
+      operationId: purgeBinnedFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Permanently deleted
+        '403':
+          description: Forbidden
+
+  /api/files/bin/{id}/content:
+    get:
+      tags: [Files]
+      summary: Download a file from the recycle bin (admin only)
+      operationId: downloadBinnedFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: File stream
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+
+  /api/bin:
+    get:
+      tags: [Recycle bin]
+      summary: List trashed items (admin only)
+      description: Unified recycle bin of files, users, groups, and all asset kinds. Optional `type` filter.
+      operationId: listRecycleBin
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [FILE, USER, GROUP, DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+      responses:
+        '200':
+          description: Trashed items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RecycleBinItem'
+        '403':
+          description: Forbidden
+    delete:
+      tags: [Recycle bin]
+      summary: Permanently delete every item in the recycle bin (admin only)
+      operationId: emptyRecycleBin
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Bin emptied
+        '403':
+          description: Forbidden
+
+  /api/bin/{itemType}/{id}/restore:
+    post:
+      tags: [Recycle bin]
+      summary: Restore an item from the recycle bin (admin only)
+      operationId: restoreBinItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: itemType
+          required: true
+          schema:
+            type: string
+            enum: [FILE, USER, GROUP, DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Item restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecycleBinItem'
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+        '409':
+          description: Username, email, or group name is already in use
+
+  /api/bin/{itemType}/{id}:
+    delete:
+      tags: [Recycle bin]
+      summary: Permanently delete an item from the recycle bin (admin only)
+      operationId: purgeBinItem
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: itemType
+          required: true
+          schema:
+            type: string
+            enum: [FILE, USER, GROUP, DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Item permanently deleted
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+
+  /api/files/{id}:
+    get:
+      tags: [Files]
+      summary: Get stored file metadata
+      operationId: getStoredFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: File metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredFile'
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    patch:
+      tags: [Files]
+      summary: Update display name or notes
+      operationId: updateStoredFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName:
+                  type: string
+                obs:
+                  type: string
+      responses:
+        '200':
+          description: Updated metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoredFile'
+        '403':
+          description: Forbidden
+    delete:
+      tags: [Files]
+      summary: Move stored file to the recycle bin
+      operationId: deleteStoredFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Moved to recycle bin
+        '403':
+          description: Forbidden
+
+  /api/files/{id}/content:
+    get:
+      tags: [Files]
+      summary: Download stored file bytes
+      operationId: downloadStoredFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: File stream
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
 
   /api/projects:
     get:
@@ -2668,7 +3130,7 @@ paths:
           description: Project updated
     delete:
       tags: [Projects]
-      summary: Delete project
+      summary: Move project to recycle bin
       operationId: deleteProject
       security:
         - bearerAuth: []

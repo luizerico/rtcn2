@@ -141,6 +141,19 @@ Password reset uses a pluggable sender in `api/services/emailService.js`:
 
 Production must set `smtp` or `module` — the console default is rejected so reset links are not silently logged.
 
+### File storage (attachments)
+
+Reusable upload/download for PDF, DOCX, and images (JPEG, PNG, GIF, WEBP). Metadata lives in Mongo (`stored_files`); bytes go to the driver selected by `FILE_STORAGE_DRIVER`.
+
+| `FILE_STORAGE_DRIVER` | Behavior |
+|-----------------------|----------|
+| `tmp` (default) | Local disk under `FILE_STORAGE_TMP_DIR` (default `tmp/uploads`, gitignored) |
+| `azure` | Azure Blob (`AZURE_STORAGE_CONNECTION_STRING`, `AZURE_STORAGE_CONTAINER`) |
+| `aws` | Amazon S3 (`AWS_S3_BUCKET`, `AWS_S3_REGION`, optional `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) |
+| `gcs` | Google Cloud Storage (`GCS_BUCKET` plus `GOOGLE_APPLICATION_CREDENTIALS` or `GCS_CLIENT_EMAIL` + `GCS_PRIVATE_KEY`) |
+
+`FILE_MAX_BYTES` defaults to 10MB. Access follows the parent record (for example `OPPORTUNITY:READ` / `OPPORTUNITY:WRITE`), not a separate file permission.
+
 ## API testing
 
 ```bash

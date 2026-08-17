@@ -10,6 +10,9 @@ build/
 /01_sample_data/
 /02_template_model/
 
+# Local file storage (FILE_STORAGE_DRIVER=tmp)
+/tmp/
+
 # Local agent / git worktree scratch (not part of the app)
 .worktrees/
 .worktrees_trash/

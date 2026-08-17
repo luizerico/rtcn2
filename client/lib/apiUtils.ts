@@ -101,6 +101,15 @@ function handleUnauthorized(message: string, code?: string) {
   }
 }
 
+async function throwIfFailed(res: Response): Promise<void> {
+  if (res.ok) return;
+  const parsed = await parseError(res);
+  if (res.status === 401 || (res.status === 403 && parsed.code === 'NOT_VERIFIED')) {
+    handleUnauthorized(parsed.message, parsed.code);
+  }
+  throw new ApiError(parsed.message, res.status, parsed.code);
+}
+
 async function request<T>(method: string, endpoint: string, bodyData?: object): Promise<T> {
   const res = await fetch(resolveUrl(endpoint), {
     method,
@@ -109,17 +118,7 @@ async function request<T>(method: string, endpoint: string, bodyData?: object): 
     body: bodyData ? JSON.stringify(bodyData) : undefined,
   });
 
-  if (!res.ok) {
-    const parsed = await parseError(res);
-    if (
-      res.status === 401 ||
-      (res.status === 403 && parsed.code === 'NOT_VERIFIED')
-    ) {
-      handleUnauthorized(parsed.message, parsed.code);
-    }
-    throw new ApiError(parsed.message, res.status, parsed.code);
-  }
-
+  await throwIfFailed(res);
   return res.json() as Promise<T>;
 }
 
@@ -135,8 +134,39 @@ export async function apiPut<T>(endpoint: string, bodyData: object): Promise<T> 
   return request<T>('PUT', endpoint, bodyData);
 }
 
+export async function apiPatch<T>(endpoint: string, bodyData: object): Promise<T> {
+  return request<T>('PATCH', endpoint, bodyData);
+}
+
 export async function apiDelete<T>(endpoint: string, bodyData?: object): Promise<T> {
   return request<T>('DELETE', endpoint, bodyData);
+}
+
+export async function apiUpload<T>(endpoint: string, formData: FormData): Promise<T> {
+  const res = await fetch(resolveUrl(endpoint), {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+  await throwIfFailed(res);
+  return res.json() as Promise<T>;
+}
+
+export async function apiDownload(endpoint: string, filename = 'download'): Promise<void> {
+  const res = await fetch(resolveUrl(endpoint), {
+    method: 'GET',
+    credentials: 'include',
+  });
+  await throwIfFailed(res);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export { ApiError, clearLocalSessionHints };

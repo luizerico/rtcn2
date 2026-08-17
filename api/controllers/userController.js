@@ -5,6 +5,7 @@ const { assertPasswordPolicy } = require('../utils/passwordPolicy');
 const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
 const { USER_PUBLIC_EXCLUDE, attachUserGroups } = require('../utils/userPresentation');
 const { revokeAllUserSessions } = require('../services/sessionService');
+const { activeFilter, applyTrash } = require('../services/trash');
 const {
   parseListQuery,
   clampPage,
@@ -23,7 +24,7 @@ exports.getAllUsers = async (req, res) => {
       'createdAt'
     );
 
-    const filter = {};
+    const filter = activeFilter();
     const qOr = textSearchOr(['username', 'email'], req.query.q);
     if (qOr) filter.$or = qOr;
 
@@ -40,7 +41,7 @@ exports.getAllUsers = async (req, res) => {
 
     const groupId = typeof req.query.groupId === 'string' ? req.query.groupId.trim() : '';
     if (groupId) {
-      const group = await Group.findById(groupId).select('members');
+      const group = await Group.findOne(activeFilter({ _id: groupId })).select('members');
       if (!group) {
         return res.status(200).json(
           paginatedResponse({
@@ -88,7 +89,7 @@ exports.getAllUsers = async (req, res) => {
 
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select(USER_PUBLIC_EXCLUDE);
+    const user = await User.findOne(activeFilter({ _id: req.params.id })).select(USER_PUBLIC_EXCLUDE);
     if (!user) {
       return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
@@ -108,7 +109,7 @@ exports.createUser = async (req, res) => {
       return sendError(res, 400, passwordCheck.message, ERROR_CODES.VALIDATION);
     }
 
-    const existing = await User.findOne({ $or: [{ username }, { email }] });
+    const existing = await User.findOne(activeFilter({ $or: [{ username }, { email }] }));
     if (existing) {
       return sendError(res, 400, 'User or email already exists.', ERROR_CODES.CONFLICT);
     }
@@ -161,7 +162,7 @@ exports.updateUser = async (req, res) => {
       }
     }
 
-    const user = await User.findByIdAndUpdate(req.params.id, updates, {
+    const user = await User.findOneAndUpdate(activeFilter({ _id: req.params.id }), updates, {
       returnDocument: 'after',
       runValidators: true,
     }).select(USER_PUBLIC_EXCLUDE);
@@ -183,13 +184,17 @@ exports.updateUser = async (req, res) => {
 
 exports.deleteUser = async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
+    if (String(req.params.id) === String(req.user._id)) {
+      return sendError(res, 400, 'You cannot move your own account to the recycle bin.', ERROR_CODES.BAD_REQUEST);
+    }
+    const user = await User.findOne(activeFilter({ _id: req.params.id }));
     if (!user) {
       return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
-    await Group.updateMany({ members: user._id }, { $pull: { members: user._id } });
+    applyTrash(user, req.user._id);
+    await user.save();
     await revokeAllUserSessions(user._id, 'user_deleted');
-    res.status(200).json({ message: 'User deleted successfully.' });
+    res.status(200).json({ message: 'User moved to recycle bin.' });
   } catch (error) {
     return sendServerError(res, error, 'Error deleting user');
   }

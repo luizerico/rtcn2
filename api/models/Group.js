@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
+const { trashFields, addPartialUniqueIndex } = require('../services/trash');
 
 const groupSchema = new Schema(
   {
-    name: { type: String, required: true, unique: true, trim: true },
+    name: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
     members: [
       {
@@ -11,8 +12,11 @@ const groupSchema = new Schema(
         ref: 'User',
       },
     ],
+    ...trashFields,
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model('Group', groupSchema);
+addPartialUniqueIndex(groupSchema, 'name');
+
+module.exports = mongoose.models.Group || mongoose.model('Group', groupSchema);

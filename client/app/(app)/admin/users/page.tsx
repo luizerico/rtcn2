@@ -152,7 +152,11 @@ export default function AdminUsersPage() {
     setError(null);
     try {
       await apiDelete(`/users/${pendingDelete._id}`);
-      pushToast({ tone: 'info', title: 'User deleted', message: 'The account was removed.' });
+      pushToast({
+        tone: 'info',
+        title: 'User moved to recycle bin',
+        message: 'The account can be restored from Recycle bin.',
+      });
       setPendingDelete(null);
       await loadUsers();
     } catch (err) {
@@ -507,7 +511,14 @@ export default function AdminUsersPage() {
         isOpen={Boolean(pendingDelete)}
         onClose={() => setPendingDelete(null)}
         onConfirm={handleDelete}
+        title="Move to recycle bin"
         itemLabel={pendingDelete?.username}
+        description={
+          pendingDelete
+            ? `Move “${pendingDelete.username}” to the recycle bin? An administrator can restore it later.`
+            : undefined
+        }
+        confirmLabel="Move to bin"
         busy={deleting}
       />
     </div>

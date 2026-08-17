@@ -37,6 +37,12 @@ const adminSections = [
     visible: (_can: ReturnType<typeof useAccess>['can'], isAdmin: boolean) => isAdmin,
   },
   {
+    href: '/admin/bin',
+    title: 'Recycle bin',
+    description: 'Restore or permanently delete files moved to the bin. Admin only.',
+    visible: (_can: ReturnType<typeof useAccess>['can'], isAdmin: boolean) => isAdmin,
+  },
+  {
     href: '/admin/reports',
     title: 'Reports sample',
     description: 'Exercise the FastAPI GraphQL reports service with live platform analytics.',

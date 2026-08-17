@@ -5,14 +5,20 @@ const {
   replaceGroupClassPermissions,
 } = require('../services/rbacService');
 const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
+const { isTrashed } = require('../services/trash');
 
 exports.addMemberToGroup = async (req, res) => {
   try {
     const targetUserId = req.validated?.targetUserId || req.body.targetUserId;
 
     const user = await User.findById(targetUserId);
-    if (!user) {
+    if (!user || isTrashed(user)) {
       return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
+    }
+
+    const group = await Group.findOne({ _id: req.params.groupId, deletedAt: null });
+    if (!group) {
+      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
 
     const updatedGroup = await Group.findByIdAndUpdate(
@@ -20,10 +26,6 @@ exports.addMemberToGroup = async (req, res) => {
       { $addToSet: { members: targetUserId } },
       { returnDocument: 'after' }
     );
-
-    if (!updatedGroup) {
-      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
-    }
 
     res.status(200).json({
       message: `User successfully added to group ${req.params.groupId}.`,
@@ -38,15 +40,16 @@ exports.removeMemberFromGroup = async (req, res) => {
   try {
     const targetUserId = req.validated?.targetUserId || req.body.targetUserId;
 
+    const group = await Group.findOne({ _id: req.params.groupId, deletedAt: null });
+    if (!group) {
+      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
+    }
+
     const updatedGroup = await Group.findByIdAndUpdate(
       req.params.groupId,
       { $pull: { members: targetUserId } },
       { returnDocument: 'after' }
     );
-
-    if (!updatedGroup) {
-      return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
-    }
 
     res.status(200).json({
       message: `User successfully removed from group ${req.params.groupId}.`,
@@ -59,7 +62,7 @@ exports.removeMemberFromGroup = async (req, res) => {
 
 exports.getGroupPermissions = async (req, res) => {
   try {
-    const group = await Group.findById(req.params.groupId);
+    const group = await Group.findOne({ _id: req.params.groupId, deletedAt: null });
     if (!group) {
       return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }
@@ -94,7 +97,7 @@ exports.updateGroupPermissions = async (req, res) => {
       objects = [],
     } = req.validated || req.body;
 
-    const group = await Group.findById(req.params.groupId);
+    const group = await Group.findOne({ _id: req.params.groupId, deletedAt: null });
     if (!group) {
       return sendError(res, 404, 'Group not found.', ERROR_CODES.NOT_FOUND);
     }

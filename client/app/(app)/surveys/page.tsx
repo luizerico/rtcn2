@@ -134,7 +134,11 @@ export default function SurveysPage() {
     setDeleting(true);
     try {
       await apiDelete(`/surveys/${pendingDelete._id}`);
-      pushToast({ tone: 'info', title: 'Survey deleted', message: 'Survey and responses removed.' });
+      pushToast({
+        tone: 'info',
+        title: 'Survey moved to recycle bin',
+        message: 'The survey can be restored from Recycle bin.',
+      });
       setPendingDelete(null);
       await loadSurveys();
     } catch (err) {
@@ -427,7 +431,14 @@ export default function SurveysPage() {
         isOpen={Boolean(pendingDelete)}
         onClose={() => setPendingDelete(null)}
         onConfirm={handleDelete}
+        title="Move to recycle bin"
         itemLabel={pendingDelete?.name}
+        description={
+          pendingDelete
+            ? `Move “${pendingDelete.name}” to the recycle bin? An administrator can restore it later.`
+            : undefined
+        }
+        confirmLabel="Move to bin"
         busy={deleting}
       />
     </div>

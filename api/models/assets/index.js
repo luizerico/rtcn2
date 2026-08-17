@@ -11,6 +11,7 @@ const Sponsor = require('./Sponsor');
 const Opportunity = require('./Opportunity');
 const Project = require('./Project');
 const { ASSET_KINDS, ASSET_TYPE_LABELS, ASSET_DISCRIMINATORS } = require('../../constants/assetTypes');
+const { activeFilter } = require('../../services/trash');
 
 const KIND_MODELS = {
   DOCUMENT: DocumentAsset,
@@ -30,10 +31,11 @@ function modelForKind(kind) {
 /**
  * Find one asset by id across RBAC asset collections.
  */
-async function findAssetById(id) {
+async function findAssetById(id, { includeDeleted = false } = {}) {
   if (!id) return null;
+  const filter = includeDeleted ? { _id: id } : activeFilter({ _id: id });
   const results = await Promise.all(
-    Object.values(KIND_MODELS).map((Model) => Model.findById(id))
+    Object.values(KIND_MODELS).map((Model) => Model.findOne(filter))
   );
   return results.find(Boolean) || null;
 }
@@ -46,9 +48,10 @@ async function findAssetById(id) {
 async function findAssets(filter = {}, options = {}) {
   const kinds = (options.kinds || ASSET_KINDS).map((k) => String(k).toUpperCase());
   const models = kinds.map((k) => KIND_MODELS[k]).filter(Boolean);
+  const queryFilter = options.includeDeleted ? filter : { ...activeFilter(), ...filter };
 
   let queries = models.map((Model) => {
-    let q = Model.find(filter);
+    let q = Model.find(queryFilter);
     if (options.populate) {
       for (const [path, select] of options.populate) {
         q = q.populate(path, select);

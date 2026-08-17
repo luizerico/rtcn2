@@ -1,0 +1,359 @@
+"use client";
+
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
+import { Field, TextArea, TextInput } from '@/components/funding/FormFields';
+import { useToast } from '@/components/ToastProvider';
+import {
+  apiDelete,
+  apiDownload,
+  apiGet,
+  apiPatch,
+  apiUpload,
+} from '@/lib/apiUtils';
+import {
+  FILE_ACCEPT,
+  formatBytes,
+  userLabel,
+  type StoredFileRecord,
+} from '@/lib/storedFileTypes';
+
+type AttachedFilesPanelProps = {
+  listEndpoint: string;
+  canWrite: boolean;
+  title?: string;
+};
+
+type UploadDraft = {
+  file: File;
+  displayName: string;
+};
+
+export default function AttachedFilesPanel({
+  listEndpoint,
+  canWrite,
+  title = 'Files',
+}: AttachedFilesPanelProps) {
+  const { pushToast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [items, setItems] = useState<StoredFileRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [drafts, setDrafts] = useState<UploadDraft[]>([]);
+  const [obs, setObs] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<StoredFileRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editObs, setEditObs] = useState('');
+  const [savingObs, setSavingObs] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiGet<{ items: StoredFileRecord[] }>(listEndpoint);
+      setItems(Array.isArray(data.items) ? data.items : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load files.');
+    } finally {
+      setLoading(false);
+    }
+  }, [listEndpoint]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const resetAttachForm = () => {
+    setDrafts([]);
+    setObs('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFilesPicked = (list: FileList | null) => {
+    setDrafts(
+      Array.from(list || []).map((file) => ({
+        file,
+        displayName: file.name,
+      }))
+    );
+  };
+
+  const handleUpload = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!drafts.length) {
+      pushToast({ tone: 'error', title: 'Choose files', message: 'PDF, DOCX, or image required.' });
+      return;
+    }
+    setUploading(true);
+    try {
+      const form = new FormData();
+      for (const draft of drafts) {
+        form.append('file', draft.file);
+        form.append('displayName', draft.displayName.trim() || draft.file.name);
+      }
+      if (obs.trim()) form.append('obs', obs.trim());
+      const created = await apiUpload<{ items: StoredFileRecord[] }>(listEndpoint, form);
+      const uploaded = Array.isArray(created.items) ? created.items : [];
+      setItems((prev) => [...uploaded, ...prev]);
+      resetAttachForm();
+      setAttachOpen(false);
+      const label =
+        uploaded.length === 1
+          ? uploaded[0].displayName
+          : `${uploaded.length} files uploaded`;
+      pushToast({ tone: 'success', title: 'Files uploaded', message: label });
+    } catch (err) {
+      pushToast({
+        tone: 'error',
+        title: 'Upload failed',
+        message: err instanceof Error ? err.message : 'Failed to upload files.',
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownload = async (row: StoredFileRecord) => {
+    try {
+      await apiDownload(`/files/${row._id}/content`, row.originalName || row.displayName);
+    } catch (err) {
+      pushToast({
+        tone: 'error',
+        title: 'Download failed',
+        message: err instanceof Error ? err.message : 'Failed to download file.',
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await apiDelete(`/files/${pendingDelete._id}`);
+      setItems((prev) => prev.filter((row) => row._id !== pendingDelete._id));
+      pushToast({ tone: 'success', title: 'File deleted', message: pendingDelete.displayName });
+      setPendingDelete(null);
+    } catch (err) {
+      pushToast({
+        tone: 'error',
+        title: 'Delete failed',
+        message: err instanceof Error ? err.message : 'Failed to delete file.',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleSaveObs = async (row: StoredFileRecord) => {
+    setSavingObs(true);
+    try {
+      const updated = await apiPatch<StoredFileRecord>(`/files/${row._id}`, { obs: editObs });
+      setItems((prev) => prev.map((item) => (item._id === row._id ? updated : item)));
+      setEditingId(null);
+      pushToast({ tone: 'success', title: 'Notes saved', message: updated.displayName });
+    } catch (err) {
+      pushToast({
+        tone: 'error',
+        title: 'Update failed',
+        message: err instanceof Error ? err.message : 'Failed to update notes.',
+      });
+    } finally {
+      setSavingObs(false);
+    }
+  };
+
+  return (
+    <section className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <p className="text-sm text-[var(--muted)]">PDF, DOCX, and images (JPEG, PNG, GIF, WEBP).</p>
+        </div>
+        {canWrite ? (
+          <button
+            type="button"
+            onClick={() => {
+              setAttachOpen((open) => {
+                if (open) resetAttachForm();
+                return !open;
+              });
+            }}
+            className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--accent-soft)]/40"
+          >
+            {attachOpen ? 'Cancel' : 'Attach files'}
+          </button>
+        ) : null}
+      </header>
+
+      {canWrite && attachOpen ? (
+        <form onSubmit={handleUpload} className="grid gap-3">
+          <Field label="Files">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={FILE_ACCEPT}
+              onChange={(event) => handleFilesPicked(event.target.files)}
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm"
+            />
+          </Field>
+          {drafts.length > 0 ? (
+            <ul className="space-y-3">
+              {drafts.map((draft, index) => (
+                <li key={`${draft.file.name}-${draft.file.size}-${index}`}>
+                  <Field label="Display name">
+                    <TextInput
+                      value={draft.displayName}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setDrafts((prev) =>
+                          prev.map((item, i) => (i === index ? { ...item, displayName: value } : item))
+                        );
+                      }}
+                      maxLength={255}
+                    />
+                  </Field>
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    {draft.file.name} · {formatBytes(draft.file.size)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <Field label="Notes">
+            <TextArea
+              value={obs}
+              onChange={(event) => setObs(event.target.value)}
+              placeholder="Optional notes for these files"
+              rows={4}
+              maxLength={2000}
+            />
+          </Field>
+          <div>
+            <button
+              type="submit"
+              disabled={uploading || drafts.length === 0}
+              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+            >
+              {uploading
+                ? 'Uploading…'
+                : drafts.length > 1
+                  ? `Upload ${drafts.length} files`
+                  : 'Upload file'}
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {loading ? <p className="text-sm text-[var(--muted)]">Loading files…</p> : null}
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
+          {error}
+        </div>
+      ) : null}
+      {!loading && !error && items.length === 0 ? (
+        <p className="text-sm text-[var(--muted)]">No files attached yet.</p>
+      ) : null}
+
+      {items.length > 0 ? (
+        <ul className="divide-y divide-[var(--border)]">
+          {items.map((row) => (
+            <li key={row._id} className="space-y-2 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium">{row.displayName}</p>
+                  <p className="text-xs text-[var(--muted)]">
+                    {row.originalName} · {formatBytes(row.sizeBytes)} · {userLabel(row.uploadedBy)}
+                    {row.createdAt ? ` · ${new Date(row.createdAt).toLocaleString()}` : ''}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleDownload(row)}
+                    className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--accent-soft)]/40"
+                  >
+                    Download
+                  </button>
+                  {canWrite ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingId(row._id);
+                          setEditObs(row.obs || '');
+                        }}
+                        className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--accent-soft)]/40"
+                      >
+                        Notes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDelete(row)}
+                        className="rounded border border-red-200 px-2 py-0.5 text-xs text-red-700 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+              {row.obs && editingId !== row._id ? (
+                <p className="whitespace-pre-wrap text-sm text-[var(--muted)]">{row.obs}</p>
+              ) : null}
+              {canWrite && editingId === row._id ? (
+                <div className="space-y-2">
+                  <Field label="Notes">
+                    <TextArea
+                      value={editObs}
+                      onChange={(event) => setEditObs(event.target.value)}
+                      rows={4}
+                      maxLength={2000}
+                    />
+                  </Field>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={savingObs}
+                      onClick={() => void handleSaveObs(row)}
+                      className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+                    >
+                      {savingObs ? 'Saving…' : 'Save notes'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--accent-soft)]/40"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      <ConfirmDeleteDialog
+        isOpen={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={handleDelete}
+        title="Move to recycle bin"
+        itemLabel={pendingDelete?.displayName}
+        description={
+          pendingDelete
+            ? `Move “${pendingDelete.displayName}” to the recycle bin? An administrator can restore it later.`
+            : undefined
+        }
+        confirmLabel="Move to bin"
+        busy={deleting}
+      />
+    </section>
+  );
+}
