@@ -15,6 +15,7 @@ export type TableActionIconName =
   | 'answer'
   | 'results'
   | 'view'
+  | 'more'
   | 'access'
   | 'notes'
   | 'attach'
@@ -125,6 +126,14 @@ export function TableActionIcon({ name }: { name: TableActionIconName }) {
         <Svg>
           <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
           <circle cx="12" cy="12" r="3" />
+        </Svg>
+      );
+    case 'more':
+      return (
+        <Svg>
+          <circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none" />
         </Svg>
       );
     case 'access':

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { apiDelete, apiGet, apiPut } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
@@ -13,7 +13,8 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import PermissionModal from '@/components/ui/PermissionModal';
 import { useAccess } from '@/components/AccessProvider';
 import { AccessPrimaryButton } from '@/components/ui/AccessControls';
-import { AccessIconButton, AccessIconLink, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
+import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
+import RowActionsMenu from '@/components/ui/RowActionsMenu';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 import { buildListParams, type PaginatedList } from '@/lib/listTypes';
 import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
@@ -70,13 +71,21 @@ function formatDate(value?: string | null) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 }
 
+function bulkButtonClass(danger = false) {
+  const color = danger
+    ? 'text-[var(--danger)] hover:bg-red-50'
+    : 'text-[var(--foreground)] hover:bg-[var(--accent-soft)]/40';
+  return `rounded-md border border-[var(--border)] px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50 ${color}`;
+}
+
 export default function AdminUsersPage() {
   const { pushToast } = useToast();
-  const { can, isAdmin } = useAccess();
+  const { can, isAdmin, user: currentUser } = useAccess();
   const canCreate = can('USER:CREATE');
   const canWrite = can('USER:WRITE');
   const canDelete = can('USER:DELETE');
   const canManageAcl = can('GROUP:WRITE');
+  const canSelect = canWrite || canDelete;
   const [aclUser, setAclUser] = useState<UserRecord | null>(null);
 
   const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters(DEFAULT_FILTERS);
@@ -92,11 +101,12 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
-  const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [enablingId, setEnablingId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<UserRecord | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [actionBusy, setActionBusy] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<UserRecord[]>([]);
   const [deleting, setDeleting] = useState(false);
   const [passwordUser, setPasswordUser] = useState<UserRecord | null>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   const columns = useMemo(() => USER_COLUMNS, []);
   const { isVisible, toggle } = useColumnVisibility('admin-users', columns, {
@@ -105,8 +115,8 @@ export default function AdminUsersPage() {
 
   const hasActiveFilters = Object.values(applied).some(Boolean);
 
-  const loadUsers = useCallback(async () => {
-    setLoading(true);
+  const loadUsers = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       const params = buildListParams({ page, limit, sort, order, filters: applied });
@@ -123,6 +133,10 @@ export default function AdminUsersPage() {
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [applied, page, limit, sort, order]);
 
   useEffect(() => {
     apiGet<PaginatedList<GroupOption>>('/groups?limit=100&sort=name&order=asc')
@@ -154,70 +168,201 @@ export default function AdminUsersPage() {
     return order === 'asc' ? ' ↑' : ' ↓';
   };
 
+  const pagination = data?.pagination;
+  const users = data?.items || [];
+  const pageIds = users.map((row) => row._id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const somePageSelected = pageIds.some((id) => selectedIds.has(id));
+  const selectedUsers = users.filter((row) => selectedIds.has(row._id));
+  const selectedCount = selectedUsers.length;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = somePageSelected && !allPageSelected;
+    }
+  }, [somePageSelected, allPageSelected]);
+
   const handleDelete = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete.length) return;
     setDeleting(true);
     setError(null);
-    try {
-      await apiDelete(`/users/${pendingDelete._id}`);
-      pushToast({
-        tone: 'info',
-        title: 'User moved to recycle bin',
-        message: 'The account can be restored from Recycle bin.',
-      });
-      setPendingDelete(null);
-      await loadUsers();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete user.');
-    } finally {
-      setDeleting(false);
+    const results = await runForUsers(pendingDelete, (row) => apiDelete(`/users/${row._id}`));
+    setDeleting(false);
+    setPendingDelete([]);
+    notifyBulkResult(results, {
+      successTitle: 'Users moved to recycle bin',
+      successMessage: 'Selected accounts can be restored from Recycle bin.',
+    });
+    if (results.ok) {
+      setSelectedIds(new Set());
+      await loadUsers({ silent: true });
     }
   };
 
-  const handleToggleEnabled = async (user: UserRecord) => {
+  const isSelf = (row: UserRecord) => String(row._id) === String(currentUser?.id);
+
+  const runForUsers = async (
+    targets: UserRecord[],
+    work: (row: UserRecord) => Promise<void>
+  ) => {
+    let ok = 0;
+    const failed: string[] = [];
+    for (const row of targets) {
+      try {
+        await work(row);
+        ok += 1;
+      } catch (err) {
+        failed.push(`${row.username}: ${err instanceof Error ? err.message : 'Failed'}`);
+      }
+    }
+    return { ok, failed };
+  };
+
+  const notifyBulkResult = (
+    results: { ok: number; failed: string[] },
+    copy: { successTitle: string; successMessage: string }
+  ) => {
+    if (results.ok) {
+      pushToast({
+        tone: results.failed.length ? 'warning' : 'success',
+        title: copy.successTitle,
+        message: results.failed.length
+          ? `${results.ok} updated. ${results.failed.length} failed: ${results.failed[0]}`
+          : copy.successMessage,
+      });
+    } else if (results.failed.length) {
+      pushToast({
+        tone: 'error',
+        title: 'Update failed',
+        message: results.failed[0],
+      });
+    }
+  };
+
+  const applyStatus = async (
+    targets: UserRecord[],
+    body: { isVerified?: boolean; isEnabled?: boolean },
+    copy: { successTitle: string; successMessage: string; empty: string }
+  ) => {
+    if (!targets.length) {
+      pushToast({ tone: 'info', title: copy.empty, message: 'No matching accounts in the selection.' });
+      return;
+    }
+    setActionBusy(true);
     setError(null);
-    setEnablingId(user._id);
-    const next = user.isEnabled === false;
+    const results = await runForUsers(targets, (row) => apiPut(`/users/${row._id}`, body));
+    setActionBusy(false);
+    notifyBulkResult(results, copy);
+    if (results.ok) await loadUsers({ silent: true });
+  };
+
+  const handleVerifySelected = (verified: boolean) => {
+    const targets = selectedUsers.filter((row) => Boolean(row.isVerified) !== verified);
+    const skippedSelf = verified ? 0 : selectedUsers.filter(isSelf).length;
+    const next = verified ? targets : targets.filter((row) => !isSelf(row));
+    if (!verified && skippedSelf && !next.length) {
+      pushToast({
+        tone: 'warning',
+        title: 'Cannot unverify your own account',
+        message: 'Select other users to revoke verification.',
+      });
+      return;
+    }
+    void applyStatus(next, { isVerified: verified }, {
+      successTitle: verified ? 'Users verified' : 'Verification revoked',
+      successMessage: verified
+        ? 'Selected accounts can sign in.'
+        : 'Selected accounts cannot sign in until verified again.',
+      empty: verified ? 'Already verified' : 'Already unverified',
+    });
+  };
+
+  const handleBlockSelected = (blocked: boolean) => {
+    const next = selectedUsers.filter((row) => (row.isEnabled === false) !== blocked && !isSelf(row));
+    if (selectedUsers.some(isSelf) && !next.length) {
+      pushToast({
+        tone: 'warning',
+        title: blocked ? 'Cannot block your own account' : 'Cannot change your own account',
+        message: 'Select other users for this action.',
+      });
+      return;
+    }
+    void applyStatus(next, { isEnabled: !blocked }, {
+      successTitle: blocked ? 'Users blocked' : 'Users unblocked',
+      successMessage: blocked
+        ? 'Selected accounts can no longer sign in.'
+        : 'Selected accounts can sign in.',
+      empty: blocked ? 'Already blocked' : 'Already unblocked',
+    });
+  };
+
+  const handleDeleteSelected = () => {
+    const next = selectedUsers.filter((row) => !isSelf(row));
+    if (!next.length) {
+      pushToast({
+        tone: 'warning',
+        title: 'Cannot delete your own account',
+        message: 'Select other users to move to the recycle bin.',
+      });
+      return;
+    }
+    setPendingDelete(next);
+  };
+
+  const handleToggleEnabled = async (row: UserRecord) => {
+    const nextEnabled = row.isEnabled === false;
+    setActionBusy(true);
+    setError(null);
     try {
-      await apiPut(`/users/${user._id}`, { isEnabled: next });
+      await apiPut(`/users/${row._id}`, { isEnabled: nextEnabled });
       pushToast({
         tone: 'success',
-        title: next ? 'User enabled' : 'User disabled',
-        message: next
-          ? `${user.username} can sign in.`
-          : `${user.username} can no longer sign in.`,
+        title: nextEnabled ? 'User unblocked' : 'User blocked',
+        message: nextEnabled
+          ? `${row.username} can sign in.`
+          : `${row.username} can no longer sign in.`,
       });
-      await loadUsers();
+      await loadUsers({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update account status.');
     } finally {
-      setEnablingId(null);
+      setActionBusy(false);
     }
   };
 
-  const handleToggleVerified = async (user: UserRecord) => {
+  const handleToggleVerified = async (row: UserRecord) => {
+    const next = !row.isVerified;
+    setActionBusy(true);
     setError(null);
-    setVerifyingId(user._id);
-    const next = !user.isVerified;
     try {
-      await apiPut(`/users/${user._id}`, { isVerified: next });
+      await apiPut(`/users/${row._id}`, { isVerified: next });
       pushToast({
         tone: 'success',
         title: next ? 'User verified' : 'Verification revoked',
         message: next
-          ? `${user.username} can sign in.`
-          : `${user.username} can no longer sign in until verified again.`,
+          ? `${row.username} can sign in.`
+          : `${row.username} can no longer sign in until verified again.`,
       });
-      await loadUsers();
+      await loadUsers({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update verification.');
     } finally {
-      setVerifyingId(null);
+      setActionBusy(false);
     }
   };
 
-  const pagination = data?.pagination;
-  const users = data?.items || [];
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allPageSelected ? new Set() : new Set(pageIds));
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
@@ -293,7 +438,7 @@ export default function AdminUsersPage() {
             >
               <option value="">All</option>
               <option value="true">Enabled</option>
-              <option value="false">Disabled</option>
+              <option value="false">Blocked</option>
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
@@ -385,6 +530,54 @@ export default function AdminUsersPage() {
           </div>
         </div>
 
+        {selectedCount > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--accent-soft)]/40 px-4 py-2 text-sm">
+            <span className="mr-1 font-medium text-[var(--foreground)]">
+              {selectedCount} selected
+            </span>
+            <button
+              type="button"
+              className={bulkButtonClass()}
+              disabled={!canWrite || actionBusy}
+              onClick={() => handleVerifySelected(true)}
+            >
+              Verify
+            </button>
+            <button
+              type="button"
+              className={bulkButtonClass()}
+              disabled={!canWrite || actionBusy}
+              onClick={() => handleVerifySelected(false)}
+            >
+              Unverify
+            </button>
+            <button
+              type="button"
+              className={bulkButtonClass()}
+              disabled={!canWrite || actionBusy}
+              onClick={() => handleBlockSelected(true)}
+            >
+              Block
+            </button>
+            <button
+              type="button"
+              className={bulkButtonClass()}
+              disabled={!canWrite || actionBusy}
+              onClick={() => handleBlockSelected(false)}
+            >
+              Unblock
+            </button>
+            <button
+              type="button"
+              className={bulkButtonClass(true)}
+              disabled={!canDelete || actionBusy}
+              onClick={handleDeleteSelected}
+            >
+              Delete
+            </button>
+          </div>
+        ) : null}
+
         {loading ? (
           <p className="p-5 text-[var(--muted)]">Loading users…</p>
         ) : users.length === 0 ? (
@@ -394,6 +587,18 @@ export default function AdminUsersPage() {
             <table className="headers-nowrap min-w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                 <tr>
+                  {canSelect ? (
+                    <th className="w-10 px-4 py-3">
+                      <input
+                        ref={selectAllRef}
+                        type="checkbox"
+                        checked={allPageSelected}
+                        onChange={toggleSelectAll}
+                        aria-label="Select all users on this page"
+                        className="h-4 w-4 accent-[var(--accent)]"
+                      />
+                    </th>
+                  ) : null}
                   {isVisible('username') ? (
                     <th className="px-4 py-3 font-medium">
                       <button type="button" onClick={() => toggleSort('username')} className="hover:text-[var(--accent)]">
@@ -440,8 +645,21 @@ export default function AdminUsersPage() {
                 {users.map((user) => (
                   <tr
                     key={user._id}
-                    className={`border-b border-[var(--border)] last:border-0 ${tableActionRowGroupClass}`}
+                    className={`border-b border-[var(--border)] last:border-0 ${tableActionRowGroupClass} ${
+                      selectedIds.has(user._id) ? 'bg-[var(--accent-soft)]/30' : ''
+                    }`}
                   >
+                    {canSelect ? (
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(user._id)}
+                          onChange={() => toggleSelected(user._id)}
+                          aria-label={`Select ${user.username}`}
+                          className="h-4 w-4 accent-[var(--accent)]"
+                        />
+                      </td>
+                    ) : null}
                     {isVisible('username') ? (
                       <td className="px-4 py-3 font-medium">
                         <Link
@@ -473,7 +691,7 @@ export default function AdminUsersPage() {
                     {isVisible('enabled') ? (
                       <td className="px-4 py-3">
                         {user.isEnabled === false ? (
-                          <span className="font-medium text-[var(--muted)]">Disabled</span>
+                          <span className="font-medium text-[var(--muted)]">Blocked</span>
                         ) : (
                           <span className="text-emerald-700">Enabled</span>
                         )}
@@ -484,63 +702,66 @@ export default function AdminUsersPage() {
                     ) : null}
                     {isVisible('actions') ? (
                       <td className="px-4 py-3 text-right">
-                        <TableActionRow>
-                          <AccessIconLink
-                            allowed={isAdmin}
-                            icon="view"
-                            label="View"
-                            href={`/admin/users/${user._id}`}
-                          />
+                        <TableActionRow alwaysVisible>
                           <AccessIconButton
                             allowed={canWrite}
                             icon="edit"
                             label="Edit"
                             onClick={() => setEditingUser(user)}
                           />
-                          <AccessIconButton
-                            allowed={canWrite}
-                            icon={user.isVerified ? 'verify' : 'unverify'}
-                            label={
-                              verifyingId === user._id
-                                ? 'Updating…'
-                                : user.isVerified
-                                  ? 'Unverify'
-                                  : 'Verify'
-                            }
-                            onClick={() => handleToggleVerified(user)}
-                            disabled={verifyingId === user._id}
-                          />
-                          <AccessIconButton
-                            allowed={canWrite}
-                            icon={user.isEnabled === false ? 'add' : 'disconnect'}
-                            label={
-                              enablingId === user._id
-                                ? 'Updating…'
-                                : user.isEnabled === false
-                                  ? 'Enable'
-                                  : 'Disable'
-                            }
-                            onClick={() => handleToggleEnabled(user)}
-                            disabled={enablingId === user._id}
-                          />
-                          <AccessIconButton
-                            allowed={canManageAcl}
-                            icon="access"
-                            label="Access"
-                            onClick={() => setAclUser(user)}
-                          />
-                          <AccessIconButton
-                            allowed={canWrite}
-                            icon="password"
-                            label="Change password"
-                            onClick={() => setPasswordUser(user)}
-                          />
-                          <AccessIconButton
-                            allowed={canDelete}
-                            icon="delete"
-                            label="Delete"
-                            danger
-                            onClick={() => setPendingDelete(user)}
+                          <RowActionsMenu
+                            items={[
+                              {
+                                id: 'view',
+                                label: 'View',
+                                allowed: isAdmin,
+                                href: `/admin/users/${user._id}`,
+                              },
+                              {
+                                id: 'verify',
+                                label: user.isVerified ? 'Unverify' : 'Verify',
+                                allowed: canWrite,
+                                disabled: actionBusy || (Boolean(user.isVerified) && isSelf(user)),
+                                reason:
+                                  user.isVerified && isSelf(user)
+                                    ? 'You cannot unverify your own account.'
+                                    : undefined,
+                                onSelect: () => void handleToggleVerified(user),
+                              },
+                              {
+                                id: 'block',
+                                label: user.isEnabled === false ? 'Unblock' : 'Block',
+                                allowed: canWrite,
+                                disabled: actionBusy || isSelf(user),
+                                reason: isSelf(user)
+                                  ? 'You cannot block your own account.'
+                                  : undefined,
+                                onSelect: () => void handleToggleEnabled(user),
+                              },
+                              {
+                                id: 'access',
+                                label: 'Access',
+                                allowed: canManageAcl,
+                                onSelect: () => setAclUser(user),
+                              },
+                              {
+                                id: 'password',
+                                label: 'Change password',
+                                allowed: canWrite,
+                                onSelect: () => setPasswordUser(user),
+                              },
+                              {
+                                id: 'delete',
+                                label: 'Delete',
+                                allowed: canDelete,
+                                danger: true,
+                                disabled: actionBusy || isSelf(user),
+                                reason: isSelf(user)
+                                  ? 'You cannot delete your own account.'
+                                  : undefined,
+                                onSelect: () => setPendingDelete([user]),
+                              },
+                            ]}
                           />
                         </TableActionRow>
                       </td>
@@ -631,15 +852,17 @@ export default function AdminUsersPage() {
       />
 
       <ConfirmDeleteDialog
-        isOpen={Boolean(pendingDelete)}
-        onClose={() => setPendingDelete(null)}
+        isOpen={pendingDelete.length > 0}
+        onClose={() => setPendingDelete([])}
         onConfirm={handleDelete}
         title="Move to recycle bin"
-        itemLabel={pendingDelete?.username}
+        itemLabel={
+          pendingDelete.length === 1 ? pendingDelete[0]?.username : `${pendingDelete.length} users`
+        }
         description={
-          pendingDelete
-            ? `Move “${pendingDelete.username}” to the recycle bin? An administrator can restore it later.`
-            : undefined
+          pendingDelete.length === 1
+            ? `Move “${pendingDelete[0].username}” to the recycle bin? An administrator can restore it later.`
+            : `Move ${pendingDelete.length} accounts to the recycle bin? An administrator can restore them later.`
         }
         confirmLabel="Move to bin"
         busy={deleting}
