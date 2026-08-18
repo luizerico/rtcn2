@@ -1,0 +1,34 @@
+---
+description: Right-align form/page/modal action buttons; Cancel first, primary last
+globs: client/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Form action buttons: right-aligned
+
+Page, form, and modal footers (Back/Cancel, Save draft, Publish, Submit, Create) sit on the **right**.
+
+- Whole group: `flex flex-wrap justify-end gap-3` (or `ml-auto` on the group)
+- **Cancel/Back first** (leftmost of the group, bordered secondary)
+- **Primary last** (rightmost: Save, Publish, Submit, Create)
+- Mobile: keep `flex-wrap` so buttons wrap, but the group stays end-aligned
+- Do not left-align action rows inside bordered form cards
+- Not for list filter Apply/Reset, table row icons, or in-form content actions (e.g. "Add question")
+
+```tsx
+// ❌ BAD — left-aligned footer
+<div className="flex flex-wrap gap-3">
+  <Link href="/admin/surveys">Back</Link>
+  <button type="submit">Save draft</button>
+  <button type="button">Publish version</button>
+</div>
+
+// ✅ GOOD — group on the right; Cancel/Back first, primary last
+<div className="flex flex-wrap justify-end gap-3">
+  <Link href="/admin/surveys">Back</Link>
+  <button type="submit">Save draft</button>
+  <button type="button">Publish version</button>
+</div>
+```
+
+See `.cursor/rules/page-navigation.mdc` for Cancel-then-Save order and breadcrumbs.

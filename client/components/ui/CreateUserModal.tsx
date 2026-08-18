@@ -50,7 +50,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCr
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create user">
+    <Modal isOpen={isOpen} onClose={onClose} title="Create user" closeOnBackdrop={false}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
