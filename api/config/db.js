@@ -17,6 +17,13 @@ const connectDB = async () => {
     } catch (error) {
       console.warn('Permission migration on connect skipped:', error.message);
     }
+
+    try {
+      const { migrateUserGoogleIdIndex } = require('../models/User');
+      await migrateUserGoogleIdIndex();
+    } catch (error) {
+      console.warn('User googleId index migration skipped:', error.message);
+    }
   } catch (err) {
     console.error('MongoDB connection failed:', err.message);
     if (/auth/i.test(err.message)) {

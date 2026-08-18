@@ -13,7 +13,7 @@ alwaysApply: false
 - Valid authorize resources for assets: `SURVEY`, `SPONSOR`, `OPPORTUNITY`, `PROJECT`. COUNTY is a subject, not an Asset kind. **USER and GROUP are not Asset subclasses and are never permission `resourceType` values.**
 - Identity admin routes still use `authorize('USER:…')` / `authorize('GROUP:…')`; those resolve via **admin group membership**, not permission rows.
 - Principals on asset grants: `USER` or `GROUP` (`principalType` + `principalId`) — who receives access, not what is secured.
-- Grant access to all objects of an asset class (`*`) or specific asset ids. Questions are not permission resources (`SURVEY:WRITE` edits the catalog/instrument). Survey **answers** are gated by the subject: `COUNTY:READ` (or PROJECT/…) to view, `CREATE` to start a sheet, `WRITE` to edit an existing sheet. Sheet owners can edit while status is `in_progress` or `need_changes`. Only admins can see or set `archived`.
+- Grant access to all objects of an asset class (`*`) or specific asset ids. Questions are not permission resources (`SURVEY:WRITE` edits the catalog/instrument). Survey **answers** are gated by the subject: `COUNTY:READ` (or PROJECT/…) to view, `CREATE` to start a sheet, `WRITE` to edit an existing sheet. Sheet owners can edit while status is `in_progress` or `need_changes`. `DELETE` (or the owner while `in_progress` / `need_changes`) moves the sheet to the recycle bin. Only admins can see or set `archived`.
 - Valid actions: `READ`, `WRITE`, `CREATE`, `DELETE`, `ADMIN` (UI labels: Full control / Modify / Read / Create / Delete)
 
 ```js

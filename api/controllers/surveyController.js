@@ -18,6 +18,7 @@ const {
   setActiveInstrumentVersion,
   readSubjectResponse,
   saveSubjectResponse,
+  trashSubjectResponse,
   listSubjectRevisions,
   listInstrumentResponses,
   listAccessibleAnswers,
@@ -261,6 +262,22 @@ exports.putSubjectResponse = async (req, res) => {
     res.json(payload);
   } catch (error) {
     return handleError(res, error, 'Error saving response');
+  }
+};
+
+exports.deleteSubjectResponse = async (req, res) => {
+  try {
+    const survey = await loadSurvey(req.params.id);
+    if (!survey) return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
+    const payload = await trashSubjectResponse(
+      survey,
+      req.params.subjectType,
+      req.params.subjectId,
+      req.user
+    );
+    res.status(200).json(payload);
+  } catch (error) {
+    return handleError(res, error, 'Error deleting response');
   }
 };
 

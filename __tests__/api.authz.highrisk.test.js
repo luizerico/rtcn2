@@ -231,6 +231,12 @@ describe('High-risk authz paths', () => {
         .set(viewerAuth);
       expect(getDenied.status).toBe(403);
 
+      const queryDenied = await request(app)
+        .post('/api/permissions/acl/query')
+        .set(viewerAuth)
+        .send({ resourceType: 'SURVEY', resourceIds: [survey._id] });
+      expect(queryDenied.status).toBe(403);
+
       const postDenied = await request(app)
         .post('/api/permissions/acl')
         .set(viewerAuth)
@@ -288,6 +294,26 @@ describe('High-risk authz paths', () => {
         .set(adminAuth);
       expect(getAllowed.status).toBe(200);
       expect(getAllowed.body.entries.length).toBeGreaterThan(0);
+
+      const queryAllowed = await request(app)
+        .post('/api/permissions/acl/query')
+        .set(adminAuth)
+        .send({ resourceType: 'SURVEY', allObjects: false, resourceIds: [survey._id] });
+      expect(queryAllowed.status).toBe(200);
+      expect(queryAllowed.body.entries.length).toBeGreaterThan(0);
+
+      const deleteDenied = await request(app)
+        .post('/api/permissions/acl/delete')
+        .set(viewerAuth)
+        .send({ resourceType: 'SURVEY', resourceIds: [survey._id] });
+      expect(deleteDenied.status).toBe(403);
+
+      const deleteAllowed = await request(app)
+        .post('/api/permissions/acl/delete')
+        .set(adminAuth)
+        .send({ resourceType: 'SURVEY', allObjects: false, resourceIds: [survey._id] });
+      expect(deleteAllowed.status).toBe(200);
+      expect(deleteAllowed.body.deletedCount).toBeGreaterThan(0);
 
       const catalog = await request(app).get('/api/permissions/catalog').set(adminAuth);
       expect(catalog.status).toBe(200);

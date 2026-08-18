@@ -3,6 +3,8 @@
  * Browser sessions use the httpOnly cookie; credentials are always included.
  */
 
+import { clearGeoSessionCache, getCachedGeo, isGeoCatalogEndpoint } from '@/lib/geoSessionCache';
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
 
 class ApiError extends Error {
@@ -79,6 +81,7 @@ async function parseError(res: Response): Promise<{ message: string; code?: stri
 }
 
 function clearLocalSessionHints() {
+  clearGeoSessionCache();
   if (typeof window === 'undefined') return;
   localStorage.removeItem('authToken');
   localStorage.removeItem('userUsername');
@@ -123,6 +126,9 @@ async function request<T>(method: string, endpoint: string, bodyData?: object): 
 }
 
 export async function apiGet<T>(endpoint: string): Promise<T> {
+  if (isGeoCatalogEndpoint(endpoint)) {
+    return getCachedGeo(endpoint, () => request<T>('GET', endpoint));
+  }
   return request<T>('GET', endpoint);
 }
 
@@ -169,4 +175,4 @@ export async function apiDownload(endpoint: string, filename = 'download'): Prom
   URL.revokeObjectURL(url);
 }
 
-export { ApiError, clearLocalSessionHints };
+export { ApiError, clearLocalSessionHints, clearGeoSessionCache };

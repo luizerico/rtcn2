@@ -265,6 +265,44 @@ describe('Unified recycle bin', () => {
     expect(await InstrumentResponse.countDocuments({ instrumentId: survey.body._id })).toBe(0);
   });
 
+  it('lists trashed survey answers and restores them from the bin', async () => {
+    const auth = { Authorization: `Bearer ${adminToken}` };
+    const { county } = await seedCounty({ name: 'Answer Bin' });
+    const survey = await request(app).post('/api/surveys').set(auth).send({
+      name: 'Answer Pulse',
+      questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+      countyIds: [county._id],
+    });
+    expect(survey.status).toBe(201);
+    const questionId = survey.body.questions[0].questionId;
+    const path = `/api/surveys/${survey.body._id}/subjects/COUNTY/${county._id}`;
+    const saved = await request(app).put(path).set(auth).send({
+      answers: [{ questionId, value: 'Yes' }],
+    });
+    expect(saved.status).toBe(200);
+
+    const removed = await request(app).delete(path).set(auth);
+    expect(removed.status).toBe(200);
+
+    const bin = await request(app).get('/api/bin?type=SURVEY_ANSWER').set(auth);
+    expect(bin.status).toBe(200);
+    expect(bin.body.items).toHaveLength(1);
+    expect(bin.body.items[0].itemType).toBe('SURVEY_ANSWER');
+    expect(bin.body.items[0]._id).toBe(saved.body._id);
+
+    const restored = await request(app)
+      .post(`/api/bin/SURVEY_ANSWER/${saved.body._id}/restore`)
+      .set(auth);
+    expect(restored.status).toBe(200);
+
+    const empty = await request(app).get('/api/bin?type=SURVEY_ANSWER').set(auth);
+    expect(empty.body.items).toHaveLength(0);
+
+    const again = await request(app).get(path).set(auth);
+    expect(again.status).toBe(200);
+    expect(again.body._id).toBe(saved.body._id);
+  });
+
   it('empties a mixed recycle bin and purges stored files with their owner', async () => {
     const auth = { Authorization: `Bearer ${adminToken}` };
     const sponsor = await createSponsor(app, adminToken);

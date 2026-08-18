@@ -15,6 +15,7 @@ const {
   setSurveyCountyVersion,
   getSubjectResponse,
   putSubjectResponse,
+  deleteSubjectResponse,
   listSubjectRevisions,
   submitSurveyResponse,
   listSurveyResponses,
@@ -187,6 +188,12 @@ router.put(
   validate(paramObjectId('id', 'Survey id')),
   validate(paramObjectId('subjectId', 'Subject id')),
   putSubjectResponse
+);
+router.delete(
+  '/:id/subjects/:subjectType/:subjectId',
+  validate(paramObjectId('id', 'Survey id')),
+  validate(paramObjectId('subjectId', 'Subject id')),
+  deleteSubjectResponse
 );
 router.get(
   '/:id/responses',

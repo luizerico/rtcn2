@@ -766,6 +766,70 @@ describe('Versioned survey instruments', () => {
     expect(deniedBulk.status).toBe(403);
   });
 
+  it('sorts assigned counties by region, state, biome, and microregion name', async () => {
+    const Region = require('../api/models/geo/Region');
+    const State = require('../api/models/geo/State');
+    const Biome = require('../api/models/geo/Biome');
+    const MicroRegion = require('../api/models/geo/MicroRegion');
+    const County = require('../api/models/geo/County');
+    const south = await Region.create({ code: 'S', name: 'South' });
+    const north = await Region.create({ code: 'N', name: 'North' });
+    const rioGrande = await State.create({ code: 'RS', name: 'Rio Grande', region: south._id });
+    const amazonas = await State.create({ code: 'AM', name: 'Amazonas', region: north._id });
+    const cerrado = await Biome.create({ code: 'CER', name: 'Cerrado' });
+    const amazonia = await Biome.create({ code: 'AMZ', name: 'Amazonia' });
+    const microBeta = await MicroRegion.create({
+      name: 'Beta Micro',
+      code: 'MB',
+      region: south._id,
+      state: rioGrande._id,
+    });
+    const microAlpha = await MicroRegion.create({
+      name: 'Alpha Micro',
+      code: 'MA',
+      region: north._id,
+      state: amazonas._id,
+    });
+    const porto = await seedCounty({
+      name: 'Porto',
+      IBGECode: '4314902',
+      region: south,
+      state: rioGrande,
+      biome: cerrado,
+    });
+    const manaus = await seedCounty({
+      name: 'Manaus',
+      IBGECode: '1302603',
+      region: north,
+      state: amazonas,
+      biome: amazonia,
+    });
+    await County.updateOne({ _id: porto.county._id }, { $set: { microregion: microBeta._id } });
+    await County.updateOne({ _id: manaus.county._id }, { $set: { microregion: microAlpha._id } });
+
+    const auth = { Authorization: `Bearer ${adminToken}` };
+    const survey = await request(app).post('/api/surveys').set(auth).send({
+      name: 'Geo sort',
+      questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+      countyIds: [porto.county._id, manaus.county._id],
+    });
+    expect(survey.status).toBe(201);
+
+    async function names(sort, order = 'asc') {
+      const res = await request(app)
+        .get(`/api/surveys/${survey.body._id}/counties?sort=${sort}&order=${order}`)
+        .set(auth);
+      expect(res.status).toBe(200);
+      return res.body.items.map((row) => row.name);
+    }
+
+    expect(await names('region')).toEqual(['Manaus', 'Porto']);
+    expect(await names('state')).toEqual(['Manaus', 'Porto']);
+    expect(await names('biome')).toEqual(['Manaus', 'Porto']);
+    expect(await names('microregion')).toEqual(['Manaus', 'Porto']);
+    expect(await names('region', 'desc')).toEqual(['Porto', 'Manaus']);
+  });
+
   it('intersects optional countyIds with the geography set on bulk assign and unassign', async () => {
     const first = await seedCounty({ name: 'Keep', IBGECode: '2100010' });
     const second = await seedCounty({
@@ -846,6 +910,19 @@ describe('Versioned survey instruments', () => {
     expect(opened.status).toBe(200);
     expect(opened.body._id).toBe(saved.body._id);
     expect(opened.body.answers[0].value).toBe('Yes');
+
+    const assigned = await request(app)
+      .get(`/api/surveys/${survey.body._id}/counties`)
+      .set(auth);
+    expect(assigned.status).toBe(200);
+    expect(assigned.body.items.map((row) => row._id)).toEqual([String(county._id)]);
+    expect(assigned.body.items[0].versionLocked).toBe(true);
+
+    const responses = await request(app)
+      .get(`/api/surveys/${survey.body._id}/responses`)
+      .set(auth);
+    expect(responses.status).toBe(200);
+    expect(responses.body.responses.some((row) => row._id === saved.body._id)).toBe(true);
   });
 
   it('lets SURVEY:READ plus COUNTY:CREATE start a sheet and hides it from COUNTY:READ-only users', async () => {
@@ -1097,5 +1174,236 @@ describe('Versioned survey instruments', () => {
     const other = await request(app).get(`${path}/files`).query({ questionId: secondId }).set(auth);
     expect(other.status).toBe(200);
     expect(other.body.items).toHaveLength(0);
+  });
+
+  it('moves a sheet to the recycle bin and restores it', async () => {
+    const { county } = await seedCounty({ name: 'Bin County' });
+    const auth = { Authorization: `Bearer ${adminToken}` };
+    const survey = await request(app).post('/api/surveys').set(auth).send({
+      name: 'Bin Pulse',
+      questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+      countyIds: [county._id],
+    });
+    const questionId = survey.body.questions[0].questionId;
+    const path = `/api/surveys/${survey.body._id}/subjects/COUNTY/${county._id}`;
+    const saved = await request(app).put(path).set(auth).send({
+      answers: [{ questionId, value: 'Yes' }],
+    });
+    expect(saved.status).toBe(200);
+
+    const denied = await request(app).delete(path).set('Authorization', `Bearer ${viewerToken}`);
+    expect(denied.status).toBe(403);
+
+    const trashed = await request(app).delete(path).set(auth);
+    expect(trashed.status).toBe(200);
+    expect(trashed.body.message).toMatch(/recycle bin/i);
+
+    const listed = await request(app).get('/api/surveys/answers').set(auth);
+    expect(listed.body.items.some((row) => row._id === saved.body._id)).toBe(false);
+
+    const opened = await request(app).get(path).set(auth);
+    expect(opened.status).toBe(200);
+    expect(opened.body._id).toBeUndefined();
+    expect(opened.body.revision).toBe(0);
+
+    const bin = await request(app).get('/api/bin?type=SURVEY_ANSWER').set(auth);
+    expect(bin.status).toBe(200);
+    expect(bin.body.items).toHaveLength(1);
+    expect(bin.body.items[0]).toMatchObject({
+      itemType: 'SURVEY_ANSWER',
+      _id: saved.body._id,
+    });
+    expect(bin.body.items[0].name).toMatch(/Bin Pulse/);
+
+    const restored = await request(app)
+      .post(`/api/bin/SURVEY_ANSWER/${saved.body._id}/restore`)
+      .set(auth);
+    expect(restored.status).toBe(200);
+
+    const again = await request(app).get(path).set(auth);
+    expect(again.status).toBe(200);
+    expect(again.body._id).toBe(saved.body._id);
+    expect(again.body.answers[0].value).toBe('Yes');
+  });
+
+  it('lets COUNTY:DELETE trash a sheet and blocks COUNTY:WRITE on approved sheets', async () => {
+    const { county } = await seedCounty({ name: 'Deleteville' });
+    const adminAuth = { Authorization: `Bearer ${adminToken}` };
+    const survey = await request(app).post('/api/surveys').set(adminAuth).send({
+      name: 'Deletable',
+      questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+      countyIds: [county._id],
+    });
+    const questionId = survey.body.questions[0].questionId;
+    const path = `/api/surveys/${survey.body._id}/subjects/COUNTY/${county._id}`;
+    const saved = await request(app).put(path).set(adminAuth).send({
+      answers: [{ questionId, value: 'Yes' }],
+      status: 'approved',
+    });
+    expect(saved.status).toBe(200);
+
+    const writers = await Group.create({
+      name: 'county-writers-no-delete',
+      members: [viewer.user._id],
+    });
+    await replaceGroupPermissions(writers._id, [
+      {
+        groupId: writers._id,
+        resourceType: 'COUNTY',
+        target: county.name,
+        resourceId: county._id,
+        permission: 'READ',
+      },
+      {
+        groupId: writers._id,
+        resourceType: 'COUNTY',
+        target: county.name,
+        resourceId: county._id,
+        permission: 'WRITE',
+      },
+      {
+        groupId: writers._id,
+        resourceType: 'SURVEY',
+        target: survey.body.name,
+        resourceId: survey.body._id,
+        permission: 'READ',
+      },
+    ]);
+    const writerToken = await login(app, 'viewer@example.com', 'Password123!');
+    const blocked = await request(app).delete(path).set('Authorization', `Bearer ${writerToken}`);
+    expect(blocked.status).toBe(403);
+
+    const deleters = await Group.create({
+      name: 'county-deleters',
+      members: [viewer.user._id],
+    });
+    await replaceGroupPermissions(deleters._id, [
+      {
+        groupId: deleters._id,
+        resourceType: 'COUNTY',
+        target: county.name,
+        resourceId: county._id,
+        permission: 'READ',
+      },
+      {
+        groupId: deleters._id,
+        resourceType: 'COUNTY',
+        target: county.name,
+        resourceId: county._id,
+        permission: 'DELETE',
+      },
+      {
+        groupId: deleters._id,
+        resourceType: 'SURVEY',
+        target: survey.body.name,
+        resourceId: survey.body._id,
+        permission: 'READ',
+      },
+    ]);
+    const deleterToken = await login(app, 'viewer@example.com', 'Password123!');
+    const removed = await request(app).delete(path).set('Authorization', `Bearer ${deleterToken}`);
+    expect(removed.status).toBe(200);
+  });
+
+  it('lets the owner trash an in-progress sheet and refuses restore when a new sheet exists', async () => {
+    const { county } = await seedCounty({ name: 'Owner Bin' });
+    const adminAuth = { Authorization: `Bearer ${adminToken}` };
+    const survey = await request(app).post('/api/surveys').set(adminAuth).send({
+      name: 'Owner Pulse',
+      questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+      countyIds: [county._id],
+    });
+    const questionId = survey.body.questions[0].questionId;
+    const path = `/api/surveys/${survey.body._id}/subjects/COUNTY/${county._id}`;
+
+    const starters = await Group.create({
+      name: 'county-draft-owners',
+      members: [viewer.user._id],
+    });
+    await replaceGroupPermissions(starters._id, [
+      {
+        groupId: starters._id,
+        resourceType: 'COUNTY',
+        target: county.name,
+        resourceId: county._id,
+        permission: 'READ',
+      },
+      {
+        groupId: starters._id,
+        resourceType: 'COUNTY',
+        target: county.name,
+        resourceId: county._id,
+        permission: 'CREATE',
+      },
+      {
+        groupId: starters._id,
+        resourceType: 'SURVEY',
+        target: survey.body.name,
+        resourceId: survey.body._id,
+        permission: 'READ',
+      },
+    ]);
+    const starterToken = await login(app, 'viewer@example.com', 'Password123!');
+    const draft = await request(app)
+      .put(path)
+      .set('Authorization', `Bearer ${starterToken}`)
+      .send({ answers: [{ questionId, value: 'Yes' }], status: 'in_progress' });
+    expect(draft.status).toBe(200);
+
+    const trashed = await request(app)
+      .delete(path)
+      .set('Authorization', `Bearer ${starterToken}`);
+    expect(trashed.status).toBe(200);
+
+    const replacement = await request(app)
+      .put(path)
+      .set('Authorization', `Bearer ${starterToken}`)
+      .send({ answers: [{ questionId, value: 'No' }], status: 'in_progress' });
+    expect(replacement.status).toBe(200);
+    expect(replacement.body._id).not.toBe(draft.body._id);
+
+    const conflict = await request(app)
+      .post(`/api/bin/SURVEY_ANSWER/${draft.body._id}/restore`)
+      .set(adminAuth);
+    expect(conflict.status).toBe(409);
+
+    await request(app).delete(path).set(adminAuth);
+    const restored = await request(app)
+      .post(`/api/bin/SURVEY_ANSWER/${draft.body._id}/restore`)
+      .set(adminAuth);
+    expect(restored.status).toBe(200);
+
+    const approved = await request(app).put(path).set(adminAuth).send({
+      answers: [{ questionId, value: 'Yes' }],
+      status: 'approved',
+    });
+    expect(approved.status).toBe(200);
+    const ownerBlocked = await request(app)
+      .delete(path)
+      .set('Authorization', `Bearer ${starterToken}`);
+    expect(ownerBlocked.status).toBe(403);
+  });
+
+  it('permanently deletes revisions when a trashed sheet is purged', async () => {
+    const { county } = await seedCounty({ name: 'Purge County' });
+    const auth = { Authorization: `Bearer ${adminToken}` };
+    const survey = await request(app).post('/api/surveys').set(auth).send({
+      name: 'Purge Pulse',
+      questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+      countyIds: [county._id],
+    });
+    const questionId = survey.body.questions[0].questionId;
+    const path = `/api/surveys/${survey.body._id}/subjects/COUNTY/${county._id}`;
+    const saved = await request(app).put(path).set(auth).send({
+      answers: [{ questionId, value: 'Yes' }],
+    });
+    expect(saved.status).toBe(200);
+    expect(await InstrumentRevision.countDocuments({ responseId: saved.body._id })).toBe(1);
+
+    await request(app).delete(path).set(auth);
+    const purged = await request(app).delete(`/api/bin/SURVEY_ANSWER/${saved.body._id}`).set(auth);
+    expect(purged.status).toBe(200);
+    expect(await InstrumentResponse.countDocuments({ _id: saved.body._id })).toBe(0);
+    expect(await InstrumentRevision.countDocuments({ responseId: saved.body._id })).toBe(0);
   });
 });

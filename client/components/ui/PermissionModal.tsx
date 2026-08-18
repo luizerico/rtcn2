@@ -4,6 +4,7 @@ import React, { useId } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { AddPrincipalPanel } from './permission-modal/AddPrincipalPanel';
 import { AssetObjectPicker } from './permission-modal/AssetObjectPicker';
+import { CountyGeoPicker } from './permission-modal/CountyGeoPicker';
 import { PermissionScopeTable } from './permission-modal/PermissionScopeTable';
 import { PrincipalList } from './permission-modal/PrincipalList';
 import type { PermissionModalProps } from './permission-modal/types';
@@ -91,17 +92,29 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
           </div>
         </div>
 
-        {!editor.allObjects && (
-          <AssetObjectPicker
-            selectionLocked={editor.selectionLocked}
-            catalogLoading={catalogLoading}
-            aclLoading={editor.aclLoading}
-            selectableObjects={editor.selectableObjects}
-            selectedIds={editor.selectedIds}
-            initialResourceId={initialResourceId}
-            onToggleObject={editor.toggleObject}
-          />
-        )}
+        {!editor.allObjects &&
+          (editor.resourceType === 'COUNTY' ? (
+            <CountyGeoPicker
+              selectionLocked={editor.selectionLocked}
+              aclLoading={editor.aclLoading}
+              selectedIds={editor.selectedIds}
+              selectedObjects={editor.objectMeta}
+              initialResourceId={initialResourceId}
+              onReplaceObjects={editor.replaceSelectedObjects}
+              onAddObjects={editor.addSelectedObjects}
+              onToggleObject={editor.toggleObject}
+            />
+          ) : (
+            <AssetObjectPicker
+              selectionLocked={editor.selectionLocked}
+              catalogLoading={catalogLoading}
+              aclLoading={editor.aclLoading}
+              selectableObjects={editor.selectableObjects}
+              selectedIds={editor.selectedIds}
+              initialResourceId={initialResourceId}
+              onToggleObject={editor.toggleObject}
+            />
+          ))}
 
         {editor.allObjects && editor.aclLoading && (
           <p className="text-xs text-[var(--muted)]">Loading permissions…</p>
@@ -115,7 +128,7 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
             onSelect={editor.selectPrincipal}
             onAddUser={() => editor.setAddMode('USER')}
             onAddGroup={() => editor.setAddMode('GROUP')}
-            onRemove={editor.removeSelectedPrincipal}
+            onRemove={editor.removePrincipals}
           />
 
           <PermissionScopeTable

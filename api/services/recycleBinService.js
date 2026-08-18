@@ -3,7 +3,8 @@ const User = require('../models/User');
 const Group = require('../models/Group');
 const Permission = require('../models/Permission');
 const StoredFile = require('../models/StoredFile');
-const { purgeInstrumentDependents } = require('./surveyInstrumentService');
+const { purgeInstrumentDependents, listTrashedResponses, restoreTrashedResponse, purgeTrashedResponse, toAnswerBinItem } = require('./surveyInstrumentService');
+const InstrumentResponse = require('../models/survey/InstrumentResponse');
 const { KIND_MODELS, ASSET_KINDS, modelForKind } = require('../models/assets');
 const { trashedFilter, isTrashed, clearTrash, activeFilter } = require('./trash');
 const {
@@ -21,7 +22,7 @@ const FILE_OWNER_TYPES = {
   SPONSOR: 'sponsor',
 };
 
-const ITEM_TYPES = new Set(['FILE', 'USER', 'GROUP', ...ASSET_KINDS]);
+const ITEM_TYPES = new Set(['FILE', 'USER', 'GROUP', 'SURVEY_ANSWER', ...ASSET_KINDS]);
 
 function normalizeType(value) {
   return String(value || '').toUpperCase();
@@ -95,6 +96,10 @@ async function listBinItems(typeFilter) {
     }
   }
 
+  if (include('SURVEY_ANSWER')) {
+    items.push(...(await listTrashedResponses()));
+  }
+
   for (const kind of ASSET_KINDS) {
     if (!include(kind)) continue;
     const Model = KIND_MODELS[kind];
@@ -138,6 +143,13 @@ async function loadTrashed(itemType, id) {
   }
   if (type === 'GROUP') {
     const doc = await Group.findById(id);
+    if (!doc || !isTrashed(doc)) {
+      throw new HttpError(404, 'Item not found in the recycle bin.', { code: ERROR_CODES.NOT_FOUND });
+    }
+    return { type, doc };
+  }
+  if (type === 'SURVEY_ANSWER') {
+    const doc = await InstrumentResponse.findById(id);
     if (!doc || !isTrashed(doc)) {
       throw new HttpError(404, 'Item not found in the recycle bin.', { code: ERROR_CODES.NOT_FOUND });
     }
@@ -195,6 +207,11 @@ async function restoreBinItem(itemType, id, userId) {
     return toBinItem('GROUP', doc, doc.name, doc.description || '');
   }
 
+  if (type === 'SURVEY_ANSWER') {
+    const restored = await restoreTrashedResponse(doc, userId);
+    return toAnswerBinItem(restored);
+  }
+
   clearTrash(doc, userId);
   await doc.save();
   return toBinItem(type, doc, doc.name, doc.description || '');
@@ -230,6 +247,10 @@ async function purgeBinItem(itemType, id) {
     return { itemType: type, _id: String(doc._id) };
   }
 
+  if (type === 'SURVEY_ANSWER') {
+    return purgeTrashedResponse(doc);
+  }
+
   const ownerType = FILE_OWNER_TYPES[type];
   if (ownerType) {
     await purgeFilesForOwner(ownerType, doc._id);
@@ -243,7 +264,7 @@ async function purgeBinItem(itemType, id) {
 
 async function emptyBin() {
   const items = await listBinItems();
-  const purgeOrder = { FILE: 0, USER: 1, GROUP: 2 };
+  const purgeOrder = { FILE: 0, SURVEY_ANSWER: 1, USER: 2, GROUP: 3 };
   items.sort((a, b) => (purgeOrder[a.itemType] ?? 3) - (purgeOrder[b.itemType] ?? 3));
 
   let deleted = 0;

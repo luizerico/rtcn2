@@ -23,7 +23,7 @@ import {
   type StateRecord,
 } from '@/lib/geoTypes';
 
-type SortField = 'name' | 'code' | 'IBGECode';
+type SortField = 'name' | 'code' | 'IBGECode' | 'state' | 'region' | 'biome' | 'microregion';
 type GeoType = 'region' | 'state' | 'biome' | 'microregion' | 'county';
 type BulkAction = 'assign' | 'unassign';
 type GeoOption = { _id: string; code?: string; name: string; IBGECode?: string };
@@ -579,6 +579,16 @@ export default function AssignSurveyCountiesPage() {
     return order === 'asc' ? ' ↑' : ' ↓';
   };
 
+  const patchAssignedRow = (countyId: string, patch: Partial<AssignedCounty>) => {
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        items: prev.items.map((row) => (row._id === countyId ? { ...row, ...patch } : row)),
+      };
+    });
+  };
+
   const handleUnassignOne = async () => {
     if (!pendingUnassign || !survey) return;
     setUnassigning(true);
@@ -605,6 +615,12 @@ export default function AssignSurveyCountiesPage() {
 
   const handleCountyVersion = async (county: AssignedCounty, versionId: string) => {
     if (!canWrite || !versionId || versionId === county.versionId || county.versionLocked) return;
+    const previous = { versionId: county.versionId, version: county.version };
+    const nextVersion = surveyVersions.find((row) => row._id === versionId);
+    patchAssignedRow(county._id, {
+      versionId,
+      version: nextVersion?.version ?? county.version,
+    });
     setSavingCountyId(county._id);
     try {
       await apiPut(`/surveys/${surveyId}/counties/${county._id}`, { versionId });
@@ -613,8 +629,8 @@ export default function AssignSurveyCountiesPage() {
         title: 'County version updated',
         message: `${county.name} will use the selected version for new answers.`,
       });
-      await refresh();
     } catch (err) {
+      patchAssignedRow(county._id, previous);
       pushToast({
         tone: 'error',
         title: 'Could not change version',
@@ -1074,11 +1090,37 @@ export default function AssignSurveyCountiesPage() {
                         </button>
                       </th>
                     ) : null}
-                    {isVisible('state') ? <th className="px-4 py-3 font-medium">State</th> : null}
-                    {isVisible('region') ? <th className="px-4 py-3 font-medium">Region</th> : null}
-                    {isVisible('biome') ? <th className="px-4 py-3 font-medium">Biome</th> : null}
+                    {isVisible('state') ? (
+                      <th className="px-4 py-3 font-medium">
+                        <button type="button" onClick={() => toggleSort('state')} className="hover:text-[var(--foreground)]">
+                          State{sortIndicator('state')}
+                        </button>
+                      </th>
+                    ) : null}
+                    {isVisible('region') ? (
+                      <th className="px-4 py-3 font-medium">
+                        <button type="button" onClick={() => toggleSort('region')} className="hover:text-[var(--foreground)]">
+                          Region{sortIndicator('region')}
+                        </button>
+                      </th>
+                    ) : null}
+                    {isVisible('biome') ? (
+                      <th className="px-4 py-3 font-medium">
+                        <button type="button" onClick={() => toggleSort('biome')} className="hover:text-[var(--foreground)]">
+                          Biome{sortIndicator('biome')}
+                        </button>
+                      </th>
+                    ) : null}
                     {isVisible('microregion') ? (
-                      <th className="px-4 py-3 font-medium">Microregion</th>
+                      <th className="px-4 py-3 font-medium">
+                        <button
+                          type="button"
+                          onClick={() => toggleSort('microregion')}
+                          className="hover:text-[var(--foreground)]"
+                        >
+                          Microregion{sortIndicator('microregion')}
+                        </button>
+                      </th>
                     ) : null}
                     {isVisible('actions') ? (
                       <th className="px-4 py-3 text-right font-medium">Actions</th>

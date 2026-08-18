@@ -3,9 +3,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { apiGet, apiPut } from '@/lib/apiUtils';
+import { apiDelete, apiGet, apiPut } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import { useAccess } from '@/components/AccessProvider';
 import AnswersAreaTree, {
   type AnswersTreeSelection,
@@ -35,6 +36,7 @@ interface SheetPayload {
   computedScore?: { letter?: string; percent?: number; total?: number; maxTotal?: number };
   ownerId?: string | null;
   canEdit?: boolean;
+  canDelete?: boolean;
   questions: SheetQuestion[];
 }
 
@@ -98,6 +100,8 @@ export default function SubjectInstrumentPage() {
   const [focusQuestionId, setFocusQuestionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const basePath = `/surveys/${surveyId}/subjects/${subjectType}/${subjectId}`;
@@ -149,6 +153,15 @@ export default function SubjectInstrumentPage() {
     if (isAdmin) return true;
     if (can(`${subjectType}:WRITE`, { resourceId: subjectId })) return true;
     if (!sheet?._id) return can(`${subjectType}:CREATE`, { resourceId: subjectId });
+    const ownerEditable = sheet.status === 'in_progress' || sheet.status === 'need_changes';
+    return ownerEditable && Boolean(user?.id) && sheet.ownerId === user.id;
+  }, [can, isAdmin, sheet, subjectId, subjectType, user?.id]);
+
+  const canDelete = useMemo(() => {
+    if (!sheet?._id) return false;
+    if (sheet.canDelete != null) return sheet.canDelete;
+    if (isAdmin) return true;
+    if (can(`${subjectType}:DELETE`, { resourceId: subjectId })) return true;
     const ownerEditable = sheet.status === 'in_progress' || sheet.status === 'need_changes';
     return ownerEditable && Boolean(user?.id) && sheet.ownerId === user.id;
   }, [can, isAdmin, sheet, subjectId, subjectType, user?.id]);
@@ -322,6 +335,29 @@ export default function SubjectInstrumentPage() {
     await saveSheet(status);
   };
 
+  const handleDelete = async () => {
+    if (!sheet?._id) return;
+    setDeleting(true);
+    try {
+      await apiDelete(basePath);
+      pushToast({
+        tone: 'info',
+        title: 'Answer moved to recycle bin',
+        message: 'An administrator can restore it from Recycle bin.',
+      });
+      setDeleteOpen(false);
+      router.push('/surveys');
+    } catch (err) {
+      pushToast({
+        tone: 'error',
+        title: 'Delete failed',
+        message: err instanceof Error ? err.message : 'Could not delete this answer.',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading) return <p className="text-[var(--muted)]">Loading sheet…</p>;
   if (error || !sheet) {
     return (
@@ -353,7 +389,7 @@ export default function SubjectInstrumentPage() {
               {score?.letter ? ` · ${score.letter} (${score.percent ?? 0}%)` : ''}
             </p>
           </div>
-          <div className="flex flex-wrap gap-3 text-sm font-medium">
+          <div className="flex flex-wrap items-center gap-3 text-sm font-medium">
             <Link href={`${basePath}/view`} className="text-[var(--accent)] hover:underline">
               View answers
             </Link>
@@ -361,6 +397,16 @@ export default function SubjectInstrumentPage() {
               <Link href={`${basePath}/compare`} className="text-[var(--accent)] hover:underline">
                 Compare revisions
               </Link>
+            ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                disabled={saving || deleting}
+                onClick={() => setDeleteOpen(true)}
+                className="text-red-700 hover:underline disabled:opacity-60"
+              >
+                Delete
+              </button>
             ) : null}
           </div>
         </div>
@@ -624,6 +670,21 @@ export default function SubjectInstrumentPage() {
           }}
         />
       ) : null}
+
+      <ConfirmDeleteDialog
+        isOpen={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handleDelete}
+        title="Move to recycle bin"
+        itemLabel={sheet ? `${sheet.surveyName || 'Survey'} · ${sheet.subjectLabel || subjectId}` : undefined}
+        description={
+          sheet
+            ? `Move this “${sheet.surveyName || 'Survey'}” sheet to the recycle bin? An administrator can restore it later.`
+            : undefined
+        }
+        confirmLabel="Move to bin"
+        busy={deleting}
+      />
     </div>
   );
 }

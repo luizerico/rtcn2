@@ -221,4 +221,13 @@ describe('County catalog API', () => {
     expect(res.body.items[0]._id).toBe(String(COUNTY_A));
     expect(res.body.items[0].microregion).toEqual(expect.objectContaining({ name: 'Goiânia' }));
   });
+
+  it('accepts a county list limit above 100 when filtering by region', async () => {
+    const res = await request(app)
+      .get(`/api/counties?regionId=${REGION_CO}&limit=500&sort=name&order=asc`)
+      .set('Authorization', `Bearer ${viewerToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.limit).toBe(500);
+    expect(res.body.items).toHaveLength(2);
+  });
 });

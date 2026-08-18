@@ -47,7 +47,8 @@ exports.listCounties = async (req, res) => {
     const { page: rawPage, limit, sortField, sortOrder, orderLabel } = parseListQuery(
       { ...req.query, order: req.query.order || 'asc' },
       COUNTY_SORT_FIELDS,
-      'name'
+      'name',
+      { maxLimit: 10000 }
     );
 
     const filter = notDeletedFilter();

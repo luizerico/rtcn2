@@ -1,11 +1,12 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { apiGet, apiPost } from '@/lib/apiUtils';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { apiPost } from '@/lib/apiUtils';
 import { emptyScopes, mapToScopes, scopesToMap } from './permissionScopes';
 import type {
   AclEntry,
   CatalogClass,
+  CatalogObject,
   CatalogPrincipal,
   PermissionLevel,
   PrincipalType,
@@ -46,6 +47,7 @@ export function useAssetAclEditor({
   const [resourceType, setResourceType] = useState(initialResourceType);
   const [allObjects, setAllObjects] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [objectMeta, setObjectMeta] = useState<CatalogObject[]>([]);
   const [entries, setEntries] = useState<AclEntry[]>([]);
   const [selectedPrincipalKey, setSelectedPrincipalKey] = useState<string | null>(null);
   const [permissionMap, setPermissionMap] = useState(emptyScopes());
@@ -55,6 +57,15 @@ export function useAssetAclEditor({
   const loadGeneration = useRef(0);
   const preferredPrincipalKey = useRef<string | null>(null);
   const catalogPreferApplied = useRef(false);
+  const lastAclType = useRef('');
+  const lastAclAllObjects = useRef<boolean | null>(null);
+  const lastAclIds = useRef<Set<string>>(new Set());
+
+  const resetAclQueryCache = () => {
+    lastAclType.current = '';
+    lastAclAllObjects.current = null;
+    lastAclIds.current = new Set();
+  };
 
   const selectedClass = useMemo(
     () => classes.find((entry) => entry.resourceType === resourceType) || null,
@@ -101,13 +112,11 @@ export function useAssetAclEditor({
       return;
     }
 
-    const params = new URLSearchParams({
+    const acl = await apiPost<{ entries: AclEntry[] }>('/permissions/acl/query', {
       resourceType: nextType,
-      allObjects: String(nextAllObjects),
+      allObjects: nextAllObjects,
+      resourceIds: nextAllObjects ? [] : nextIds,
     });
-    if (!nextAllObjects) params.set('resourceIds', nextIds.join(','));
-
-    const acl = await apiGet<{ entries: AclEntry[] }>(`/permissions/acl?${params.toString()}`);
     if (generation !== loadGeneration.current) return;
 
     const nextEntries = (acl.entries || []).map((entry) => ({
@@ -144,12 +153,14 @@ export function useAssetAclEditor({
       setSaving(false);
       preferredPrincipalKey.current = null;
       catalogPreferApplied.current = false;
+      resetAclQueryCache();
       return;
     }
 
     setResourceType(initialResourceType);
     setAllObjects(Boolean(initialAllObjects));
     setSelectedIds(initialResourceId && !initialAllObjects ? [initialResourceId] : []);
+    setObjectMeta([]);
     setEntries([]);
     setSelectedPrincipalKey(null);
     setPermissionMap(emptyScopes());
@@ -200,12 +211,32 @@ export function useAssetAclEditor({
     setSharedError(null);
   };
 
-  const toggleObject = (id: string) => {
+  const toggleObject = useCallback((id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]
     );
     setSharedError(null);
-  };
+  }, [setSharedError]);
+
+  const replaceSelectedObjects = useCallback((objects: CatalogObject[]) => {
+    setObjectMeta(objects);
+    setSelectedIds(objects.map((object) => object.id));
+    setSharedError(null);
+  }, [setSharedError]);
+
+  const addSelectedObjects = useCallback((objects: CatalogObject[]) => {
+    setObjectMeta((prev) => {
+      const byId = new Map(prev.map((object) => [object.id, object]));
+      for (const object of objects) byId.set(object.id, object);
+      return [...byId.values()];
+    });
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const object of objects) next.add(object.id);
+      return [...next];
+    });
+    setSharedError(null);
+  }, [setSharedError]);
 
   const refreshAclForSelection = async (
     nextAllObjects: boolean,
@@ -226,19 +257,31 @@ export function useAssetAclEditor({
     }
   };
 
-  // Auto-load ACL whenever the asset selection changes (without flickering the list).
+  // Load ACL when the listed set grows or the class-wide toggle changes — not on uncheck.
   useEffect(() => {
     if (!isOpen || catalogLoading) return;
 
     if (!allObjects && selectedIds.length === 0) {
-      setEntries([]);
-      setSelectedPrincipalKey(null);
-      setPermissionMap(emptyScopes());
       return;
     }
 
+    const typeChanged = lastAclType.current !== resourceType;
+    const allChanged = lastAclAllObjects.current !== allObjects;
+    const hasNewIds = allObjects
+      ? lastAclAllObjects.current !== true
+      : selectedIds.some((id) => !lastAclIds.current.has(id));
+    if (!typeChanged && !allChanged && !hasNewIds && lastAclAllObjects.current !== null) {
+      return;
+    }
+
+    const idsSnapshot = selectedIds;
     const handle = window.setTimeout(() => {
-      void refreshAclForSelection(allObjects, selectedIds, resourceType, users, groups);
+      lastAclType.current = resourceType;
+      lastAclAllObjects.current = allObjects;
+      lastAclIds.current = allObjects
+        ? new Set()
+        : new Set([...lastAclIds.current, ...idsSnapshot]);
+      void refreshAclForSelection(allObjects, idsSnapshot, resourceType, users, groups);
     }, 150);
 
     return () => window.clearTimeout(handle);
@@ -269,19 +312,27 @@ export function useAssetAclEditor({
     setSharedError(null);
   };
 
-  const removeSelectedPrincipal = () => {
-    if (!selectedPrincipalKey) return;
-    const next = entries.filter(
-      (entry) => `${entry.principalType}:${entry.principalId}` !== selectedPrincipalKey
+  const removePrincipals = (keys: string[] = []) => {
+    const removeKeys = keys.length
+      ? keys
+      : selectedPrincipalKey
+        ? [selectedPrincipalKey]
+        : [];
+    if (removeKeys.length === 0) return;
+    const removeSet = new Set(removeKeys);
+    const next = persistSelectedPermissions(selectedPrincipalKey, permissionMap, entries).filter(
+      (entry) => !removeSet.has(`${entry.principalType}:${entry.principalId}`)
     );
     setEntries(next);
-    const first = next[0];
-    if (first) {
-      setSelectedPrincipalKey(`${first.principalType}:${first.principalId}`);
-      setPermissionMap(scopesToMap(first.scopes));
-    } else {
-      setSelectedPrincipalKey(null);
-      setPermissionMap(emptyScopes());
+    if (selectedPrincipalKey && removeSet.has(selectedPrincipalKey)) {
+      const first = next[0];
+      if (first) {
+        setSelectedPrincipalKey(`${first.principalType}:${first.principalId}`);
+        setPermissionMap(scopesToMap(first.scopes));
+      } else {
+        setSelectedPrincipalKey(null);
+        setPermissionMap(emptyScopes());
+      }
     }
   };
 
@@ -306,16 +357,19 @@ export function useAssetAclEditor({
   const changeResourceType = (nextType: string) => {
     setResourceType(nextType);
     setSelectedIds([]);
+    setObjectMeta([]);
     setAllObjects(false);
     setEntries([]);
     setSelectedPrincipalKey(null);
     setPermissionMap(emptyScopes());
+    resetAclQueryCache();
   };
 
   const changeAllObjects = (checked: boolean) => {
     setAllObjects(checked);
     if (checked) {
       setSelectedIds([]);
+      setObjectMeta([]);
     } else {
       setEntries([]);
       setSelectedPrincipalKey(null);
@@ -339,13 +393,17 @@ export function useAssetAclEditor({
       return;
     }
 
-    const objects = (selectedClass?.objects || [])
-      .filter((object) => selectedIds.includes(object.id))
-      .map((object) => ({
-        id: object.id,
-        name: object.name,
-        label: object.label || object.name,
-      }));
+    const byId = new Map<string, CatalogObject>();
+    for (const object of selectedClass?.objects || []) byId.set(object.id, object);
+    for (const object of objectMeta) byId.set(object.id, object);
+    const objects = selectedIds.map((id) => {
+      const object = byId.get(id);
+      return {
+        id,
+        name: object?.name || id,
+        label: object?.label || object?.name || id,
+      };
+    });
 
     setSaving(true);
     setSharedError(null);
@@ -390,6 +448,7 @@ export function useAssetAclEditor({
     resourceType,
     allObjects,
     selectedIds,
+    objectMeta,
     entries,
     selectedPrincipalKey,
     permissionMap,
@@ -404,8 +463,10 @@ export function useAssetAclEditor({
     setAddMode,
     selectPrincipal,
     toggleObject,
+    replaceSelectedObjects,
+    addSelectedObjects,
     addPrincipal,
-    removeSelectedPrincipal,
+    removePrincipals,
     handleTogglePermission,
     changeResourceType,
     changeAllObjects,

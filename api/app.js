@@ -27,7 +27,7 @@ require('./models/survey');
 require('./models/geo');
 require('./models/StoredFile');
 
-const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '100kb';
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '2mb';
 
 /**
  * Build the Express application with API routes.
