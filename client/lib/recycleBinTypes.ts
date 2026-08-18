@@ -2,6 +2,7 @@ export type RecycleBinItemType =
   | 'FILE'
   | 'USER'
   | 'GROUP'
+  | 'ORGANIZATION'
   | 'SURVEY'
   | 'SURVEY_ANSWER'
   | 'SPONSOR'
@@ -27,6 +28,7 @@ export const BIN_TYPE_LABELS: Record<string, string> = {
   FILE: 'File',
   USER: 'User',
   GROUP: 'Group',
+  ORGANIZATION: 'Organization',
   SURVEY: 'Survey',
   SURVEY_ANSWER: 'Survey answer',
   SPONSOR: 'Sponsor',
@@ -39,6 +41,7 @@ export const BIN_TYPE_FILTERS: Array<{ value: string; label: string }> = [
   { value: 'FILE', label: 'File' },
   { value: 'USER', label: 'User' },
   { value: 'GROUP', label: 'Group' },
+  { value: 'ORGANIZATION', label: 'Organization' },
   { value: 'SPONSOR', label: 'Sponsor' },
   { value: 'OPPORTUNITY', label: 'Opportunity' },
   { value: 'PROJECT', label: 'Project' },

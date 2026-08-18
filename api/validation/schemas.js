@@ -2,8 +2,11 @@ const {
   requireFields,
   nonEmptyString,
   objectId,
+  optionalObjectId,
+  optionalString,
   password,
   emailString,
+  optionalEmail,
   parsePagination,
   oneOf,
   booleanFlag,
@@ -76,7 +79,56 @@ function createUserBody(req) {
     username: nonEmptyString(req.body.username, 'Username', { maxLength: 64 }),
     email: emailString(req.body.email),
     password: password(req.body.password, { label: 'Password', minLength: 8 }),
+    organization: optionalObjectId(req.body.organization, 'Organization'),
+    language: optionalString(req.body.language, 'Language', { maxLength: 10 }),
   };
+}
+
+function parseOrganizationFields(body, { requireName }) {
+  const fields = {};
+  if (requireName || (body && Object.prototype.hasOwnProperty.call(body, 'name'))) {
+    fields.name = nonEmptyString(body?.name, 'Organization name', { minLength: 2, maxLength: 100 });
+  }
+  if (!requireName || (body && Object.prototype.hasOwnProperty.call(body, 'description'))) {
+    fields.description = optionalString(body?.description, 'Description', { maxLength: 500 });
+  }
+  if (!requireName || (body && Object.prototype.hasOwnProperty.call(body, 'website'))) {
+    fields.website = optionalString(body?.website, 'Website', { maxLength: 2048 });
+  }
+  if (!requireName || (body && Object.prototype.hasOwnProperty.call(body, 'email'))) {
+    fields.email = optionalEmail(body?.email, 'Organization email');
+  }
+  if (!requireName || (body && Object.prototype.hasOwnProperty.call(body, 'phone'))) {
+    fields.phone = optionalString(body?.phone, 'Phone', { maxLength: 50 });
+  }
+  return fields;
+}
+
+/** Organizations: POST /api/organizations */
+function createOrganizationBody(req) {
+  return parseOrganizationFields(req.body, { requireName: true });
+}
+
+/** Organizations: PUT /api/organizations/:id */
+function updateOrganizationBody(req) {
+  const fields = {};
+  const body = req.body || {};
+  if (Object.prototype.hasOwnProperty.call(body, 'name')) {
+    fields.name = nonEmptyString(body.name, 'Organization name', { minLength: 2, maxLength: 100 });
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'description')) {
+    fields.description = optionalString(body.description, 'Description', { maxLength: 500 });
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'website')) {
+    fields.website = optionalString(body.website, 'Website', { maxLength: 2048 });
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'email')) {
+    fields.email = optionalEmail(body.email, 'Organization email');
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'phone')) {
+    fields.phone = optionalString(body.phone, 'Phone', { maxLength: 50 });
+  }
+  return fields;
 }
 
 /** Users: POST /api/users/:id/password */
@@ -187,6 +239,8 @@ module.exports = {
   forgotPasswordQuery,
   createUserBody,
   adminPasswordBody,
+  createOrganizationBody,
+  updateOrganizationBody,
   createGroupBody,
   groupMemberBody,
   groupPermissionsBody,

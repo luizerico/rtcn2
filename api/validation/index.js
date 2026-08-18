@@ -59,6 +59,16 @@ function objectId(value, label = 'id') {
   return id;
 }
 
+function optionalObjectId(value, label = 'id') {
+  if (isBlank(value)) return null;
+  return objectId(value, label);
+}
+
+function optionalString(value, label, { maxLength, minLength } = {}) {
+  if (isBlank(value)) return '';
+  return nonEmptyString(value, label, { maxLength, minLength });
+}
+
 function password(value, { label = 'Password', minLength = 8 } = {}) {
   return nonEmptyString(value, label, { minLength, trim: false });
 }
@@ -114,6 +124,11 @@ function emailString(value, label = 'Email') {
   return email.toLowerCase();
 }
 
+function optionalEmail(value, label = 'Email') {
+  if (isBlank(value)) return '';
+  return emailString(value, label);
+}
+
 function collectValidationError(error) {
   if (error instanceof ValidationError) {
     return {
@@ -135,10 +150,13 @@ module.exports = {
   requireFields,
   nonEmptyString,
   objectId,
+  optionalObjectId,
+  optionalString,
   password,
   oneOf,
   booleanFlag,
   parsePagination,
   emailString,
+  optionalEmail,
   collectValidationError,
 };

@@ -1,10 +1,18 @@
 const Group = require('../models/Group');
+const Organization = require('../models/Organization');
 
 const USER_PUBLIC_EXCLUDE =
   '-password -resetTokenHash -tokenExpiry -verificationTokenHash -verificationTokenExpiry';
 
+function orgIdOf(user) {
+  const ref = user?.organization;
+  if (!ref) return null;
+  if (typeof ref === 'object' && ref._id) return String(ref._id);
+  return String(ref);
+}
+
 /**
- * Attach group membership summaries to user documents for API responses.
+ * Attach group membership summaries and organization {_id, name} to user documents.
  * @param {import('mongoose').Document | object | Array} users
  * @returns {Promise<object | object[]>}
  */
@@ -36,9 +44,17 @@ async function attachUserGroups(users) {
     }
   }
 
+  const orgIds = [...new Set(list.map(orgIdOf).filter(Boolean))];
+  const orgs = orgIds.length
+    ? await Organization.find({ _id: { $in: orgIds }, deletedAt: null }).select('_id name')
+    : [];
+  const orgById = new Map(orgs.map((org) => [String(org._id), { _id: org._id, name: org.name }]));
+
   const enriched = list.map((user) => {
     const plain = typeof user.toObject === 'function' ? user.toObject() : { ...user };
     plain.groups = [...(byUser.get(String(user._id))?.values() || [])];
+    const orgId = orgIdOf(user);
+    plain.organization = orgId ? orgById.get(orgId) || null : null;
     return plain;
   });
 

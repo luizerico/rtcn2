@@ -533,7 +533,69 @@ describe('API endpoints', () => {
         .send({ description: 'no name' });
       expect(res.status).toBe(400);
     });
+  });
 
+  describe('Organizations', () => {
+    it('requires auth', async () => {
+      const res = await request(app).get('/api/organizations');
+      expect(res.status).toBe(401);
+    });
+
+    it('CRUD lifecycle works', async () => {
+      const create = await request(app)
+        .post('/api/organizations')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'SEBRAE MS',
+          description: 'Sample org',
+          website: 'https://ms.sebrae.com.br/',
+          email: 'contact@ms.sebrae.com.br',
+          phone: '67 9188-9119',
+        });
+      expect(create.status).toBe(201);
+      expect(create.body.name).toBe('SEBRAE MS');
+      expect(create.body.email).toBe('contact@ms.sebrae.com.br');
+
+      const list = await request(app)
+        .get('/api/organizations')
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(list.status).toBe(200);
+      expect(list.body.items.some((org) => org.name === 'SEBRAE MS')).toBe(true);
+
+      const orgId = create.body._id;
+      const getOne = await request(app)
+        .get(`/api/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(getOne.status).toBe(200);
+
+      const update = await request(app)
+        .put(`/api/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ description: 'Updated description' });
+      expect(update.status).toBe(200);
+      expect(update.body.description).toBe('Updated description');
+
+      const remove = await request(app)
+        .delete(`/api/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(remove.status).toBe(200);
+
+      const missing = await request(app)
+        .get(`/api/organizations/${orgId}`)
+        .set('Authorization', `Bearer ${authToken}`);
+      expect(missing.status).toBe(404);
+    });
+
+    it('rejects create without name', async () => {
+      const res = await request(app)
+        .post('/api/organizations')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ description: 'no name' });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('Groups membership', () => {
     it('membership and permissions endpoints work', async () => {
       const create = await request(app)
         .post('/api/groups')
@@ -783,6 +845,53 @@ describe('API endpoints', () => {
       });
       expect(allowLogin.status).toBe(200);
       expect(allowLogin.body.token).toBeDefined();
+    });
+
+    it('assigns organization, rejects isAdmin mass assignment, and blocks disabled login', async () => {
+      const org = await request(app)
+        .post('/api/organizations')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ name: 'Acme Org' });
+      expect(org.status).toBe(201);
+
+      const created = await request(app)
+        .post('/api/users')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          username: 'erin',
+          email: 'erin@example.com',
+          password: 'Password123!',
+          organization: org.body._id,
+        });
+      expect(created.status).toBe(201);
+      expect(created.body.organization).toEqual(
+        expect.objectContaining({ _id: org.body._id, name: 'Acme Org' })
+      );
+      expect(created.body.isEnabled).toBe(true);
+      expect(created.body.isAdmin).toBeUndefined();
+
+      const massAssign = await request(app)
+        .put(`/api/users/${created.body._id}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ isAdmin: true, roleId: userId, organization: org.body._id });
+      expect(massAssign.status).toBe(200);
+      expect(massAssign.body.isAdmin).toBeUndefined();
+      expect(String(massAssign.body.roleId || '')).not.toBe(String(userId));
+      expect(massAssign.body.organization.name).toBe('Acme Org');
+
+      const disable = await request(app)
+        .put(`/api/users/${created.body._id}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ isEnabled: false });
+      expect(disable.status).toBe(200);
+      expect(disable.body.isEnabled).toBe(false);
+
+      const denied = await request(app).post('/api/auth/login').send({
+        email: 'erin@example.com',
+        password: 'Password123!',
+      });
+      expect(denied.status).toBe(403);
+      expect(denied.body.code).toBe('ACCOUNT_DISABLED');
     });
 
     it('rejects create user with short password', async () => {

@@ -23,6 +23,7 @@ tags:
   - name: Auth
   - name: Users
   - name: Groups
+  - name: Organizations
   - name: Permissions
   - name: Assets
   - name: Surveys
@@ -75,6 +76,20 @@ components:
         isVerified:
           type: boolean
           description: When false, login and session use are rejected (NOT_VERIFIED).
+        isEnabled:
+          type: boolean
+          description: When false, login and session use are rejected (ACCOUNT_DISABLED).
+        language:
+          type: string
+          nullable: true
+        organization:
+          type: object
+          nullable: true
+          properties:
+            _id:
+              type: string
+            name:
+              type: string
         lastLoginAt:
           type: string
           format: date-time
@@ -143,7 +158,7 @@ components:
           type: string
         code:
           type: string
-          enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, NOT_VERIFIED, PASSWORD_CHANGED, CONFIG]
+          enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, NOT_VERIFIED, ACCOUNT_DISABLED, PASSWORD_CHANGED, CONFIG]
       required: [message, code]
 
     AuthError:
@@ -153,7 +168,7 @@ components:
           properties:
             code:
               type: string
-              enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, PASSWORD_CHANGED, CONFIG]
+              enum: [NO_TOKEN, EXPIRED, REVOKED, INVALID, USER_NOT_FOUND, FORBIDDEN, INVALID_CREDENTIALS, PASSWORD_CHANGED, ACCOUNT_DISABLED, CONFIG]
 
     SessionRecord:
       type: object
@@ -246,6 +261,49 @@ components:
         description:
           type: string
           example: Can edit content
+
+    Organization:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        website:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateOrganizationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: SEBRAE MS
+        description:
+          type: string
+          maxLength: 500
+        website:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
 
     MemberRequest:
       type: object
@@ -852,7 +910,7 @@ components:
       properties:
         itemType:
           type: string
-          enum: [FILE, USER, GROUP, SURVEY, SURVEY_ANSWER, SPONSOR, OPPORTUNITY, PROJECT]
+          enum: [FILE, USER, GROUP, ORGANIZATION, SURVEY, SURVEY_ANSWER, SPONSOR, OPPORTUNITY, PROJECT]
         _id:
           type: string
         name:
@@ -1723,7 +1781,7 @@ paths:
           name: sort
           schema:
             type: string
-            enum: [username, email, createdAt, lastLoginAt, isVerified]
+            enum: [username, email, createdAt, lastLoginAt, isVerified, isEnabled]
             default: createdAt
         - in: query
           name: order
@@ -1748,6 +1806,15 @@ paths:
           name: isVerified
           schema:
             type: boolean
+        - in: query
+          name: isEnabled
+          schema:
+            type: boolean
+        - in: query
+          name: organizationId
+          schema:
+            type: string
+          description: Only users belonging to this organization
         - in: query
           name: groupId
           schema:
@@ -1817,9 +1884,10 @@ paths:
       tags: [Users]
       summary: Update user
       description: |
-        Whitelisted fields only: `username`, `email`, `isVerified`.
+        Whitelisted fields only: `username`, `email`, `isVerified`, `isEnabled`, `organization`, `language`.
         Setting `isVerified` is how admins grant or revoke sign-in for self-registered accounts.
-        Password, roleId, and reset tokens cannot be set here.
+        Setting `isEnabled` to false disconnects sessions (ACCOUNT_DISABLED).
+        Password, roleId, isAdmin, and reset tokens cannot be set here.
       operationId: updateUser
       security:
         - bearerAuth: []
@@ -2386,6 +2454,174 @@ paths:
           description: Unauthorized
         '404':
           description: Group not found
+
+  /api/organizations:
+    get:
+      tags: [Organizations]
+      summary: List organizations
+      description: Paginated organization list with search, filters, and sort. Requires admin-group membership (`ORGANIZATION:READ`).
+      operationId: listOrganizations
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [name, email, createdAt, updatedAt]
+            default: name
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search name, description, or email
+        - in: query
+          name: name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated organization list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Organization'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+                  sort:
+                    $ref: '#/components/schemas/ListSortMeta'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+    post:
+      tags: [Organizations]
+      summary: Create organization
+      operationId: createOrganization
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRequest'
+      responses:
+        '201':
+          description: Organization created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /api/organizations/{id}:
+    get:
+      tags: [Organizations]
+      summary: Get organization by ID
+      operationId: getOrganization
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Organization found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    put:
+      tags: [Organizations]
+      summary: Update organization
+      operationId: updateOrganization
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRequest'
+      responses:
+        '200':
+          description: Organization updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    delete:
+      tags: [Organizations]
+      summary: Move organization to recycle bin
+      operationId: deleteOrganization
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Organization moved to recycle bin
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
 
   /api/assets:
     get:
@@ -3596,7 +3832,7 @@ paths:
           name: type
           schema:
             type: string
-            enum: [FILE, USER, GROUP, SURVEY, SURVEY_ANSWER, SPONSOR, OPPORTUNITY, PROJECT]
+            enum: [FILE, USER, GROUP, ORGANIZATION, SURVEY, SURVEY_ANSWER, SPONSOR, OPPORTUNITY, PROJECT]
       responses:
         '200':
           description: Trashed items
@@ -3636,7 +3872,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [FILE, USER, GROUP, SURVEY, SURVEY_ANSWER, SPONSOR, OPPORTUNITY, PROJECT]
+            enum: [FILE, USER, GROUP, ORGANIZATION, SURVEY, SURVEY_ANSWER, SPONSOR, OPPORTUNITY, PROJECT]
         - in: path
           name: id
           required: true
@@ -3668,7 +3904,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [FILE, USER, GROUP, SURVEY, SURVEY_ANSWER, SPONSOR, OPPORTUNITY, PROJECT]
+            enum: [FILE, USER, GROUP, ORGANIZATION, SURVEY, SURVEY_ANSWER, SPONSOR, OPPORTUNITY, PROJECT]
         - in: path
           name: id
           required: true

@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { apiDelete, apiGet, apiPut } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import CreateUserModal from '@/components/ui/CreateUserModal';
+import EditUserModal from '@/components/ui/EditUserModal';
 import ChangePasswordModal from '@/components/ui/ChangePasswordModal';
 import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
@@ -12,9 +13,10 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import PermissionModal from '@/components/ui/PermissionModal';
 import { useAccess } from '@/components/AccessProvider';
 import { AccessPrimaryButton } from '@/components/ui/AccessControls';
-import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
+import { AccessIconButton, AccessIconLink, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 import { buildListParams, type PaginatedList } from '@/lib/listTypes';
+import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
 
 interface UserGroup {
   _id: string;
@@ -26,9 +28,12 @@ interface UserRecord {
   username: string;
   email: string;
   isVerified?: boolean;
+  isEnabled?: boolean;
+  language?: string | null;
   lastLoginAt?: string | null;
   createdAt?: string;
   groups?: UserGroup[];
+  organization?: { _id: string; name: string } | null;
 }
 
 interface GroupOption {
@@ -36,13 +41,15 @@ interface GroupOption {
   name: string;
 }
 
-type SortField = 'username' | 'email' | 'createdAt' | 'lastLoginAt' | 'isVerified';
+type SortField = 'username' | 'email' | 'createdAt' | 'lastLoginAt' | 'isVerified' | 'isEnabled';
 
 const USER_COLUMNS: ColumnDef[] = [
   { id: 'username', label: 'Username', alwaysVisible: true },
   { id: 'email', label: 'Email' },
+  { id: 'organization', label: 'Organization' },
   { id: 'groups', label: 'Groups' },
   { id: 'verified', label: 'Verified' },
+  { id: 'enabled', label: 'Enabled' },
   { id: 'lastLogin', label: 'Last login' },
   { id: 'actions', label: 'Actions', alwaysVisible: true },
 ];
@@ -52,7 +59,9 @@ const DEFAULT_FILTERS = {
   username: '',
   email: '',
   isVerified: '',
+  isEnabled: '',
   groupId: '',
+  organizationId: '',
 };
 
 function formatDate(value?: string | null) {
@@ -70,20 +79,21 @@ export default function AdminUsersPage() {
   const canManageAcl = can('GROUP:WRITE');
   const [aclUser, setAclUser] = useState<UserRecord | null>(null);
 
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState(DEFAULT_FILTERS);
+  const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters(DEFAULT_FILTERS);
   const [sort, setSort] = useState<SortField>('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
-  const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [showFilters, setShowFilters] = useState(false);
   const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
+  const [orgOptions, setOrgOptions] = useState<GroupOption[]>([]);
 
   const [data, setData] = useState<PaginatedList<UserRecord> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserRecord | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [enablingId, setEnablingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<UserRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [passwordUser, setPasswordUser] = useState<UserRecord | null>(null);
@@ -118,20 +128,15 @@ export default function AdminUsersPage() {
     apiGet<PaginatedList<GroupOption>>('/groups?limit=100&sort=name&order=asc')
       .then((result) => setGroupOptions(result.items || []))
       .catch(() => setGroupOptions([]));
+    apiGet<PaginatedList<GroupOption>>('/organizations?limit=100&sort=name&order=asc')
+      .then((result) => setOrgOptions(result.items || []))
+      .catch(() => setOrgOptions([]));
   }, []);
 
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setPage(1);
-    setApplied({ ...filters });
-  };
-
   const onReset = () => {
-    setFilters(DEFAULT_FILTERS);
-    setApplied(DEFAULT_FILTERS);
+    resetFilters(DEFAULT_FILTERS);
     setSort('createdAt');
     setOrder('desc');
-    setPage(1);
   };
 
   const toggleSort = (field: SortField) => {
@@ -155,13 +160,38 @@ export default function AdminUsersPage() {
     setError(null);
     try {
       await apiDelete(`/users/${pendingDelete._id}`);
-      pushToast({ tone: 'info', title: 'User deleted', message: 'The account was removed.' });
+      pushToast({
+        tone: 'info',
+        title: 'User moved to recycle bin',
+        message: 'The account can be restored from Recycle bin.',
+      });
       setPendingDelete(null);
       await loadUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user.');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleToggleEnabled = async (user: UserRecord) => {
+    setError(null);
+    setEnablingId(user._id);
+    const next = user.isEnabled === false;
+    try {
+      await apiPut(`/users/${user._id}`, { isEnabled: next });
+      pushToast({
+        tone: 'success',
+        title: next ? 'User enabled' : 'User disabled',
+        message: next
+          ? `${user.username} can sign in.`
+          : `${user.username} can no longer sign in.`,
+      });
+      await loadUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update account status.');
+    } finally {
+      setEnablingId(null);
     }
   };
 
@@ -214,7 +244,7 @@ export default function AdminUsersPage() {
 
       {showFilters ? (
         <form
-          onSubmit={onSubmit}
+          onSubmit={(event) => event.preventDefault()}
           className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3 lg:grid-cols-4"
         >
           <label className="flex flex-col gap-1 text-sm md:col-span-2">
@@ -255,6 +285,33 @@ export default function AdminUsersPage() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">Enabled</span>
+            <select
+              value={filters.isEnabled}
+              onChange={(e) => setFilters((prev) => ({ ...prev, isEnabled: e.target.value }))}
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            >
+              <option value="">All</option>
+              <option value="true">Enabled</option>
+              <option value="false">Disabled</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">Organization</span>
+            <select
+              value={filters.organizationId}
+              onChange={(e) => setFilters((prev) => ({ ...prev, organizationId: e.target.value }))}
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            >
+              <option value="">All</option>
+              {orgOptions.map((org) => (
+                <option key={org._id} value={org._id}>
+                  {org.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
             <span className="text-[var(--muted)]">Group</span>
             <select
               value={filters.groupId}
@@ -270,12 +327,6 @@ export default function AdminUsersPage() {
             </select>
           </label>
           <div className="flex items-end gap-2 md:col-span-2 lg:col-span-4">
-            <button
-              type="submit"
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
-              Apply filters
-            </button>
             <button
               type="button"
               onClick={onReset}
@@ -340,7 +391,7 @@ export default function AdminUsersPage() {
           <p className="p-5 text-[var(--muted)]">No users match these filters.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="headers-nowrap min-w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                 <tr>
                   {isVisible('username') ? (
@@ -357,11 +408,19 @@ export default function AdminUsersPage() {
                       </button>
                     </th>
                   ) : null}
+                  {isVisible('organization') ? <th className="px-4 py-3 font-medium">Organization</th> : null}
                   {isVisible('groups') ? <th className="px-4 py-3 font-medium">Groups</th> : null}
                   {isVisible('verified') ? (
                     <th className="px-4 py-3 font-medium">
                       <button type="button" onClick={() => toggleSort('isVerified')} className="hover:text-[var(--accent)]">
                         Verified{sortIndicator('isVerified')}
+                      </button>
+                    </th>
+                  ) : null}
+                  {isVisible('enabled') ? (
+                    <th className="px-4 py-3 font-medium">
+                      <button type="button" onClick={() => toggleSort('isEnabled')} className="hover:text-[var(--accent)]">
+                        Enabled{sortIndicator('isEnabled')}
                       </button>
                     </th>
                   ) : null}
@@ -386,7 +445,7 @@ export default function AdminUsersPage() {
                     {isVisible('username') ? (
                       <td className="px-4 py-3 font-medium">
                         <Link
-                          href={`/account?userId=${user._id}`}
+                          href={`/admin/users/${user._id}`}
                           className="text-[var(--accent)] hover:underline"
                         >
                           {user.username}
@@ -394,6 +453,9 @@ export default function AdminUsersPage() {
                       </td>
                     ) : null}
                     {isVisible('email') ? <td className="px-4 py-3">{user.email}</td> : null}
+                    {isVisible('organization') ? (
+                      <td className="px-4 py-3">{user.organization?.name || '—'}</td>
+                    ) : null}
                     {isVisible('groups') ? (
                       <td className="px-4 py-3">
                         {user.groups?.length ? user.groups.map((g) => g.name).join(', ') : '—'}
@@ -408,12 +470,33 @@ export default function AdminUsersPage() {
                         )}
                       </td>
                     ) : null}
+                    {isVisible('enabled') ? (
+                      <td className="px-4 py-3">
+                        {user.isEnabled === false ? (
+                          <span className="font-medium text-[var(--muted)]">Disabled</span>
+                        ) : (
+                          <span className="text-emerald-700">Enabled</span>
+                        )}
+                      </td>
+                    ) : null}
                     {isVisible('lastLogin') ? (
                       <td className="whitespace-nowrap px-4 py-3">{formatDate(user.lastLoginAt)}</td>
                     ) : null}
                     {isVisible('actions') ? (
                       <td className="px-4 py-3 text-right">
                         <TableActionRow>
+                          <AccessIconLink
+                            allowed={isAdmin}
+                            icon="view"
+                            label="View"
+                            href={`/admin/users/${user._id}`}
+                          />
+                          <AccessIconButton
+                            allowed={canWrite}
+                            icon="edit"
+                            label="Edit"
+                            onClick={() => setEditingUser(user)}
+                          />
                           <AccessIconButton
                             allowed={canWrite}
                             icon={user.isVerified ? 'verify' : 'unverify'}
@@ -426,6 +509,19 @@ export default function AdminUsersPage() {
                             }
                             onClick={() => handleToggleVerified(user)}
                             disabled={verifyingId === user._id}
+                          />
+                          <AccessIconButton
+                            allowed={canWrite}
+                            icon={user.isEnabled === false ? 'add' : 'disconnect'}
+                            label={
+                              enablingId === user._id
+                                ? 'Updating…'
+                                : user.isEnabled === false
+                                  ? 'Enable'
+                                  : 'Disable'
+                            }
+                            onClick={() => handleToggleEnabled(user)}
+                            disabled={enablingId === user._id}
                           />
                           <AccessIconButton
                             allowed={canManageAcl}
@@ -498,6 +594,20 @@ export default function AdminUsersPage() {
         }}
       />
 
+      <EditUserModal
+        isOpen={Boolean(editingUser)}
+        user={editingUser}
+        onClose={() => setEditingUser(null)}
+        onSaved={({ username }) => {
+          pushToast({
+            tone: 'success',
+            title: 'User updated',
+            message: `${username} was saved.`,
+          });
+          void loadUsers();
+        }}
+      />
+
       <ChangePasswordModal
         isOpen={Boolean(passwordUser)}
         onClose={() => setPasswordUser(null)}
@@ -524,7 +634,14 @@ export default function AdminUsersPage() {
         isOpen={Boolean(pendingDelete)}
         onClose={() => setPendingDelete(null)}
         onConfirm={handleDelete}
+        title="Move to recycle bin"
         itemLabel={pendingDelete?.username}
+        description={
+          pendingDelete
+            ? `Move “${pendingDelete.username}” to the recycle bin? An administrator can restore it later.`
+            : undefined
+        }
+        confirmLabel="Move to bin"
         busy={deleting}
       />
     </div>

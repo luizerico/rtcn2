@@ -29,6 +29,17 @@ const userSchema = new Schema(
      * or an admin sets isVerified. Google sign-in and admin create/bootstrap set true.
      */
     isVerified: { type: Boolean, default: false },
+    /**
+     * Admin kill-switch. Login and session use require true.
+     * Defaults true so existing accounts keep working.
+     */
+    isEnabled: { type: Boolean, default: true },
+    organization: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
+    },
+    language: { type: String, default: null, trim: true, maxlength: 10 },
     /** Google subject id when the account is linked to Google. Omitted for password users. */
     googleId: { type: String },
     lastLoginAt: { type: Date, default: null },
@@ -45,6 +56,7 @@ const userSchema = new Schema(
 
 addPartialUniqueIndex(userSchema, 'username');
 addPartialUniqueIndex(userSchema, 'email');
+userSchema.index({ organization: 1 });
 userSchema.index(
   { googleId: 1 },
   {

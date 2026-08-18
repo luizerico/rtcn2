@@ -19,6 +19,12 @@ const adminSections = [
     visible: (_can: ReturnType<typeof useAccess>['can'], isAdmin: boolean) => isAdmin,
   },
   {
+    href: '/admin/organizations',
+    title: 'Organization management',
+    description: 'Manage organizations that users can belong to.',
+    visible: (_can: ReturnType<typeof useAccess>['can'], isAdmin: boolean) => isAdmin,
+  },
+  {
     href: '/admin/permissions',
     title: 'Permission management',
     description: 'Define READ, WRITE, and DELETE scopes for each group and target.',

@@ -20,6 +20,8 @@ describe('canAccess', () => {
     expect(canAccess(snapshot({ isAdmin: false }), 'USER:READ')).toBe(false);
     expect(canAccess(snapshot({ isAdmin: true }), 'USER:DELETE')).toBe(true);
     expect(canAccess(snapshot({ isAdmin: true }), 'LOG:READ')).toBe(true);
+    expect(canAccess(snapshot({ isAdmin: false }), 'ORGANIZATION:READ')).toBe(false);
+    expect(canAccess(snapshot({ isAdmin: true }), 'ORGANIZATION:CREATE')).toBe(true);
   });
 
   it('allows class-wide asset grants', () => {

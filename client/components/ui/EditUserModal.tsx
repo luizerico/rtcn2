@@ -2,13 +2,24 @@
 
 import React, { FormEvent, useEffect, useId, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import { apiGet, apiPost } from '@/lib/apiUtils';
+import { apiGet, apiPut } from '@/lib/apiUtils';
 import type { PaginatedList } from '@/lib/listTypes';
 
-interface CreateUserModalProps {
+export type EditableUser = {
+  _id: string;
+  username: string;
+  email: string;
+  isVerified?: boolean;
+  isEnabled?: boolean;
+  language?: string | null;
+  organization?: { _id: string; name: string } | null;
+};
+
+interface EditUserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreated?: (user: { username: string; email: string }) => void;
+  user: EditableUser | null;
+  onSaved?: (user: { username: string }) => void;
 }
 
 interface OrgOption {
@@ -16,59 +27,66 @@ interface OrgOption {
   name: string;
 }
 
-const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCreated }) => {
+const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, onClose, user, onSaved }) => {
   const formId = useId();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [organizationId, setOrganizationId] = useState('');
+  const [language, setLanguage] = useState('');
+  const [isVerified, setIsVerified] = useState(true);
+  const [isEnabled, setIsEnabled] = useState(true);
   const [orgOptions, setOrgOptions] = useState<OrgOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || !user) {
       setUsername('');
       setEmail('');
-      setPassword('');
-      setConfirmPassword('');
       setOrganizationId('');
+      setLanguage('');
+      setIsVerified(true);
+      setIsEnabled(true);
       setSaving(false);
       setError(null);
       return;
     }
+    setUsername(user.username || '');
+    setEmail(user.email || '');
+    setOrganizationId(user.organization?._id || '');
+    setLanguage(user.language || '');
+    setIsVerified(user.isVerified !== false);
+    setIsEnabled(user.isEnabled !== false);
     apiGet<PaginatedList<OrgOption>>('/organizations?limit=100&sort=name&order=asc')
       .then((result) => setOrgOptions(result.items || []))
       .catch(() => setOrgOptions([]));
-  }, [isOpen]);
+  }, [isOpen, user]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
+    if (!user) return;
     setSaving(true);
     setError(null);
     try {
-      await apiPost('/users', {
+      await apiPut(`/users/${user._id}`, {
         username,
         email,
-        password,
-        ...(organizationId ? { organization: organizationId } : {}),
+        organization: organizationId || null,
+        language,
+        isVerified,
+        isEnabled,
       });
-      onCreated?.({ username, email });
+      onSaved?.({ username });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create user.');
+      setError(err instanceof Error ? err.message : 'Failed to update user.');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create user" closeOnBackdrop={false}>
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit user" closeOnBackdrop={false}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
@@ -85,6 +103,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCr
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
+            maxLength={64}
             autoComplete="off"
             className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
           />
@@ -125,35 +144,37 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCr
         </div>
 
         <div>
-          <label htmlFor={`${formId}-password`} className="mb-1 block text-sm font-medium">
-            Password
+          <label htmlFor={`${formId}-language`} className="mb-1 block text-sm font-medium">
+            Language
           </label>
           <input
-            id={`${formId}-password`}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            autoComplete="new-password"
+            id={`${formId}-language`}
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            maxLength={10}
+            placeholder="e.g. pt-BR"
+            autoComplete="off"
             className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
           />
         </div>
 
-        <div>
-          <label htmlFor={`${formId}-confirm`} className="mb-1 block text-sm font-medium">
-            Confirm password
+        <div className="flex flex-wrap gap-4 pt-1">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={isVerified}
+              onChange={(e) => setIsVerified(e.target.checked)}
+            />
+            Verified
           </label>
-          <input
-            id={`${formId}-confirm`}
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            minLength={8}
-            autoComplete="new-password"
-            className="w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm"
-          />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={isEnabled}
+              onChange={(e) => setIsEnabled(e.target.checked)}
+            />
+            Enabled
+          </label>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
@@ -166,10 +187,10 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCr
           </button>
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || !user}
             className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)] disabled:opacity-60"
           >
-            {saving ? 'Creating…' : 'Create user'}
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </form>
@@ -177,4 +198,4 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onCr
   );
 };
 
-export default CreateUserModal;
+export default EditUserModal;

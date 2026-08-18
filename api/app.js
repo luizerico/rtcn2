@@ -26,6 +26,7 @@ require('./models/assets');
 require('./models/survey');
 require('./models/geo');
 require('./models/StoredFile');
+require('./models/Organization');
 
 const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '2mb';
 
@@ -55,6 +56,7 @@ function createApp({ fallback } = {}) {
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/groups', groupRoutes);
+  app.use('/api/organizations', require('./routes/organizationRoutes'));
   app.use('/api/assets', assetRoutes);
   app.use('/api/surveys', surveyRoutes);
   app.use('/api/sponsors', require('./routes/sponsorRoutes'));

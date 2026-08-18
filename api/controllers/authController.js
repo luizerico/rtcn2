@@ -102,6 +102,7 @@ async function issueSessionResponse(req, res, user, message = 'Login successful.
       username: user.username,
       email: user.email,
       isVerified: user.isVerified,
+      isEnabled: user.isEnabled !== false,
       lastLoginAt: user.lastLoginAt,
     },
   });
@@ -226,6 +227,16 @@ exports.loginUser = async (req, res) => {
       });
     }
 
+    if (user.isEnabled === false) {
+      req.actionLogContext = { userId: user._id, username: user.username };
+      return sendError(
+        res,
+        403,
+        'This account is disabled. Ask an administrator to enable it.',
+        { code: ERROR_CODES.ACCOUNT_DISABLED }
+      );
+    }
+
     return issueSessionResponse(req, res, user);
   } catch (err) {
     return sendServerError(res, err, 'Server error during login.');
@@ -301,6 +312,10 @@ exports.googleAuthCallback = async (req, res) => {
 
     if (!user.isVerified) {
       return res.redirect(`${clientUrl}/login?reason=NOT_VERIFIED`);
+    }
+
+    if (user.isEnabled === false) {
+      return res.redirect(`${clientUrl}/login?reason=ACCOUNT_DISABLED`);
     }
 
     user.lastLoginAt = new Date();
@@ -416,6 +431,9 @@ exports.getCurrentUser = async (req, res) => {
         email: withGroups.email,
         roleId: withGroups.roleId,
         isVerified: withGroups.isVerified,
+        isEnabled: withGroups.isEnabled !== false,
+        language: withGroups.language || null,
+        organization: withGroups.organization || null,
         lastLoginAt: withGroups.lastLoginAt || null,
         googleId: withGroups.googleId || null,
         groups: withGroups.groups || [],

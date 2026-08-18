@@ -347,6 +347,11 @@ describe('High-risk authz paths', () => {
           .post('/api/groups')
           .set(viewerAuth)
           .send({ name: 'rogue' }),
+        request(app).get('/api/organizations').set(viewerAuth),
+        request(app)
+          .post('/api/organizations')
+          .set(viewerAuth)
+          .send({ name: 'rogue-org' }),
       ]);
 
       for (const res of denied) {
@@ -362,6 +367,12 @@ describe('High-risk authz paths', () => {
         .set(adminAuth)
         .send({ name: 'ops', description: 'Ops team' });
       expect(createGroup.status).toBe(201);
+
+      const createOrg = await request(app)
+        .post('/api/organizations')
+        .set(adminAuth)
+        .send({ name: 'Ops Org' });
+      expect(createOrg.status).toBe(201);
 
       const addMember = await request(app)
         .post(`/api/groups/${createGroup.body._id}/members`)

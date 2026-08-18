@@ -43,6 +43,10 @@ const REASON_COPY: Record<string, { title: string; message: string }> = {
     message:
       'Check your email for a verification link, or ask an administrator to verify your account.',
   },
+  ACCOUNT_DISABLED: {
+    title: 'Account disabled',
+    message: 'This account is disabled. Ask an administrator to enable it.',
+  },
   GOOGLE_NOT_CONFIGURED: {
     title: 'Google sign-in unavailable',
     message: 'Google OAuth is not configured on this server.',

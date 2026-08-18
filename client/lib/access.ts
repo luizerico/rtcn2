@@ -1,6 +1,6 @@
 /**
  * Client-side access helpers mirroring API RBAC rules.
- * Identity resources (USER/GROUP/LOG) use isAdmin; assets use permission rows.
+ * Identity resources (USER/GROUP/ORGANIZATION/LOG) use isAdmin; assets use permission rows.
  */
 
 export type AccessAction = 'READ' | 'WRITE' | 'CREATE' | 'DELETE' | 'ADMIN';
@@ -18,6 +18,9 @@ export interface AccessUser {
   email: string;
   roleId?: string | null;
   isVerified?: boolean;
+  isEnabled?: boolean;
+  language?: string | null;
+  organization?: { _id: string; name: string } | null;
   lastLoginAt?: string | null;
   googleId?: string | null;
   groups?: Array<{ _id: string; name: string }>;
@@ -39,7 +42,7 @@ export interface CanOptions {
   classWideOnly?: boolean;
 }
 
-const IDENTITY_TYPES = new Set(['USER', 'GROUP', 'LOG']);
+const IDENTITY_TYPES = new Set(['USER', 'GROUP', 'ORGANIZATION', 'LOG']);
 
 function isClassWide(grant: AccessGrant): boolean {
   return !grant.resourceId && (grant.target === '*' || grant.target === '' || !grant.target);
