@@ -71,7 +71,7 @@ function BucketTable({
         <p className="p-4 text-sm text-[var(--muted)]">{empty}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
+          <table className="headers-nowrap min-w-full text-left text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
               <tr>
                 <th className="px-4 py-2 font-medium">Name</th>
@@ -205,7 +205,7 @@ export default function AdminReportsSamplePage() {
             <p className="p-4 text-sm text-[var(--muted)]">No user activity yet.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="headers-nowrap min-w-full text-left text-sm">
                 <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                   <tr>
                     <th className="px-4 py-2 font-medium">User</th>
@@ -245,7 +245,7 @@ export default function AdminReportsSamplePage() {
               <p className="p-4 text-sm text-[var(--muted)]">No groups found.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="headers-nowrap min-w-full text-left text-sm">
                   <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                     <tr>
                       <th className="px-4 py-2 font-medium">Group</th>
@@ -278,7 +278,7 @@ export default function AdminReportsSamplePage() {
               <p className="p-4 text-sm text-[var(--muted)]">No assets found.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="headers-nowrap min-w-full text-left text-sm">
                   <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                     <tr>
                       <th className="px-4 py-2 font-medium">Kind</th>
@@ -311,7 +311,7 @@ export default function AdminReportsSamplePage() {
             <h2 className="font-semibold">Recent assets</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="headers-nowrap min-w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                 <tr>
                   <th className="px-4 py-2 font-medium">Name</th>

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { apiGet } from '@/lib/apiUtils';
@@ -11,6 +11,7 @@ import { AccessIconLink, TableActionRow, tableActionRowGroupClass } from '@/comp
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 import { buildListParams, type PaginatedList } from '@/lib/listTypes';
 import { geoId, geoLabel, type GeoRef, type RegionRecord, type StateRecord } from '@/lib/geoTypes';
+import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
 
 export type GeoSortField = 'code' | 'name';
 
@@ -67,11 +68,9 @@ export default function GeoCatalogList({
     [searchParams]
   );
 
-  const [filters, setFilters] = useState(initialFilters);
-  const [applied, setApplied] = useState(initialFilters);
+  const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters(initialFilters);
   const [sort, setSort] = useState<GeoSortField>('name');
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
-  const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [showFilters, setShowFilters] = useState(
     Boolean(initialFilters.q || initialFilters.regionId || initialFilters.stateId)
@@ -139,19 +138,10 @@ export default function GeoCatalogList({
     void loadRows();
   }, [loadRows]);
 
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setPage(1);
-    setApplied({ ...filters });
-  };
-
   const onReset = () => {
-    const empty = { q: '', regionId: '', stateId: '' };
-    setFilters(empty);
-    setApplied(empty);
+    resetFilters({ q: '', regionId: '', stateId: '' });
     setSort('name');
     setOrder('asc');
-    setPage(1);
   };
 
   const toggleSort = (field: GeoSortField) => {
@@ -186,7 +176,7 @@ export default function GeoCatalogList({
 
       {showFilters ? (
         <form
-          onSubmit={onSubmit}
+          onSubmit={(event) => event.preventDefault()}
           className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3 lg:grid-cols-4"
         >
           <label className="flex flex-col gap-1 text-sm md:col-span-2">
@@ -233,12 +223,6 @@ export default function GeoCatalogList({
             </label>
           ) : null}
           <div className="flex items-end gap-2 md:col-span-2 lg:col-span-4">
-            <button
-              type="submit"
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
-              Apply filters
-            </button>
             <button
               type="button"
               onClick={onReset}
@@ -303,7 +287,7 @@ export default function GeoCatalogList({
           <p className="p-5 text-[var(--muted)]">No {noun} match these filters.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="headers-nowrap min-w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                 <tr>
                   {isVisible('code') ? (

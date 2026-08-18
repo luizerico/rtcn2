@@ -66,3 +66,15 @@ textarea {
   background: var(--surface);
   color: var(--foreground);
 }
+
+table.headers-nowrap thead th {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+table.headers-nowrap thead th > button {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 0.15rem;
+}

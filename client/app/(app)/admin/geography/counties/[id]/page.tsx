@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { apiGet } from '@/lib/apiUtils';
@@ -9,6 +9,7 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 import { buildListParams, type PaginatedList } from '@/lib/listTypes';
+import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
 import {
   geoId,
   geoLabel,
@@ -144,14 +145,17 @@ export default function CountyDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [emissionQ, setEmissionQ] = useState('');
-  const [emissionYear, setEmissionYear] = useState('');
-  const [emissionSector, setEmissionSector] = useState('');
-  const [appliedEmissions, setAppliedEmissions] = useState(EMPTY_EMISSION_FILTERS);
+  const {
+    filters: emissionFilters,
+    setFilters: setEmissionFilters,
+    applied: appliedEmissions,
+    page: emissionPage,
+    setPage: setEmissionPage,
+    resetFilters: resetEmissionFilters,
+  } = useAutoAppliedFilters(EMPTY_EMISSION_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [emissionSort, setEmissionSort] = useState<EmissionSortField>('year');
   const [emissionOrder, setEmissionOrder] = useState<'asc' | 'desc'>('desc');
-  const [emissionPage, setEmissionPage] = useState(1);
   const [emissionLimit, setEmissionLimit] = useState(25);
   const [emissions, setEmissions] = useState<PaginatedList<CountyEmissionRecord> | null>(null);
   const [emissionsLoading, setEmissionsLoading] = useState(true);
@@ -196,18 +200,8 @@ export default function CountyDetailPage() {
     void loadEmissions();
   }, [loadEmissions]);
 
-  const onEmissionFilter = (event: FormEvent) => {
-    event.preventDefault();
-    setEmissionPage(1);
-    setAppliedEmissions({ q: emissionQ, year: emissionYear, sector: emissionSector });
-  };
-
   const onClearEmissionFilters = () => {
-    setEmissionQ('');
-    setEmissionYear('');
-    setEmissionSector('');
-    setAppliedEmissions(EMPTY_EMISSION_FILTERS);
-    setEmissionPage(1);
+    resetEmissionFilters(EMPTY_EMISSION_FILTERS);
   };
 
   const toggleEmissionSort = (field: EmissionSortField) => {
@@ -361,34 +355,28 @@ export default function CountyDetailPage() {
             </div>
             {showFilters ? (
               <form
-                onSubmit={onEmissionFilter}
+                onSubmit={(event) => event.preventDefault()}
                 className="grid gap-3 border-b border-[var(--border)] p-4 md:grid-cols-4"
               >
                 <input
-                  value={emissionQ}
-                  onChange={(e) => setEmissionQ(e.target.value)}
+                  value={emissionFilters.q}
+                  onChange={(e) => setEmissionFilters((prev) => ({ ...prev, q: e.target.value }))}
                   placeholder="Search sector, category…"
                   className="rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm"
                 />
                 <input
-                  value={emissionYear}
-                  onChange={(e) => setEmissionYear(e.target.value)}
+                  value={emissionFilters.year}
+                  onChange={(e) => setEmissionFilters((prev) => ({ ...prev, year: e.target.value }))}
                   placeholder="Year"
                   className="rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm"
                 />
                 <input
-                  value={emissionSector}
-                  onChange={(e) => setEmissionSector(e.target.value)}
+                  value={emissionFilters.sector}
+                  onChange={(e) => setEmissionFilters((prev) => ({ ...prev, sector: e.target.value }))}
                   placeholder="Sector"
                   className="rounded-md border border-[var(--border)] bg-white px-3 py-2 text-sm"
                 />
                 <div className="flex items-center gap-2">
-                  <button
-                    type="submit"
-                    className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-                  >
-                    Apply
-                  </button>
                   <button
                     type="button"
                     onClick={onClearEmissionFilters}
@@ -405,7 +393,7 @@ export default function CountyDetailPage() {
               <p className="p-4 text-sm text-[var(--muted)]">No emissions match these filters.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="headers-nowrap min-w-full text-left text-sm">
                   <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                     <tr>
                       {visibleColumns.map((column) => (

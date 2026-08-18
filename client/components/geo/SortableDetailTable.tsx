@@ -97,7 +97,7 @@ export default function SortableDetailTable<T>({
         </div>
       ) : null}
       <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-sm">
+        <table className="headers-nowrap min-w-full text-left text-sm">
           <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
             <tr>
               {visibleColumns.map((column) => (
