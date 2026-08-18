@@ -26,6 +26,7 @@ type NavIconName =
   | 'admin'
   | 'users'
   | 'groups'
+  | 'organizations'
   | 'permissions'
   | 'sessions'
   | 'logs'
@@ -46,6 +47,7 @@ const NAV_ICON_BY_HREF: Record<string, NavIconName> = {
   '/admin': 'admin',
   '/admin/users': 'users',
   '/admin/groups': 'groups',
+  '/admin/organizations': 'organizations',
   '/admin/permissions': 'permissions',
   '/admin/sessions': 'sessions',
   '/admin/logs': 'logs',
@@ -125,6 +127,14 @@ function NavIcon({ name, className = 'h-5 w-5' }: { name: NavIconName; className
           <circle cx="16.5" cy="9.5" r="2.5" {...stroke} />
           <path {...stroke} d="M2.5 19.5a6 6 0 0 1 12 0" />
           <path {...stroke} d="M14 19.5a4.5 4.5 0 0 1 7.5 0" />
+        </svg>
+      );
+    case 'organizations':
+      return (
+        <svg {...common}>
+          <path {...stroke} d="M4 21V7l6-3 6 3v14" />
+          <path {...stroke} d="M10 21V11h4v10" />
+          <path {...stroke} d="M16 10h4v11H4" />
         </svg>
       );
     case 'permissions':
@@ -240,6 +250,7 @@ const links: NavItem[] = [
       can('PROJECT:READ', { allowAnyInstance: true }) ||
       can('USER:READ') ||
       can('GROUP:READ') ||
+      can('ORGANIZATION:READ') ||
       can('LOG:READ'),
   },
   {
@@ -250,6 +261,12 @@ const links: NavItem[] = [
   },
   { href: '/admin/users', label: 'Users', indent: true, visible: (_c, isAdmin) => isAdmin },
   { href: '/admin/groups', label: 'Groups', indent: true, visible: (_c, isAdmin) => isAdmin },
+  {
+    href: '/admin/organizations',
+    label: 'Organizations',
+    indent: true,
+    visible: (_c, isAdmin) => isAdmin,
+  },
   {
     href: '/admin/permissions',
     label: 'Permissions',

@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const { resolveMongoUri } = require('../config/mongoUri');
 const User = require('../models/User');
+const Organization = require('../models/Organization');
 const { Sponsor, Opportunity, Project } = require('../models/assets');
 const Survey = require('../models/assets/Survey');
 const { InstrumentVersion, InstrumentResponse, InstrumentRevision } = require('../models/survey');
@@ -30,10 +31,8 @@ const SKIPPED_FILES = [
   ['rtcn-database.microregions.json', 'use npm run db:seed-geo'],
   ['rtcn-database.biomes.json', 'use npm run db:seed-geo'],
   ['rtcn-database.counties.json', 'use npm run db:seed-geo'],
-  ['rtcn-database.users.json', 'schema does not match User (use npm run db:init)'],
   ['rtcn-database.groups.json', 'legacy groups are not the current RBAC model'],
   ['rtcn-database.permissions.json', 'legacy ACL rows are not current Permission grants'],
-  ['rtcn-database.organizations.json', 'no Organization collection'],
   ['rtcn-database.localplans.json', 'no LocalPlan collection'],
   ['rtcn-database.refreshtokens.json', 'skipped (secrets / unused)'],
   ['rtcn-database.securitylogs.json', 'skipped (legacy logs)'],
@@ -450,6 +449,170 @@ function auditFields(raw, fallbackOwnerId) {
   };
 }
 
+const DUMMY_GOOGLE_IDS = new Set(['000000']);
+
+function isBcryptHash(value) {
+  return typeof value === 'string' && /^\$2[aby]\$\d{2}\$.{53}$/.test(value);
+}
+
+function trashFromSource(raw) {
+  if (!isSourceDeleted(raw)) return { deletedAt: null, deletedBy: null };
+  return {
+    deletedAt: unwrapDate(raw.deletedAt) || new Date(),
+    deletedBy: unwrapOid(raw.deletedBy) || null,
+  };
+}
+
+function timestampsFromSource(raw) {
+  const createdAt = unwrapDate(raw.createdAt);
+  const updatedAt = unwrapDate(raw.updatedAt) || createdAt;
+  return {
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+  };
+}
+
+function normalizeOrganization(raw) {
+  if (!raw) return { skipReason: 'empty row' };
+  if (isSourceDeleted(raw) && !includeDeleted()) return { skipReason: 'deleted in source' };
+
+  const _id = unwrapOid(raw._id);
+  const name = trimmed(raw.name);
+  if (!_id) return { skipReason: 'missing id' };
+  if (!name || name.length < 2) return { skipReason: 'missing name' };
+
+  const email = optionalString(raw.email).toLowerCase();
+  return {
+    doc: {
+      _id,
+      name: name.slice(0, 100),
+      description: optionalString(raw.description).slice(0, 500),
+      website: optionalString(raw.website).slice(0, 2048),
+      email,
+      phone: optionalString(raw.phone).slice(0, 50),
+      ...trashFromSource(raw),
+      ...timestampsFromSource(raw),
+    },
+  };
+}
+
+function normalizeUser(raw, organizationIds) {
+  if (!raw) return { skipReason: 'empty row' };
+  if (isSourceDeleted(raw) && !includeDeleted()) return { skipReason: 'deleted in source' };
+
+  const _id = unwrapOid(raw._id);
+  const username = trimmed(raw.name || raw.username);
+  const email = trimmed(raw.email).toLowerCase();
+  const password = trimmed(raw.password);
+  if (!_id) return { skipReason: 'missing id' };
+  if (!username) return { skipReason: 'missing username' };
+  if (!email) return { skipReason: 'missing email' };
+  if (!isBcryptHash(password)) return { skipReason: 'missing password hash' };
+
+  const googleRaw = trimmed(raw.googleId);
+  const googleId = googleRaw && !DUMMY_GOOGLE_IDS.has(googleRaw) ? googleRaw : undefined;
+  const orgId = unwrapOid(raw.organization);
+  const organization =
+    orgId && organizationIds instanceof Set && organizationIds.has(String(orgId)) ? orgId : null;
+  const language = trimmed(raw.language).slice(0, 10) || null;
+
+  const doc = {
+    _id,
+    username,
+    email,
+    password,
+    isVerified: true,
+    isEnabled: raw.isEnabled !== false,
+    organization,
+    lastLoginAt: unwrapDate(raw.lastLogin || raw.lastLoginAt) || null,
+    language,
+    ...trashFromSource(raw),
+    ...timestampsFromSource(raw),
+  };
+  if (googleId) doc.googleId = googleId;
+  return { doc, unsetGoogleId: !googleId };
+}
+
+function bootstrapAdminIdentity() {
+  return {
+    username: String(process.env.ADMIN_USERNAME || 'admin').trim().toLowerCase(),
+    email: String(process.env.ADMIN_EMAIL || 'admin@example.com').trim().toLowerCase(),
+  };
+}
+
+async function importUsers(organizationIds) {
+  const filename = 'rtcn-database.users.json';
+  const rows = readSampleJson(filename);
+  if (!Array.isArray(rows)) {
+    throw new Error(`${filename} is not a JSON array.`);
+  }
+
+  const admin = bootstrapAdminIdentity();
+  const existing = await User.find({}).select('_id username email');
+  const byUsername = new Map();
+  const byEmail = new Map();
+  for (const user of existing) {
+    byUsername.set(String(user.username).toLowerCase(), String(user._id));
+    byEmail.set(String(user.email).toLowerCase(), String(user._id));
+  }
+
+  const ops = [];
+  const skips = [];
+  for (const raw of rows) {
+    const result = normalizeUser(raw, organizationIds);
+    if (result.skipReason) {
+      skips.push(result.skipReason);
+      continue;
+    }
+
+    const { doc, unsetGoogleId } = result;
+    const usernameKey = String(doc.username).toLowerCase();
+    const emailKey = String(doc.email).toLowerCase();
+    if (usernameKey === admin.username || emailKey === admin.email) {
+      skips.push('bootstrap admin conflict');
+      continue;
+    }
+
+    const id = String(doc._id);
+    const existingByName = byUsername.get(usernameKey);
+    const existingByEmail = byEmail.get(emailKey);
+    if ((existingByName && existingByName !== id) || (existingByEmail && existingByEmail !== id)) {
+      skips.push('username or email already in use');
+      continue;
+    }
+
+    const update = { $set: doc };
+    if (unsetGoogleId) update.$unset = { googleId: '' };
+    ops.push({
+      updateOne: {
+        filter: { _id: doc._id },
+        update,
+        upsert: true,
+      },
+    });
+    byUsername.set(usernameKey, id);
+    byEmail.set(emailKey, id);
+  }
+
+  const stats = { count: 0, matched: 0, upserted: 0, modified: 0, skipped: skips.length };
+  for (let i = 0; i < ops.length; i += BATCH_SIZE) {
+    const batch = ops.slice(i, i + BATCH_SIZE);
+    const written = await User.bulkWrite(batch, { ordered: false });
+    stats.count += batch.length;
+    stats.matched += written.matchedCount;
+    stats.upserted += written.upsertedCount;
+    stats.modified += written.modifiedCount;
+  }
+
+  console.log(
+    `Users: ${stats.count} imported (upserted ${stats.upserted}, modified ${stats.modified}); skipped ${stats.skipped}`
+  );
+  if (skips.length) {
+    console.log(`  skip reasons: ${summarizeSkips(skips)}`);
+  }
+  return stats;
+}
+
 function normalizeSponsor(raw, fallbackOwnerId) {
   if (!raw) return { skipReason: 'empty row' };
   if (isSourceDeleted(raw) && !includeDeleted()) return { skipReason: 'deleted in source' };
@@ -716,6 +879,15 @@ async function importSampleData() {
   const fallbackOwnerId = await resolveFallbackOwner();
   console.log(`Asset owner fallback: ${fallbackOwnerId}`);
 
+  const organizations = await importMapped(
+    'rtcn-database.organizations.json',
+    Organization,
+    normalizeOrganization,
+    { fallbackOwnerId, noun: 'Organizations' }
+  );
+  const organizationIds = new Set(organizations.docs.map((doc) => String(doc._id)));
+  await importUsers(organizationIds);
+
   const sponsors = await importMapped(
     'rtcn-database.sponsors.json',
     Sponsor,
@@ -771,6 +943,8 @@ module.exports = {
   normalizeOpportunity,
   normalizeProject,
   normalizeQuestion,
+  normalizeOrganization,
+  normalizeUser,
   importSampleData,
   SAMPLE_DIR,
 };

@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Group = require('../models/Group');
+const Organization = require('../models/Organization');
 const bcrypt = require('bcryptjs');
 const { assertPasswordPolicy } = require('../utils/passwordPolicy');
 const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
@@ -13,8 +14,27 @@ const {
   textSearchOr,
   escapeRegex,
 } = require('../utils/listQuery');
+const { optionalObjectId, optionalString, booleanFlag, ValidationError, nonEmptyString, emailString } = require('../validation');
 
-const USER_SORT_FIELDS = new Set(['username', 'email', 'createdAt', 'lastLoginAt', 'isVerified']);
+const USER_SORT_FIELDS = new Set([
+  'username',
+  'email',
+  'createdAt',
+  'lastLoginAt',
+  'isVerified',
+  'isEnabled',
+]);
+
+async function resolveActiveOrganization(id) {
+  if (!id) return null;
+  const org = await Organization.findOne(activeFilter({ _id: id })).select('_id');
+  if (!org) {
+    const error = new Error('Organization not found.');
+    error.status = 400;
+    throw error;
+  }
+  return org._id;
+}
 
 exports.getAllUsers = async (req, res) => {
   try {
@@ -37,6 +57,15 @@ exports.getAllUsers = async (req, res) => {
 
     if (req.query.isVerified === 'true' || req.query.isVerified === 'false') {
       filter.isVerified = req.query.isVerified === 'true';
+    }
+    if (req.query.isEnabled === 'true' || req.query.isEnabled === 'false') {
+      filter.isEnabled = req.query.isEnabled === 'true';
+    }
+
+    const organizationId =
+      typeof req.query.organizationId === 'string' ? req.query.organizationId.trim() : '';
+    if (organizationId) {
+      filter.organization = organizationId;
     }
 
     const groupId = typeof req.query.groupId === 'string' ? req.query.groupId.trim() : '';
@@ -102,7 +131,7 @@ exports.getUserById = async (req, res) => {
 
 exports.createUser = async (req, res) => {
   try {
-    const { username, email, password } = req.validated || req.body;
+    const { username, email, password, organization, language } = req.validated || req.body;
 
     const passwordCheck = assertPasswordPolicy(password);
     if (!passwordCheck.ok) {
@@ -114,12 +143,17 @@ exports.createUser = async (req, res) => {
       return sendError(res, 400, 'User or email already exists.', ERROR_CODES.CONFLICT);
     }
 
+    const organizationId = await resolveActiveOrganization(organization);
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({
       username,
       email,
       password: hashedPassword,
       isVerified: true,
+      isEnabled: true,
+      organization: organizationId,
+      ...(language ? { language } : {}),
     });
 
     const withGroups = await attachUserGroups(
@@ -128,22 +162,79 @@ exports.createUser = async (req, res) => {
 
     res.status(201).json(withGroups);
   } catch (error) {
+    if (error?.status === 400) {
+      return sendError(res, 400, error.message, ERROR_CODES.VALIDATION);
+    }
     return sendServerError(res, error, 'Error creating user');
   }
 };
 
-const USER_UPDATE_ALLOWED = ['username', 'email', 'isVerified'];
+const USER_UPDATE_ALLOWED = ['username', 'email', 'isVerified', 'isEnabled', 'organization', 'language'];
 
 exports.updateUser = async (req, res) => {
   try {
     const updates = {};
     for (const key of USER_UPDATE_ALLOWED) {
       if (!Object.prototype.hasOwnProperty.call(req.body, key)) continue;
-      if (key === 'isVerified') {
-        if (typeof req.body.isVerified !== 'boolean') {
-          return res.status(400).json({ message: 'isVerified must be a boolean.' });
+      if (key === 'isVerified' || key === 'isEnabled') {
+        try {
+          updates[key] = booleanFlag(req.body[key], { defaultValue: undefined });
+        } catch (error) {
+          if (error instanceof ValidationError) {
+            return sendError(res, 400, `${key} must be a boolean.`, ERROR_CODES.VALIDATION);
+          }
+          throw error;
         }
-        updates.isVerified = req.body.isVerified;
+        if (typeof updates[key] !== 'boolean') {
+          return sendError(res, 400, `${key} must be a boolean.`, ERROR_CODES.VALIDATION);
+        }
+        continue;
+      }
+      if (key === 'organization') {
+        try {
+          updates.organization = await resolveActiveOrganization(
+            optionalObjectId(req.body.organization, 'Organization')
+          );
+        } catch (error) {
+          if (error instanceof ValidationError || error?.status === 400) {
+            return sendError(res, 400, error.message, ERROR_CODES.VALIDATION);
+          }
+          throw error;
+        }
+        continue;
+      }
+      if (key === 'language') {
+        try {
+          const language = optionalString(req.body.language, 'Language', { maxLength: 10 });
+          updates.language = language || null;
+        } catch (error) {
+          if (error instanceof ValidationError) {
+            return sendError(res, 400, error.message, ERROR_CODES.VALIDATION);
+          }
+          throw error;
+        }
+        continue;
+      }
+      if (key === 'username') {
+        try {
+          updates.username = nonEmptyString(req.body.username, 'Username', { maxLength: 64 });
+        } catch (error) {
+          if (error instanceof ValidationError) {
+            return sendError(res, 400, error.message, ERROR_CODES.VALIDATION);
+          }
+          throw error;
+        }
+        continue;
+      }
+      if (key === 'email') {
+        try {
+          updates.email = emailString(req.body.email);
+        } catch (error) {
+          if (error instanceof ValidationError) {
+            return sendError(res, 400, error.message, ERROR_CODES.VALIDATION);
+          }
+          throw error;
+        }
         continue;
       }
       updates[key] = req.body[key];
@@ -153,6 +244,24 @@ exports.updateUser = async (req, res) => {
       return res.status(400).json({
         message: `No updatable fields provided. Allowed: ${USER_UPDATE_ALLOWED.join(', ')}.`,
       });
+    }
+
+    if (updates.username || updates.email) {
+      const clashFilter = {
+        _id: { $ne: req.params.id },
+        $or: [
+          ...(updates.username ? [{ username: updates.username }] : []),
+          ...(updates.email ? [{ email: updates.email }] : []),
+        ],
+      };
+      const clash = await User.findOne(activeFilter(clashFilter)).select('_id');
+      if (clash) {
+        return sendError(res, 400, 'User or email already exists.', ERROR_CODES.CONFLICT);
+      }
+    }
+
+    if (updates.isEnabled === false && String(req.params.id) === String(req.user._id)) {
+      return sendError(res, 400, 'You cannot disable your own account.', ERROR_CODES.BAD_REQUEST);
     }
 
     if (Object.prototype.hasOwnProperty.call(updates, 'isVerified')) {
@@ -171,13 +280,17 @@ exports.updateUser = async (req, res) => {
       return sendError(res, 404, 'User not found.', ERROR_CODES.NOT_FOUND);
     }
 
-    if (updates.isVerified === false) {
-      await revokeAllUserSessions(user._id, 'verification_revoked');
+    if (updates.isVerified === false || updates.isEnabled === false) {
+      const reason = updates.isEnabled === false ? 'account_disabled' : 'verification_revoked';
+      await revokeAllUserSessions(user._id, reason);
     }
 
     const withGroups = await attachUserGroups(user);
     res.status(200).json(withGroups);
   } catch (error) {
+    if (error?.status === 400) {
+      return sendError(res, 400, error.message, ERROR_CODES.VALIDATION);
+    }
     return sendServerError(res, error, 'Error updating user');
   }
 };

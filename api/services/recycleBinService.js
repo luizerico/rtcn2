@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Group = require('../models/Group');
+const Organization = require('../models/Organization');
 const Permission = require('../models/Permission');
 const StoredFile = require('../models/StoredFile');
 const { purgeInstrumentDependents, listTrashedResponses, restoreTrashedResponse, purgeTrashedResponse, toAnswerBinItem } = require('./surveyInstrumentService');
@@ -22,7 +23,7 @@ const FILE_OWNER_TYPES = {
   SPONSOR: 'sponsor',
 };
 
-const ITEM_TYPES = new Set(['FILE', 'USER', 'GROUP', 'SURVEY_ANSWER', ...ASSET_KINDS]);
+const ITEM_TYPES = new Set(['FILE', 'USER', 'GROUP', 'ORGANIZATION', 'SURVEY_ANSWER', ...ASSET_KINDS]);
 
 function normalizeType(value) {
   return String(value || '').toUpperCase();
@@ -96,6 +97,13 @@ async function listBinItems(typeFilter) {
     }
   }
 
+  if (include('ORGANIZATION')) {
+    const orgs = await populateDeletedBy(Organization.find(trashedFilter()).sort({ deletedAt: -1 }));
+    for (const doc of orgs) {
+      items.push(toBinItem('ORGANIZATION', doc, doc.name, doc.email || doc.description || ''));
+    }
+  }
+
   if (include('SURVEY_ANSWER')) {
     items.push(...(await listTrashedResponses()));
   }
@@ -143,6 +151,13 @@ async function loadTrashed(itemType, id) {
   }
   if (type === 'GROUP') {
     const doc = await Group.findById(id);
+    if (!doc || !isTrashed(doc)) {
+      throw new HttpError(404, 'Item not found in the recycle bin.', { code: ERROR_CODES.NOT_FOUND });
+    }
+    return { type, doc };
+  }
+  if (type === 'ORGANIZATION') {
+    const doc = await Organization.findById(id);
     if (!doc || !isTrashed(doc)) {
       throw new HttpError(404, 'Item not found in the recycle bin.', { code: ERROR_CODES.NOT_FOUND });
     }
@@ -207,6 +222,20 @@ async function restoreBinItem(itemType, id, userId) {
     return toBinItem('GROUP', doc, doc.name, doc.description || '');
   }
 
+  if (type === 'ORGANIZATION') {
+    const clash = await Organization.findOne(
+      activeFilter({ _id: { $ne: doc._id }, name: doc.name })
+    ).select('_id name');
+    if (clash) {
+      throw new HttpError(409, 'Cannot restore: organization name is already in use.', {
+        code: ERROR_CODES.CONFLICT,
+      });
+    }
+    clearTrash(doc, userId);
+    await doc.save();
+    return toBinItem('ORGANIZATION', doc, doc.name, doc.email || doc.description || '');
+  }
+
   if (type === 'SURVEY_ANSWER') {
     const restored = await restoreTrashedResponse(doc, userId);
     return toAnswerBinItem(restored);
@@ -247,6 +276,12 @@ async function purgeBinItem(itemType, id) {
     return { itemType: type, _id: String(doc._id) };
   }
 
+  if (type === 'ORGANIZATION') {
+    await User.updateMany({ organization: doc._id }, { $set: { organization: null } });
+    await doc.deleteOne();
+    return { itemType: type, _id: String(doc._id) };
+  }
+
   if (type === 'SURVEY_ANSWER') {
     return purgeTrashedResponse(doc);
   }
@@ -264,7 +299,7 @@ async function purgeBinItem(itemType, id) {
 
 async function emptyBin() {
   const items = await listBinItems();
-  const purgeOrder = { FILE: 0, SURVEY_ANSWER: 1, USER: 2, GROUP: 3 };
+  const purgeOrder = { FILE: 0, SURVEY_ANSWER: 1, USER: 2, GROUP: 3, ORGANIZATION: 4 };
   items.sort((a, b) => (purgeOrder[a.itemType] ?? 3) - (purgeOrder[b.itemType] ?? 3));
 
   let deleted = 0;

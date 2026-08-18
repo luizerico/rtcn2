@@ -234,6 +234,48 @@ describe('Unified recycle bin', () => {
     expect(afterRestore).toBe(permissionCount);
   });
 
+  it('restores and purges organizations from the recycle bin', async () => {
+    const auth = { Authorization: `Bearer ${adminToken}` };
+    const created = await request(app).post('/api/organizations').set(auth).send({
+      name: 'Bin Org',
+      email: 'bin-org@example.org',
+    });
+    expect(created.status).toBe(201);
+    const orgId = created.body._id;
+
+    const assigned = await request(app)
+      .put(`/api/users/${viewer.user._id}`)
+      .set(auth)
+      .send({ organization: orgId });
+    expect(assigned.status).toBe(200);
+    expect(assigned.body.organization.name).toBe('Bin Org');
+
+    const removed = await request(app).delete(`/api/organizations/${orgId}`).set(auth);
+    expect(removed.status).toBe(200);
+
+    const missing = await request(app).get(`/api/organizations/${orgId}`).set(auth);
+    expect(missing.status).toBe(404);
+
+    const bin = await request(app).get('/api/bin?type=ORGANIZATION').set(auth);
+    expect(bin.status).toBe(200);
+    expect(bin.body.items).toHaveLength(1);
+    expect(bin.body.items[0]).toMatchObject({ itemType: 'ORGANIZATION', _id: orgId, name: 'Bin Org' });
+
+    const restored = await request(app).post(`/api/bin/ORGANIZATION/${orgId}/restore`).set(auth);
+    expect(restored.status).toBe(200);
+
+    const again = await request(app).get(`/api/organizations/${orgId}`).set(auth);
+    expect(again.status).toBe(200);
+
+    await request(app).delete(`/api/organizations/${orgId}`).set(auth);
+    const purged = await request(app).delete(`/api/bin/ORGANIZATION/${orgId}`).set(auth);
+    expect(purged.status).toBe(200);
+
+    const cleared = await request(app).get(`/api/users/${viewer.user._id}`).set(auth);
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.organization).toBeNull();
+  });
+
   it('purges survey responses only when the survey is permanently deleted', async () => {
     const auth = { Authorization: `Bearer ${adminToken}` };
     const { county } = await seedCounty();

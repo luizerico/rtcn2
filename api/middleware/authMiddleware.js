@@ -94,6 +94,15 @@ const protect = async (req, res, next) => {
       );
     }
 
+    if (req.user.isEnabled === false) {
+      return authError(
+        res,
+        403,
+        ERROR_CODES.ACCOUNT_DISABLED,
+        'This account is disabled. Ask an administrator to enable it.'
+      );
+    }
+
     req.authToken = token;
     req.session = session;
     await touchSession(session);

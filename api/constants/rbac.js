@@ -1,12 +1,13 @@
 const { ASSET_KINDS } = require('./assetTypes');
 
 /** Not permission targets — used only for admin route guards via admin-group membership. */
-const IDENTITY_RESOURCE_TYPES = ['USER', 'GROUP', 'LOG'];
+const IDENTITY_RESOURCE_TYPES = ['USER', 'GROUP', 'ORGANIZATION', 'LOG'];
 const PRINCIPAL_TYPES = ['USER', 'GROUP'];
 
 /**
  * COUNTY is a geo subject (seeded catalog), not an Asset kind.
- * USER and GROUP are principals only — never resourceType values.
+ * USER, GROUP, and ORGANIZATION are identity (not permission resourceType values).
+ * USER and GROUP are principals; ORGANIZATION is an affiliation catalog.
  */
 const SUBJECT_RESOURCE_TYPES = ['COUNTY'];
 const RESOURCE_TYPES = [...ASSET_KINDS, ...SUBJECT_RESOURCE_TYPES];
@@ -65,7 +66,7 @@ function parsePermissionString(permission) {
     return null;
   }
 
-  // Identity route guards (USER:*, GROUP:*) — not asset permission rows.
+  // Identity route guards (USER:*, GROUP:*, ORGANIZATION:*) — not asset permission rows.
   if (IDENTITY_RESOURCE_TYPES.includes(resourceType)) {
     return { resourceType, action, identity: true };
   }

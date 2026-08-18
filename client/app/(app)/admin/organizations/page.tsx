@@ -1,0 +1,401 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { apiDelete, apiGet } from '@/lib/apiUtils';
+import { useToast } from '@/components/ToastProvider';
+import OrganizationFormModal from '@/components/ui/OrganizationFormModal';
+import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
+import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { useAccess } from '@/components/AccessProvider';
+import { AccessPrimaryButton } from '@/components/ui/AccessControls';
+import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
+import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
+import { buildListParams, type PaginatedList } from '@/lib/listTypes';
+import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
+
+interface OrganizationRecord {
+  _id: string;
+  name: string;
+  description?: string;
+  website?: string;
+  email?: string;
+  phone?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+type SortField = 'name' | 'email' | 'createdAt' | 'updatedAt';
+
+const ORG_COLUMNS: ColumnDef[] = [
+  { id: 'name', label: 'Name', alwaysVisible: true },
+  { id: 'email', label: 'Email' },
+  { id: 'phone', label: 'Phone' },
+  { id: 'website', label: 'Website' },
+  { id: 'updated', label: 'Updated' },
+  { id: 'actions', label: 'Actions', alwaysVisible: true },
+];
+
+const DEFAULT_FILTERS = {
+  q: '',
+  name: '',
+};
+
+export default function AdminOrganizationsPage() {
+  const { pushToast } = useToast();
+  const { can, isAdmin } = useAccess();
+  const canCreate = can('ORGANIZATION:CREATE');
+  const canWrite = can('ORGANIZATION:WRITE');
+  const canDelete = can('ORGANIZATION:DELETE');
+
+  const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters(DEFAULT_FILTERS);
+  const [sort, setSort] = useState<SortField>('name');
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+  const [limit, setLimit] = useState(25);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const [data, setData] = useState<PaginatedList<OrganizationRecord> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<OrganizationRecord | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<OrganizationRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const columns = useMemo(() => ORG_COLUMNS, []);
+  const { isVisible, toggle } = useColumnVisibility('admin-organizations', columns, {
+    enabled: isAdmin,
+  });
+
+  const hasActiveFilters = Object.values(applied).some(Boolean);
+  const organizations = data?.items || [];
+  const pagination = data?.pagination;
+
+  const loadOrganizations = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = buildListParams({ page, limit, sort, order, filters: applied });
+      const result = await apiGet<PaginatedList<OrganizationRecord>>(`/organizations?${params.toString()}`);
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load organizations.');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [applied, limit, order, page, sort]);
+
+  useEffect(() => {
+    void loadOrganizations();
+  }, [loadOrganizations]);
+
+  const onReset = () => {
+    resetFilters(DEFAULT_FILTERS);
+    setSort('name');
+    setOrder('asc');
+  };
+
+  const toggleSort = (field: SortField) => {
+    if (sort === field) {
+      setOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSort(field);
+      setOrder(field === 'name' ? 'asc' : 'desc');
+    }
+    setPage(1);
+  };
+
+  const sortIndicator = (field: SortField) => {
+    if (sort !== field) return '';
+    return order === 'asc' ? ' ↑' : ' ↓';
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await apiDelete(`/organizations/${pendingDelete._id}`);
+      pushToast({
+        tone: 'info',
+        title: 'Organization moved to recycle bin',
+        message: 'The organization can be restored from Recycle bin.',
+      });
+      setPendingDelete(null);
+      await loadOrganizations();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete organization.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-8">
+      <header className="border-b border-[var(--border)] pb-6">
+        <Breadcrumbs
+          items={[
+            { label: 'Home', href: '/' },
+            { label: 'Admin', href: '/admin' },
+            { label: 'Organizations' },
+          ]}
+        />
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="mt-2 text-3xl font-semibold">Organization management</h1>
+            <p className="mt-2 text-[var(--muted)]">
+              Search, filter, and manage organizations users can belong to.
+            </p>
+          </div>
+          <AccessPrimaryButton
+            allowed={canCreate}
+            onClick={() => {
+              setEditing(null);
+              setFormOpen(true);
+            }}
+          >
+            Create organization
+          </AccessPrimaryButton>
+        </div>
+      </header>
+
+      {showFilters ? (
+        <form
+          onSubmit={(event) => event.preventDefault()}
+          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3"
+        >
+          <label className="flex flex-col gap-1 text-sm md:col-span-2">
+            <span className="text-[var(--muted)]">Search</span>
+            <input
+              value={filters.q}
+              onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
+              placeholder="Name, description, or email…"
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">Name</span>
+            <input
+              value={filters.name}
+              onChange={(e) => setFilters((prev) => ({ ...prev, name: e.target.value }))}
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            />
+          </label>
+          <div className="flex items-end gap-2 md:col-span-3">
+            <button
+              type="button"
+              onClick={onReset}
+              className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]/40"
+            >
+              Reset
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
+          {error}
+        </div>
+      )}
+
+      <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)]">
+          <span>
+            {pagination
+              ? pagination.total === 0
+                ? '0 organizations'
+                : `${pagination.total} organization${pagination.total === 1 ? '' : 's'} · page ${pagination.page} of ${pagination.totalPages}`
+              : '—'}
+            {hasActiveFilters ? ' · filters active' : ''}
+          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2">
+              <span>Page size</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="rounded-md border border-[var(--border)] bg-white px-2 py-1 text-[var(--foreground)]"
+              >
+                {[10, 25, 50, 100].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span>
+              Sorted by {sort} ({order})
+            </span>
+            <TableOptionsMenu
+              columns={isAdmin ? columns : []}
+              isVisible={isAdmin ? isVisible : undefined}
+              toggle={isAdmin ? toggle : undefined}
+              showFilters={showFilters}
+              onToggleFilters={() => setShowFilters((prev) => !prev)}
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <p className="p-5 text-[var(--muted)]">Loading organizations…</p>
+        ) : organizations.length === 0 ? (
+          <p className="p-5 text-[var(--muted)]">No organizations match these filters.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="headers-nowrap min-w-full text-left text-sm">
+              <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
+                <tr>
+                  {isVisible('name') ? (
+                    <th className="px-4 py-3 font-medium">
+                      <button type="button" onClick={() => toggleSort('name')} className="hover:text-[var(--accent)]">
+                        Name{sortIndicator('name')}
+                      </button>
+                    </th>
+                  ) : null}
+                  {isVisible('email') ? (
+                    <th className="px-4 py-3 font-medium">
+                      <button type="button" onClick={() => toggleSort('email')} className="hover:text-[var(--accent)]">
+                        Email{sortIndicator('email')}
+                      </button>
+                    </th>
+                  ) : null}
+                  {isVisible('phone') ? <th className="px-4 py-3 font-medium">Phone</th> : null}
+                  {isVisible('website') ? <th className="px-4 py-3 font-medium">Website</th> : null}
+                  {isVisible('updated') ? (
+                    <th className="px-4 py-3 font-medium">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort('updatedAt')}
+                        className="hover:text-[var(--accent)]"
+                      >
+                        Updated{sortIndicator('updatedAt')}
+                      </button>
+                    </th>
+                  ) : null}
+                  {isVisible('actions') ? (
+                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody>
+                {organizations.map((org) => (
+                  <tr
+                    key={org._id}
+                    className={`border-b border-[var(--border)] last:border-0 ${tableActionRowGroupClass}`}
+                  >
+                    {isVisible('name') ? <td className="px-4 py-3 font-medium">{org.name}</td> : null}
+                    {isVisible('email') ? <td className="px-4 py-3">{org.email || '—'}</td> : null}
+                    {isVisible('phone') ? <td className="px-4 py-3">{org.phone || '—'}</td> : null}
+                    {isVisible('website') ? (
+                      <td className="px-4 py-3">
+                        {org.website && /^https?:\/\//i.test(org.website) ? (
+                          <a href={org.website} className="text-[var(--accent)] hover:underline" target="_blank" rel="noreferrer">
+                            {org.website}
+                          </a>
+                        ) : (
+                          org.website || '—'
+                        )}
+                      </td>
+                    ) : null}
+                    {isVisible('updated') ? (
+                      <td className="whitespace-nowrap px-4 py-3">
+                        {org.updatedAt ? new Date(org.updatedAt).toLocaleString() : '—'}
+                      </td>
+                    ) : null}
+                    {isVisible('actions') ? (
+                      <td className="px-4 py-3 text-right">
+                        <TableActionRow>
+                          <AccessIconButton
+                            allowed={canWrite}
+                            icon="edit"
+                            label="Edit"
+                            onClick={() => {
+                              setEditing(org);
+                              setFormOpen(true);
+                            }}
+                          />
+                          <AccessIconButton
+                            allowed={canDelete}
+                            icon="delete"
+                            label="Delete"
+                            danger
+                            onClick={() => setPendingDelete(org)}
+                          />
+                        </TableActionRow>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 border-t border-[var(--border)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[var(--muted)]">
+            {pagination
+              ? pagination.total === 0
+                ? '0 organizations'
+                : `Showing page ${pagination.page} of ${pagination.totalPages} (${pagination.total} total)`
+              : '—'}
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!pagination?.hasPrev || loading}
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              className="rounded-md border border-[var(--border)] px-3 py-1.5 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={!pagination?.hasNext || loading}
+              onClick={() => setPage((prev) => prev + 1)}
+              className="rounded-md border border-[var(--border)] px-3 py-1.5 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <OrganizationFormModal
+        isOpen={formOpen}
+        organization={editing || undefined}
+        onClose={() => {
+          setFormOpen(false);
+          setEditing(null);
+        }}
+        onSaved={({ name }) => {
+          pushToast({
+            tone: 'success',
+            title: editing ? 'Organization updated' : 'Organization created',
+            message: `${name} was saved.`,
+          });
+          void loadOrganizations();
+        }}
+      />
+
+      <ConfirmDeleteDialog
+        isOpen={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={handleDelete}
+        title="Move to recycle bin"
+        itemLabel={pendingDelete?.name}
+        description={
+          pendingDelete
+            ? `Move “${pendingDelete.name}” to the recycle bin? An administrator can restore it later.`
+            : undefined
+        }
+        confirmLabel="Move to bin"
+        busy={deleting}
+      />
+    </div>
+  );
+}
