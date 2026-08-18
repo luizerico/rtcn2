@@ -4,7 +4,7 @@ const { RESOURCE_TYPES, ACTIONS, PRINCIPAL_TYPES } = require('../constants/rbac'
 
 /**
  * ACL-style grant: one action for a USER or GROUP principal on an Asset subclass
- * (target='*', resourceId=null) or one concrete asset (resourceId set).
+ * or COUNTY subject (target='*', resourceId=null) or one concrete object (resourceId set).
  * USER and GROUP are never resourceType values — they are principals only.
  */
 const permissionSchema = new Schema(

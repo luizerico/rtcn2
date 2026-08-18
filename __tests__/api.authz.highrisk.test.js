@@ -19,6 +19,7 @@ const {
   createTestApp,
   seedAdminUser,
   seedUnprivilegedUser,
+  seedCounty,
 } = require('./helpers/apiTestUtils');
 const { replaceGroupPermissions } = require('../api/services/rbacService');
 
@@ -29,13 +30,14 @@ async function login(app, email, password) {
   return res.body.token;
 }
 
-async function createSurvey(app, token, name = 'Pulse') {
+async function createSurvey(app, token, name = 'Pulse', extra = {}) {
   const res = await request(app)
     .post('/api/surveys')
     .set('Authorization', `Bearer ${token}`)
     .send({
       name,
       questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+      ...extra,
     });
   expect(res.status).toBe(201);
   return res.body;
@@ -79,13 +81,18 @@ describe('High-risk authz paths', () => {
   describe('Survey responses', () => {
     it('denies unprivileged users from submitting or listing responses', async () => {
       const survey = await createSurvey(app, adminToken, 'Locked survey');
+      const { county } = await seedCounty();
       const auth = { Authorization: `Bearer ${viewerToken}` };
       const questionId = survey.questions[0].questionId;
 
       const submit = await request(app)
         .post(`/api/surveys/${survey._id}/responses`)
         .set(auth)
-        .send({ answers: [{ questionId, value: 'Yes' }] });
+        .send({
+          subjectType: 'COUNTY',
+          subjectId: county._id,
+          answers: [{ questionId, value: 'Yes' }],
+        });
       expect(submit.status).toBe(403);
 
       const list = await request(app)
@@ -94,13 +101,14 @@ describe('High-risk authz paths', () => {
       expect(list.status).toBe(403);
     });
 
-    it('allows SURVEY:READ to submit answers; results remain admin-only', async () => {
+    it('does not treat SURVEY:READ as fill access; results follow subject READ', async () => {
       const survey = await createSurvey(app, adminToken, 'Scoped survey');
+      const { county } = await seedCounty();
       const questionId = survey.questions[0].questionId;
 
       const surveyReaders = await Group.create({
         name: 'survey-readers',
-        description: 'Can read and answer surveys',
+        description: 'Can read instrument definitions',
         members: [viewer.user._id],
       });
       await replaceGroupPermissions(surveyReaders._id, [
@@ -119,26 +127,36 @@ describe('High-risk authz paths', () => {
       const submit = await request(app)
         .post(`/api/surveys/${survey._id}/responses`)
         .set(auth)
-        .send({ answers: [{ questionId, value: 'Yes' }] });
-      expect(submit.status).toBe(201);
-      expect(submit.body.kind).toBe('SURVEY_RESPONSE');
-      expect(String(submit.body.surveyId)).toBe(String(survey._id));
+        .send({
+          subjectType: 'COUNTY',
+          subjectId: county._id,
+          answers: [{ questionId, value: 'Yes' }],
+        });
+      expect(submit.status).toBe(403);
 
       const list = await request(app)
         .get(`/api/surveys/${survey._id}/responses`)
         .set(auth);
-      expect(list.status).toBe(403);
+      expect(list.status).toBe(200);
+      expect(list.body.responses).toHaveLength(0);
     });
 
     it('allows admin to submit and list responses', async () => {
-      const survey = await createSurvey(app, adminToken, 'Admin survey');
+      const { county } = await seedCounty();
+      const survey = await createSurvey(app, adminToken, 'Admin survey', {
+        countyIds: [county._id],
+      });
       const auth = { Authorization: `Bearer ${adminToken}` };
       const questionId = survey.questions[0].questionId;
 
       const submit = await request(app)
         .post(`/api/surveys/${survey._id}/responses`)
         .set(auth)
-        .send({ answers: [{ questionId, value: 'No' }] });
+        .send({
+          subjectType: 'COUNTY',
+          subjectId: county._id,
+          answers: [{ questionId, value: 'No' }],
+        });
       expect(submit.status).toBe(201);
 
       const list = await request(app)
@@ -148,22 +166,38 @@ describe('High-risk authz paths', () => {
       expect(list.body.responses).toHaveLength(1);
     });
 
-    it('allows instance SURVEY:READ to answer that survey only; results stay admin-only', async () => {
-      const surveyA = await createSurvey(app, adminToken, 'Survey A');
-      const surveyB = await createSurvey(app, adminToken, 'Survey B');
-      const qA = surveyA.questions[0].questionId;
-      const qB = surveyB.questions[0].questionId;
+    it('allows instance COUNTY:WRITE plus SURVEY:READ to fill that county only', async () => {
+      const { county: countyA } = await seedCounty({ name: 'Alpha' });
+      const { county: countyB } = await seedCounty({ name: 'Beta' });
+      const survey = await createSurvey(app, adminToken, 'County scoped', {
+        countyIds: [countyA._id, countyB._id],
+      });
+      const questionId = survey.questions[0].questionId;
 
       const limited = await Group.create({
-        name: 'survey-a-readers',
+        name: 'county-a-writers',
         members: [viewer.user._id],
       });
       await replaceGroupPermissions(limited._id, [
         {
           groupId: limited._id,
+          resourceType: 'COUNTY',
+          target: countyA.name,
+          resourceId: countyA._id,
+          permission: 'WRITE',
+        },
+        {
+          groupId: limited._id,
+          resourceType: 'COUNTY',
+          target: countyA.name,
+          resourceId: countyA._id,
+          permission: 'READ',
+        },
+        {
+          groupId: limited._id,
           resourceType: 'SURVEY',
-          target: surveyA.name,
-          resourceId: surveyA._id,
+          target: survey.name,
+          resourceId: survey._id,
           permission: 'READ',
         },
       ]);
@@ -172,26 +206,16 @@ describe('High-risk authz paths', () => {
       const auth = { Authorization: `Bearer ${token}` };
 
       const submitA = await request(app)
-        .post(`/api/surveys/${surveyA._id}/responses`)
+        .put(`/api/surveys/${survey._id}/subjects/COUNTY/${countyA._id}`)
         .set(auth)
-        .send({ answers: [{ questionId: qA, value: 'Yes' }] });
-      expect(submitA.status).toBe(201);
+        .send({ answers: [{ questionId, value: 'Yes' }] });
+      expect(submitA.status).toBe(200);
 
       const submitB = await request(app)
-        .post(`/api/surveys/${surveyB._id}/responses`)
+        .put(`/api/surveys/${survey._id}/subjects/COUNTY/${countyB._id}`)
         .set(auth)
-        .send({ answers: [{ questionId: qB, value: 'Yes' }] });
+        .send({ answers: [{ questionId, value: 'Yes' }] });
       expect(submitB.status).toBe(403);
-
-      const listA = await request(app)
-        .get(`/api/surveys/${surveyA._id}/responses`)
-        .set(auth);
-      expect(listA.status).toBe(403);
-
-      const listB = await request(app)
-        .get(`/api/surveys/${surveyB._id}/responses`)
-        .set(auth);
-      expect(listB.status).toBe(403);
     });
   });
 

@@ -9,6 +9,7 @@ const {
   normalizeSponsor,
   normalizeOpportunity,
   normalizeProject,
+  normalizeQuestion,
 } = require('../api/scripts/import-sample-data');
 
 const OWNER = new mongoose.Types.ObjectId('66fb10a147cf43795d325466');
@@ -116,5 +117,29 @@ describe('import-sample-data mapping', () => {
     expect(doc.kind).toBe('PROJECT');
     expect(doc.relatedEntity.entityType).toBe('county');
     expect(doc.relatedEntity.entityId).toHaveLength(1);
+  });
+
+  it('maps diagnostic questions onto the embedded survey question schema', () => {
+    const { doc, skipReason } = normalizeQuestion(
+      {
+        _id: { $oid: '673a63788ce4cc28bcd8c0ca' },
+        area: 'GT',
+        code: 'GT11',
+        question: 'Has a mobility plan?',
+        evidence: 'Municipal law',
+        criteria: 'Max if present',
+        maxPoints: 2,
+        weight: 3,
+        todo: 'Draft the plan',
+        isDeleted: false,
+      },
+      OWNER
+    );
+    expect(skipReason).toBeUndefined();
+    expect(doc.code).toBe('GT11');
+    expect(doc.prompt).toBe('Has a mobility plan?');
+    expect(doc.type).toBe('score');
+    expect(doc.maxPoints).toBe(2);
+    expect(doc.weight).toBe(3);
   });
 });

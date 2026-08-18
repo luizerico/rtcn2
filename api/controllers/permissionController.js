@@ -1,11 +1,25 @@
+const mongoose = require('mongoose');
 const { listAllPermissions, listPermissionCatalog } = require('../services/rbacCatalog');
 const { listAssetAcl, replaceAssetAcl } = require('../services/rbacService');
 const { PERMISSION_RESOURCE_TYPES } = require('../constants/rbac');
 const { sendServerError, sendError, ERROR_CODES } = require('../utils/httpErrors');
 
-exports.listPermissions = async (_req, res) => {
+exports.listPermissions = async (req, res) => {
   try {
-    res.status(200).json(await listAllPermissions());
+    const principalType = String(req.query.principalType || '').trim().toUpperCase();
+    const principalId = String(req.query.principalId || '').trim();
+    if (principalType && !['USER', 'GROUP'].includes(principalType)) {
+      return sendError(res, 400, 'principalType must be USER or GROUP.', ERROR_CODES.VALIDATION);
+    }
+    if (principalId && !mongoose.isValidObjectId(principalId)) {
+      return sendError(res, 400, 'Invalid principalId.', ERROR_CODES.VALIDATION);
+    }
+    res.status(200).json(
+      await listAllPermissions({
+        principalType: principalType || undefined,
+        principalId: principalId || undefined,
+      })
+    );
   } catch (error) {
     return sendServerError(res, error, 'Error fetching permissions');
   }

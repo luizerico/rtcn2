@@ -18,7 +18,8 @@ function auditFields(userId, existing) {
   };
 }
 
-const CREATE_KINDS = new Set(['DOCUMENT', 'DASHBOARD', 'DATASET']);
+/** Generic POST /api/assets create is retired; use dedicated survey/sponsor/opportunity/project APIs. */
+const CREATE_KINDS = new Set();
 
 /**
  * List assets the caller can READ across concrete collections.
@@ -74,7 +75,7 @@ exports.getAllAssets = async (req, res) => {
 exports.createAsset = async (req, res) => {
   try {
     const { name, description, kind } = req.validated || req.body;
-    const normalizedKind = String(kind || 'DOCUMENT').toUpperCase();
+    const normalizedKind = String(kind || '').toUpperCase();
 
     if (!CREATE_KINDS.has(normalizedKind) || !kindToDiscriminator(normalizedKind)) {
       return sendError(res, 400, 'Invalid asset kind.', ERROR_CODES.VALIDATION);

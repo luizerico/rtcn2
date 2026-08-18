@@ -8,9 +8,6 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 
 ASSET_COLLECTIONS = (
-    ("documents", "DOCUMENT", "Document"),
-    ("dashboards", "DASHBOARD", "Dashboard"),
-    ("datasets", "DATASET", "Dataset"),
     ("surveys", "SURVEY", "Survey"),
 )
 

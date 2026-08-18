@@ -13,6 +13,7 @@ import {
 } from '@/lib/apiUtils';
 import {
   FILE_ACCEPT,
+  FILE_TYPES_HINT,
   formatBytes,
   userLabel,
   type StoredFileRecord,
@@ -22,6 +23,9 @@ type AttachedFilesPanelProps = {
   listEndpoint: string;
   canWrite: boolean;
   title?: string;
+  questionId?: string;
+  variant?: 'section' | 'plain';
+  onItemsChange?: (items: StoredFileRecord[]) => void;
 };
 
 type UploadDraft = {
@@ -33,9 +37,14 @@ export default function AttachedFilesPanel({
   listEndpoint,
   canWrite,
   title = 'Files',
+  questionId,
+  variant = 'section',
+  onItemsChange,
 }: AttachedFilesPanelProps) {
   const { pushToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const onItemsChangeRef = useRef(onItemsChange);
+  onItemsChangeRef.current = onItemsChange;
   const [items, setItems] = useState<StoredFileRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,18 +58,24 @@ export default function AttachedFilesPanel({
   const [editObs, setEditObs] = useState('');
   const [savingObs, setSavingObs] = useState(false);
 
+  const listUrl = questionId
+    ? `${listEndpoint}${listEndpoint.includes('?') ? '&' : '?'}questionId=${encodeURIComponent(questionId)}`
+    : listEndpoint;
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiGet<{ items: StoredFileRecord[] }>(listEndpoint);
-      setItems(Array.isArray(data.items) ? data.items : []);
+      const data = await apiGet<{ items: StoredFileRecord[] }>(listUrl);
+      const next = Array.isArray(data.items) ? data.items : [];
+      setItems(next);
+      onItemsChangeRef.current?.(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load files.');
     } finally {
       setLoading(false);
     }
-  }, [listEndpoint]);
+  }, [listUrl]);
 
   useEffect(() => {
     void load();
@@ -86,7 +101,7 @@ export default function AttachedFilesPanel({
   const handleUpload = async (event: FormEvent) => {
     event.preventDefault();
     if (!drafts.length) {
-      pushToast({ tone: 'error', title: 'Choose files', message: 'PDF, DOCX, or image required.' });
+      pushToast({ tone: 'error', title: 'Choose files', message: FILE_TYPES_HINT });
       return;
     }
     setUploading(true);
@@ -97,9 +112,14 @@ export default function AttachedFilesPanel({
         form.append('displayName', draft.displayName.trim() || draft.file.name);
       }
       if (obs.trim()) form.append('obs', obs.trim());
+      if (questionId) form.append('questionId', questionId);
       const created = await apiUpload<{ items: StoredFileRecord[] }>(listEndpoint, form);
       const uploaded = Array.isArray(created.items) ? created.items : [];
-      setItems((prev) => [...uploaded, ...prev]);
+      setItems((prev) => {
+        const next = [...uploaded, ...prev];
+        onItemsChangeRef.current?.(next);
+        return next;
+      });
       resetAttachForm();
       setAttachOpen(false);
       const label =
@@ -135,7 +155,11 @@ export default function AttachedFilesPanel({
     setDeleting(true);
     try {
       await apiDelete(`/files/${pendingDelete._id}`);
-      setItems((prev) => prev.filter((row) => row._id !== pendingDelete._id));
+      setItems((prev) => {
+        const next = prev.filter((row) => row._id !== pendingDelete._id);
+        onItemsChangeRef.current?.(next);
+        return next;
+      });
       pushToast({ tone: 'success', title: 'File deleted', message: pendingDelete.displayName });
       setPendingDelete(null);
     } catch (err) {
@@ -153,7 +177,11 @@ export default function AttachedFilesPanel({
     setSavingObs(true);
     try {
       const updated = await apiPatch<StoredFileRecord>(`/files/${row._id}`, { obs: editObs });
-      setItems((prev) => prev.map((item) => (item._id === row._id ? updated : item)));
+      setItems((prev) => {
+        const next = prev.map((item) => (item._id === row._id ? updated : item));
+        onItemsChangeRef.current?.(next);
+        return next;
+      });
       setEditingId(null);
       pushToast({ tone: 'success', title: 'Notes saved', message: updated.displayName });
     } catch (err) {
@@ -167,12 +195,17 @@ export default function AttachedFilesPanel({
     }
   };
 
+  const wrapperClass =
+    variant === 'plain'
+      ? 'space-y-4'
+      : 'space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5';
+
   return (
-    <section className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+    <section className={wrapperClass}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <p className="text-sm text-[var(--muted)]">PDF, DOCX, and images (JPEG, PNG, GIF, WEBP).</p>
+          {variant === 'section' ? <h2 className="text-lg font-semibold">{title}</h2> : null}
+          <p className="text-sm text-[var(--muted)]">{FILE_TYPES_HINT}</p>
         </div>
         {canWrite ? (
           <button
@@ -234,7 +267,7 @@ export default function AttachedFilesPanel({
               maxLength={2000}
             />
           </Field>
-          <div>
+          <div className="flex flex-wrap justify-end">
             <button
               type="submit"
               disabled={uploading || drafts.length === 0}

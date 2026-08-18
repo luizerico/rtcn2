@@ -13,6 +13,7 @@ const {
   createTestApp,
   seedAdminUser,
   seedUnprivilegedUser,
+  seedCounty,
 } = require('./helpers/apiTestUtils');
 const { ACTIONS, RESOURCE_TYPES } = require('../api/constants/rbac');
 const Permission = require('../api/models/Permission');
@@ -90,6 +91,25 @@ describe('RBAC admin full access', () => {
     }
   });
 
+  it('lists counties as grantable permission objects', async () => {
+    const { county } = await seedCounty({ name: 'Aclville' });
+    const catalog = await request(app)
+      .get('/api/permissions/catalog')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(catalog.status).toBe(200);
+    expect(catalog.body.resourceTypes).toEqual(expect.arrayContaining(['COUNTY', 'SURVEY']));
+    expect(catalog.body.resourceTypes).not.toEqual(
+      expect.arrayContaining(['DOCUMENT', 'DASHBOARD', 'DATASET'])
+    );
+    expect(catalog.body.assetKinds).not.toEqual(expect.arrayContaining(['COUNTY']));
+    expect(catalog.body.assetKinds).not.toEqual(
+      expect.arrayContaining(['DOCUMENT', 'DASHBOARD', 'DATASET'])
+    );
+    const countyClass = catalog.body.classes.find((entry) => entry.resourceType === 'COUNTY');
+    expect(countyClass).toBeDefined();
+    expect(countyClass.objects.some((row) => row.id === String(county._id))).toBe(true);
+  });
+
   it('lists all permissions for management views', async () => {
       const res = await request(app)
         .get('/api/permissions')
@@ -143,18 +163,18 @@ describe('RBAC admin full access', () => {
       .set(auth)
       .send({
         scopes: ['READ', 'WRITE', 'CREATE', 'DELETE'],
-        resourceType: 'DOCUMENT',
+        resourceType: 'SURVEY',
         allObjects: true,
       });
     expect(setPermissions.status).toBe(200);
 
     const createAsset = await request(app)
-      .post('/api/assets')
+      .post('/api/surveys')
       .set(auth)
       .send({
-        name: 'Policy Document',
+        name: 'Policy Survey',
         description: 'Admin-managed asset',
-        kind: 'DOCUMENT',
+        questions: [{ prompt: 'Ok?', type: 'yes_no' }],
       });
     expect(createAsset.status).toBe(201);
     expect(String(createAsset.body.ownerId)).toBe(String(adminUser._id));
@@ -162,7 +182,7 @@ describe('RBAC admin full access', () => {
 
     const listAssets = await request(app).get('/api/assets').set(auth);
     expect(listAssets.status).toBe(200);
-    expect(listAssets.body).toHaveLength(1);
+    expect(listAssets.body.some((row) => row._id === createAsset.body._id)).toBe(true);
 
     const updateAsset = await request(app)
       .put(`/api/assets/${createAsset.body._id}`)
@@ -217,15 +237,15 @@ describe('RBAC admin full access', () => {
       .post('/api/assets')
       .set(auth)
       .send({ name: 'Blocked' });
-    expect(createAsset.status).toBe(403);
+    expect(createAsset.status).toBe(400);
     expect(createAsset.body).toMatchObject({
-      code: 'FORBIDDEN',
-      message: expect.stringContaining('Forbidden'),
+      code: 'VALIDATION',
+      message: expect.stringMatching(/Invalid asset kind/i),
     });
     expect(createAsset.body.error).toBeUndefined();
   });
 
-  it('limits a group to SURVEY objects without DOCUMENT access', async () => {
+  it('limits a group to SURVEY objects and rejects retired asset kinds', async () => {
     const Group = require('../api/models/Group');
     const { replaceGroupPermissions } = require('../api/services/rbacService');
 
@@ -267,7 +287,8 @@ describe('RBAC admin full access', () => {
       .post('/api/assets')
       .set(auth)
       .send({ name: 'Secret doc', kind: 'DOCUMENT' });
-    expect(createDoc.status).toBe(403);
+    expect(createDoc.status).toBe(400);
+    expect(createDoc.body.message).toMatch(/Invalid asset kind/i);
 
     const createSurvey = await request(app)
       .post('/api/surveys')

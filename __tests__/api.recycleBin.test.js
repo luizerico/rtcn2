@@ -13,7 +13,7 @@ const request = require('supertest');
 const User = require('../api/models/User');
 const Group = require('../api/models/Group');
 const Permission = require('../api/models/Permission');
-const SurveyResponse = require('../api/models/assets/SurveyResponse');
+const InstrumentResponse = require('../api/models/survey/InstrumentResponse');
 const StoredFile = require('../api/models/StoredFile');
 const {
   connectTestDatabase,
@@ -22,6 +22,7 @@ const {
   createTestApp,
   seedAdminUser,
   seedUnprivilegedUser,
+  seedCounty,
 } = require('./helpers/apiTestUtils');
 const { resetStorageDriverForTests } = require('../api/services/storage');
 const { pdfBuffer } = require('./helpers/fileFixtures');
@@ -205,7 +206,7 @@ describe('Unified recycle bin', () => {
       .set(auth)
       .send({
         scopes: ['READ'],
-        resourceType: 'DOCUMENT',
+        resourceType: 'SURVEY',
         allObjects: true,
       });
     expect(setPermissions.status).toBe(200);
@@ -235,9 +236,11 @@ describe('Unified recycle bin', () => {
 
   it('purges survey responses only when the survey is permanently deleted', async () => {
     const auth = { Authorization: `Bearer ${adminToken}` };
+    const { county } = await seedCounty();
     const survey = await request(app).post('/api/surveys').set(auth).send({
       name: 'Pulse',
       questions: [{ prompt: 'Ok?', type: 'yes_no' }],
+      countyIds: [county._id],
     });
     expect(survey.status).toBe(201);
     const questionId = survey.body.questions[0].questionId;
@@ -245,17 +248,21 @@ describe('Unified recycle bin', () => {
     const response = await request(app)
       .post(`/api/surveys/${survey.body._id}/responses`)
       .set(auth)
-      .send({ answers: [{ questionId, value: 'Yes' }] });
+      .send({
+        subjectType: 'COUNTY',
+        subjectId: county._id,
+        answers: [{ questionId, value: 'Yes' }],
+      });
     expect(response.status).toBe(201);
 
     await request(app).delete(`/api/surveys/${survey.body._id}`).set(auth);
-    expect(await SurveyResponse.countDocuments({ surveyId: survey.body._id })).toBe(1);
+    expect(await InstrumentResponse.countDocuments({ instrumentId: survey.body._id })).toBe(1);
 
     const missing = await request(app).get(`/api/surveys/${survey.body._id}`).set(auth);
     expect(missing.status).toBe(404);
 
     await request(app).delete(`/api/bin/SURVEY/${survey.body._id}`).set(auth);
-    expect(await SurveyResponse.countDocuments({ surveyId: survey.body._id })).toBe(0);
+    expect(await InstrumentResponse.countDocuments({ instrumentId: survey.body._id })).toBe(0);
   });
 
   it('empties a mixed recycle bin and purges stored files with their owner', async () => {

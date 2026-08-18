@@ -12,12 +12,14 @@ const OWNER_KIND = {
   opportunity: 'OPPORTUNITY',
   project: 'PROJECT',
   sponsor: 'SPONSOR',
+  instrument_response: 'COUNTY',
 };
 
 const OWNER_MODELS = {
   opportunity: () => require('../models/assets/Opportunity'),
   project: () => require('../models/assets/Project'),
   sponsor: () => require('../models/assets/Sponsor'),
+  instrument_response: () => require('../models/survey/InstrumentResponse'),
 };
 
 function refId(value) {
@@ -41,6 +43,7 @@ function serializeStoredFile(doc) {
     ownerType: obj.ownerType,
     ownerId: refId(obj.ownerId),
     obs: obj.obs || '',
+    questionId: obj.questionId || null,
     storageDriver: obj.storageDriver,
     uploadedBy: obj.uploadedBy,
     updatedBy: obj.updatedBy || null,
@@ -68,6 +71,22 @@ async function requireOwner(ownerType, ownerId) {
 }
 
 async function assertParentFileAccess(user, storedFile, action) {
+  if (storedFile.ownerType === 'instrument_response') {
+    const response = await require('../models/survey/InstrumentResponse').findById(storedFile.ownerId);
+    if (!response || isTrashed(response)) {
+      throw new HttpError(404, 'Parent record not found.', { code: ERROR_CODES.NOT_FOUND });
+    }
+    const permission = `${response.subjectType}:${action}`;
+    const allowed = await userHasPermission(user, permission, {
+      resourceId: String(response.subjectId),
+    });
+    if (!allowed) {
+      throw new HttpError(403, `Forbidden: Insufficient permissions for ${permission}.`, {
+        code: ERROR_CODES.FORBIDDEN,
+      });
+    }
+    return;
+  }
   const kind = OWNER_KIND[storedFile.ownerType];
   if (!kind) {
     throw new HttpError(500, 'Unknown file owner type.', { code: ERROR_CODES.CONFIG });
@@ -97,11 +116,11 @@ async function snapshotOwnerLabel(ownerType, ownerId) {
   return full?.name ? String(full.name).slice(0, 255) : '';
 }
 
-async function listFilesForOwner(ownerType, ownerId) {
+async function listFilesForOwner(ownerType, ownerId, { questionId } = {}) {
   await requireOwner(ownerType, ownerId);
-  const docs = await populateFile(
-    StoredFile.find({ ownerType, ownerId, deletedAt: null }).sort({ createdAt: -1 })
-  );
+  const filter = { ownerType, ownerId, deletedAt: null };
+  if (questionId) filter.questionId = String(questionId);
+  const docs = await populateFile(StoredFile.find(filter).sort({ createdAt: -1 }));
   return docs.map(serializeStoredFile);
 }
 
@@ -132,6 +151,7 @@ async function storeUploadedFile({
   displayName,
   obs,
   userId,
+  questionId,
   skipOwnerCheck = false,
 }) {
   if (!skipOwnerCheck) {
@@ -149,6 +169,7 @@ async function storeUploadedFile({
 
   const name = optionalText(displayName, 'Display name', 255);
   const note = optionalText(obs, 'Notes', 2000) ?? '';
+  const linkedQuestion = optionalText(questionId, 'Question id', 64) || null;
   const storedName = `${crypto.randomUUID()}${inspected.ext}`;
   const storageKey = `${ownerType}/${ownerId}/${storedName}`;
   const sha256 = crypto.createHash('sha256').update(file.buffer).digest('hex');
@@ -171,6 +192,7 @@ async function storeUploadedFile({
       ownerType,
       ownerId,
       obs: note,
+      questionId: linkedQuestion,
       storageDriver: driver.name,
       storageKey,
       uploadedBy: userId,
@@ -188,7 +210,7 @@ function asList(value) {
   return Array.isArray(value) ? value : [value];
 }
 
-async function storeUploadedFiles({ ownerType, ownerId, files, displayNames, obs, userId }) {
+async function storeUploadedFiles({ ownerType, ownerId, files, displayNames, obs, userId, questionId }) {
   const list = Array.isArray(files) ? files.filter(Boolean) : files ? [files] : [];
   if (!list.length) {
     throw new ValidationError('A file is required.');
@@ -205,6 +227,7 @@ async function storeUploadedFiles({ ownerType, ownerId, files, displayNames, obs
         displayName: names[i],
         obs,
         userId,
+        questionId,
         skipOwnerCheck: true,
       });
       created.push(doc);

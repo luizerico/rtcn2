@@ -6,7 +6,10 @@ const DEFAULT_MAX_FILES = 20;
 
 const KIND_BY_EXT = {
   pdf: 'pdf',
+  doc: 'doc',
   docx: 'docx',
+  xls: 'xls',
+  xlsx: 'xlsx',
   jpg: 'jpeg',
   jpeg: 'jpeg',
   png: 'png',
@@ -16,8 +19,14 @@ const KIND_BY_EXT = {
 
 const MIMES_BY_KIND = {
   pdf: ['application/pdf'],
+  doc: ['application/msword', 'application/octet-stream'],
   docx: [
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/zip',
+  ],
+  xls: ['application/vnd.ms-excel', 'application/octet-stream'],
+  xlsx: [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/zip',
   ],
   jpeg: ['image/jpeg'],
@@ -28,7 +37,10 @@ const MIMES_BY_KIND = {
 
 const CANONICAL_MIME = {
   pdf: 'application/pdf',
+  doc: 'application/msword',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   jpeg: 'image/jpeg',
   png: 'image/png',
   gif: 'image/gif',
@@ -37,12 +49,18 @@ const CANONICAL_MIME = {
 
 const EXT_BY_KIND = {
   pdf: '.pdf',
+  doc: '.doc',
   docx: '.docx',
+  xls: '.xls',
+  xlsx: '.xlsx',
   jpeg: '.jpg',
   png: '.png',
   gif: '.gif',
   webp: '.webp',
 };
+
+const ALLOWED_LABEL = 'PDF, Word (DOC/DOCX), Excel (XLS/XLSX), and image files (JPEG, PNG, GIF, WEBP)';
+const OLE_SIG = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 
 const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -109,6 +127,16 @@ function looksLikeDocx(buffer) {
   return ascii.includes('[Content_Types].xml') && ascii.includes('word/');
 }
 
+function looksLikeXlsx(buffer) {
+  if (!looksLikeZip(buffer)) return false;
+  const ascii = buffer.toString('latin1');
+  return ascii.includes('[Content_Types].xml') && ascii.includes('xl/');
+}
+
+function looksLikeOle(buffer) {
+  return buffer.length >= 8 && buffer.subarray(0, 8).equals(OLE_SIG);
+}
+
 function sniffKind(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) return null;
   if (looksLikePdf(buffer)) return 'pdf';
@@ -117,6 +145,8 @@ function sniffKind(buffer) {
   if (looksLikeGif(buffer)) return 'gif';
   if (looksLikeWebp(buffer)) return 'webp';
   if (looksLikeDocx(buffer)) return 'docx';
+  if (looksLikeXlsx(buffer)) return 'xlsx';
+  if (looksLikeOle(buffer)) return 'ole';
   return null;
 }
 
@@ -134,7 +164,7 @@ function assertAllowedUploadMeta(originalName, mimeType) {
   const ext = extensionOf(sanitized);
   const kind = KIND_BY_EXT[ext];
   if (!kind) {
-    throw new ValidationError('Only PDF, DOCX, and image files (JPEG, PNG, GIF, WEBP) are allowed.');
+    throw new ValidationError(`Only ${ALLOWED_LABEL} are allowed.`);
   }
   const mime = normalizeMime(mimeType);
   if (mime && !MIMES_BY_KIND[kind].includes(mime)) {
@@ -157,21 +187,22 @@ function inspectUpload({ originalName, mimeType, buffer }) {
   }
   const sniffed = sniffKind(buffer);
   if (!sniffed) {
-    throw new ValidationError('File content is not a supported PDF, DOCX, or image.');
+    throw new ValidationError(`File content is not a supported ${ALLOWED_LABEL}.`);
   }
-  if (sniffed !== meta.kind) {
+  const kind = sniffed === 'ole' && (meta.kind === 'doc' || meta.kind === 'xls') ? meta.kind : sniffed;
+  if (kind !== meta.kind) {
     throw new ValidationError('File content does not match the declared file type.');
   }
   return {
     originalName: meta.originalName,
-    kind: sniffed,
-    ext: EXT_BY_KIND[sniffed],
-    mimeType: CANONICAL_MIME[sniffed],
+    kind,
+    ext: EXT_BY_KIND[kind],
+    mimeType: CANONICAL_MIME[kind],
     sizeBytes: buffer.length,
   };
 }
 
-const ACCEPT_ATTRIBUTE = '.pdf,.docx,.jpg,.jpeg,.png,.gif,.webp';
+const ACCEPT_ATTRIBUTE = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp';
 
 module.exports = {
   DEFAULT_MAX_BYTES,

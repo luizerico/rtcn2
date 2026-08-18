@@ -42,7 +42,7 @@ function authorizeAssetById(action) {
       return sendError(res, 404, 'Asset not found.', ERROR_CODES.NOT_FOUND);
     }
     req.asset = asset;
-    const kind = String(asset.kind || 'DOCUMENT').toUpperCase();
+    const kind = String(asset.kind || '').toUpperCase();
     if (!(await userHasPermission(req.user, `${kind}:${action}`, { resourceId: asset._id }))) {
       return forbid(res, `${kind}:${action}`);
     }
@@ -58,7 +58,7 @@ router.post(
   '/',
   validate(createAssetBody),
   async (req, res, next) => {
-    const kind = req.validated?.kind || String(req.body.kind || 'DOCUMENT').toUpperCase();
+    const kind = req.validated?.kind || String(req.body.kind || '').toUpperCase();
     if (!(await userHasPermission(req.user, `${kind}:CREATE`, {}))) {
       return forbid(res, `${kind}:CREATE`);
     }

@@ -5,7 +5,11 @@ const dotenv = require('dotenv');
 const { resolveMongoUri } = require('../config/mongoUri');
 const User = require('../models/User');
 const { Sponsor, Opportunity, Project } = require('../models/assets');
+const Survey = require('../models/assets/Survey');
+const { InstrumentVersion, InstrumentResponse, InstrumentRevision } = require('../models/survey');
+const County = require('../models/geo/County');
 const { ASSET_TYPE_LABELS } = require('../constants/assetTypes');
+const { computeScore } = require('../services/surveyInstrumentService');
 const {
   SPONSOR_ORIGEM,
   OPPORTUNITY_TYPE,
@@ -30,10 +34,6 @@ const SKIPPED_FILES = [
   ['rtcn-database.groups.json', 'legacy groups are not the current RBAC model'],
   ['rtcn-database.permissions.json', 'legacy ACL rows are not current Permission grants'],
   ['rtcn-database.organizations.json', 'no Organization collection'],
-  ['rtcn-database.questions.json', 'no Question collection'],
-  ['rtcn-database.questionaries.json', 'no Questionary collection'],
-  ['rtcn-database.answers.json', 'no Answer collection'],
-  ['rtcn-database.historyanswers.json', 'no HistoryAnswer collection'],
   ['rtcn-database.localplans.json', 'no LocalPlan collection'],
   ['rtcn-database.refreshtokens.json', 'skipped (secrets / unused)'],
   ['rtcn-database.securitylogs.json', 'skipped (legacy logs)'],
@@ -65,6 +65,346 @@ function unwrapDate(value) {
 function unwrapIdList(value) {
   if (!Array.isArray(value)) return [];
   return value.map(unwrapOid).filter(Boolean);
+}
+
+function mapAnswerItems(rawAnswers) {
+  if (!Array.isArray(rawAnswers)) return [];
+  return rawAnswers
+    .map((item) => {
+      const questionId = unwrapOid(item.question || item.questionId);
+      if (!questionId) return null;
+      const filename = trimmed(item.document);
+      const obsParts = [trimmed(item.obs), filename].filter(Boolean);
+      const num = toNumber(item.answer);
+      return {
+        questionId: String(questionId),
+        value: num == null ? item.answer : num,
+        obs: obsParts.join('\n'),
+        evidenceFileId: null,
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeQuestion(raw, fallbackOwnerId) {
+  if (!raw) return { skipReason: 'empty row' };
+  if (isSourceDeleted(raw) && !includeDeleted()) return { skipReason: 'deleted in source' };
+  const _id = unwrapOid(raw._id);
+  if (!_id) return { skipReason: 'missing id' };
+  const code = trimmed(raw.code);
+  const prompt = trimmed(raw.question || raw.prompt);
+  if (!code) return { skipReason: 'missing code' };
+  if (!prompt) return { skipReason: 'missing prompt' };
+  const audit = auditFields(raw, fallbackOwnerId);
+  return {
+    doc: {
+      _id,
+      code,
+      area: optionalString(raw.area),
+      prompt,
+      type: 'score',
+      options: [],
+      required: true,
+      evidence: optionalString(raw.evidence),
+      criteria: optionalString(raw.criteria),
+      maxPoints: toNumber(raw.maxPoints) || 2,
+      weight: toNumber(raw.weight) == null ? 1 : toNumber(raw.weight),
+      todo: optionalString(raw.todo),
+      createdBy: audit.createdBy,
+      updatedBy: audit.updatedBy,
+    },
+  };
+}
+
+function snapshotEmbeddedQuestions(questions) {
+  return questions.map((doc, index) => ({
+    questionId: doc._id,
+    code: doc.code,
+    area: doc.area || '',
+    prompt: doc.prompt,
+    type: doc.type,
+    options: doc.options || [],
+    required: doc.required !== false,
+    evidence: doc.evidence || '',
+    criteria: doc.criteria || '',
+    maxPoints: doc.maxPoints || 0,
+    weight: doc.weight == null ? 1 : doc.weight,
+    todo: doc.todo || '',
+    questionRevision: doc.revision || 1,
+    sortOrder: index,
+  }));
+}
+
+function loadQuestionMap(fallbackOwnerId) {
+  const filename = 'rtcn-database.questions.json';
+  const rows = readSampleJson(filename);
+  const map = new Map();
+  if (!Array.isArray(rows)) {
+    console.log(`${filename}: missing or not an array — skipped`);
+    return map;
+  }
+  let skipped = 0;
+  for (const raw of rows) {
+    const { doc } = normalizeQuestion(raw, fallbackOwnerId);
+    if (!doc) {
+      skipped += 1;
+      continue;
+    }
+    map.set(String(doc._id), doc);
+  }
+  console.log(`Questions: ${map.size} loaded for embedding; skipped ${skipped}`);
+  return map;
+}
+
+function embedQuestionsFromIds(questionIds, questionMap) {
+  return questionIds
+    .map((id) => {
+      const doc = questionMap.get(String(id));
+      return doc ? { ...doc } : null;
+    })
+    .filter(Boolean);
+}
+
+async function dropRetiredQuestionCollections() {
+  for (const name of ['questions', 'question_revisions']) {
+    try {
+      await mongoose.connection.collection(name).drop();
+      console.log(`Dropped leftover collection: ${name}`);
+    } catch (error) {
+      if (error?.codeName !== 'NamespaceNotFound' && error?.code !== 26) {
+        throw error;
+      }
+    }
+  }
+}
+
+async function importQuestionaries(fallbackOwnerId, questionMap) {
+  const filename = 'rtcn-database.questionaries.json';
+  const rows = readSampleJson(filename);
+  if (!Array.isArray(rows)) {
+    console.log(`${filename}: missing or not an array — skipped`);
+    return { surveys: [], versionsByQuestionary: new Map() };
+  }
+
+  const surveys = [];
+  const versionsByQuestionary = new Map();
+  const skips = [];
+
+  for (const raw of rows) {
+    if (!raw) {
+      skips.push('empty row');
+      continue;
+    }
+    if (isSourceDeleted(raw) && !includeDeleted()) {
+      skips.push('deleted in source');
+      continue;
+    }
+    const _id = unwrapOid(raw._id);
+    const name = trimmed(raw.name);
+    const questionIds = unwrapIdList(raw.questions);
+    if (!_id || !name || !questionIds.length) {
+      skips.push('invalid questionary');
+      continue;
+    }
+    const questions = embedQuestionsFromIds(questionIds, questionMap);
+    if (!questions.length) {
+      skips.push('no matching questions');
+      continue;
+    }
+    const audit = auditFields(raw, fallbackOwnerId);
+    const status = trimmed(raw.status) === 'active' ? 'active' : 'draft';
+    const survey = await Survey.findByIdAndUpdate(
+      _id,
+      {
+        $set: {
+          name,
+          description: optionalString(raw.description),
+          kind: 'SURVEY',
+          assetType: ASSET_TYPE_LABELS.SURVEY,
+          instrumentType: 'scored_diagnostic',
+          status,
+          questions,
+          questionCount: questions.length,
+          ownerId: audit.ownerId,
+          createdBy: audit.createdBy,
+          updatedBy: audit.updatedBy,
+        },
+        $unset: { questionIds: 1 },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    let version = await InstrumentVersion.findOne({ instrumentId: survey._id, version: 1 });
+    if (!version) {
+      version = await InstrumentVersion.create({
+        instrumentId: survey._id,
+        version: 1,
+        items: snapshotEmbeddedQuestions(questions),
+        publishedAt: unwrapDate(raw.approvedAt) || unwrapDate(raw.createdAt) || new Date(),
+        publishedBy: audit.createdBy,
+      });
+    }
+    survey.currentVersionId = version._id;
+    survey.currentVersion = version.version;
+    survey.status = 'active';
+    await survey.save();
+    surveys.push(survey);
+    versionsByQuestionary.set(String(_id), version);
+  }
+
+  console.log(
+    `Questionaries: ${surveys.length} imported as instruments; skipped ${skips.length}`
+  );
+  if (skips.length) console.log(`  skip reasons: ${summarizeSkips(skips)}`);
+  return { surveys, versionsByQuestionary };
+}
+
+async function importAnswers(fallbackOwnerId, versionsByQuestionary) {
+  const filename = 'rtcn-database.answers.json';
+  const rows = readSampleJson(filename);
+  if (!Array.isArray(rows)) {
+    console.log(`${filename}: missing or not an array — skipped`);
+    return { ids: new Set() };
+  }
+
+  const docs = [];
+  const skips = [];
+  for (const raw of rows) {
+    if (!raw) {
+      skips.push('empty row');
+      continue;
+    }
+    if (isSourceDeleted(raw) && !includeDeleted()) {
+      skips.push('deleted in source');
+      continue;
+    }
+    const _id = unwrapOid(raw._id);
+    const countyId = unwrapOid(raw.county);
+    const questionaryId = unwrapOid(raw.questionary);
+    if (!_id || !countyId || !questionaryId) {
+      skips.push('missing ids');
+      continue;
+    }
+    const county = await County.findOne({ _id: countyId, isDeleted: { $ne: true } }).select('_id');
+    if (!county) {
+      skips.push('county not imported');
+      continue;
+    }
+    const version = versionsByQuestionary.get(String(questionaryId));
+    if (!version) {
+      skips.push('questionary not imported');
+      continue;
+    }
+    const answers = mapAnswerItems(raw.answers);
+    const status = ['in_progress', 'pending', 'need_changes', 'approved', 'archived'].includes(
+      trimmed(raw.status)
+    )
+      ? trimmed(raw.status)
+      : 'in_progress';
+    const audit = auditFields(raw, fallbackOwnerId);
+    const revision = toNumber(raw.version) || 1;
+    docs.push({
+      _id,
+      instrumentId: version.instrumentId,
+      instrumentVersionId: version._id,
+      subjectType: 'COUNTY',
+      subjectId: countyId,
+      status,
+      answers,
+      revision,
+      computedScore: computeScore(version.items, answers),
+      ownerId: audit.ownerId,
+      createdBy: audit.createdBy,
+      updatedBy: unwrapOid(raw.lastChangedBy) || audit.updatedBy,
+    });
+  }
+
+  const stats = { count: 0, skipped: skips.length };
+  for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+    const batch = docs.slice(i, i + BATCH_SIZE);
+    await upsertMany(InstrumentResponse, batch);
+    stats.count += batch.length;
+  }
+  console.log(`Answers: ${stats.count} imported as instrument responses; skipped ${stats.skipped}`);
+  if (skips.length) console.log(`  skip reasons: ${summarizeSkips(skips)}`);
+
+  const byInstrument = new Map();
+  for (const doc of docs) {
+    const key = String(doc.instrumentId);
+    const countyId = String(doc.subjectId);
+    if (!byInstrument.has(key)) byInstrument.set(key, new Set());
+    byInstrument.get(key).add(countyId);
+  }
+  for (const [instrumentId, countyIds] of byInstrument.entries()) {
+    const objectIds = [...countyIds]
+      .filter((id) => mongoose.isValidObjectId(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+    if (!objectIds.length) continue;
+    await Survey.updateOne(
+      { _id: instrumentId },
+      { $addToSet: { countyIds: { $each: objectIds } } }
+    );
+  }
+
+  return { ids: new Set(docs.map((doc) => String(doc._id))) };
+}
+
+async function importHistoryAnswers(fallbackOwnerId, responseIds) {
+  const filename = 'rtcn-database.historyanswers.json';
+  const rows = readSampleJson(filename);
+  if (!Array.isArray(rows)) {
+    console.log(`${filename}: missing or not an array — skipped`);
+    return;
+  }
+
+  const docs = [];
+  const skips = [];
+  for (const raw of rows) {
+    const responseId = unwrapOid(raw.answer);
+    if (!responseId || !responseIds.has(String(responseId))) {
+      skips.push('answer not imported');
+      continue;
+    }
+    const revision = toNumber(raw.version) || 1;
+    const old = raw.oldAnswer && typeof raw.oldAnswer === 'object' ? raw.oldAnswer : {};
+    docs.push({
+      responseId,
+      revision,
+      snapshot: {
+        subjectType: 'COUNTY',
+        subjectId: unwrapOid(old.county),
+        status: old.status || 'in_progress',
+        answers: mapAnswerItems(old.answers),
+        letter: old.score || '',
+        source: 'historyanswers',
+      },
+      createdBy: unwrapOid(raw.createdBy) || fallbackOwnerId,
+      createdAt: unwrapDate(raw.createdAt) || new Date(),
+    });
+  }
+
+  let imported = 0;
+  for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+    const batch = docs.slice(i, i + BATCH_SIZE);
+    try {
+      await InstrumentRevision.bulkWrite(
+        batch.map((doc) => ({
+          updateOne: {
+            filter: { responseId: doc.responseId, revision: doc.revision },
+            update: { $set: doc },
+            upsert: true,
+          },
+        })),
+        { ordered: false }
+      );
+      imported += batch.length;
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      imported += batch.length;
+    }
+  }
+  console.log(`History answers: ${imported} imported as instrument revisions; skipped ${skips.length}`);
+  if (skips.length) console.log(`  skip reasons: ${summarizeSkips(skips)}`);
 }
 
 function trimmed(value) {
@@ -394,6 +734,12 @@ async function importSampleData() {
     noun: 'Projects',
   });
 
+  const questionMap = loadQuestionMap(fallbackOwnerId);
+  const { versionsByQuestionary } = await importQuestionaries(fallbackOwnerId, questionMap);
+  const answers = await importAnswers(fallbackOwnerId, versionsByQuestionary);
+  await importHistoryAnswers(fallbackOwnerId, answers.ids);
+  await dropRetiredQuestionCollections();
+
   console.log('Skipped files (no matching collection, or handled elsewhere):');
   for (const [file, reason] of SKIPPED_FILES) {
     const exists = fs.existsSync(path.join(SAMPLE_DIR, file));
@@ -424,6 +770,7 @@ module.exports = {
   normalizeSponsor,
   normalizeOpportunity,
   normalizeProject,
+  normalizeQuestion,
   importSampleData,
   SAMPLE_DIR,
 };

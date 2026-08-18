@@ -23,6 +23,7 @@ const { errorHandler } = require('./middleware/errorMiddleware');
 
 // Register concrete Asset subclass models once for the API process.
 require('./models/assets');
+require('./models/survey');
 require('./models/geo');
 require('./models/StoredFile');
 

@@ -55,9 +55,9 @@ const adminSections = [
     visible: (_can: ReturnType<typeof useAccess>['can'], isAdmin: boolean) => isAdmin,
   },
   {
-    href: '/surveys',
+    href: '/admin/surveys',
     title: 'Surveys',
-    description: 'Create Survey assets with questions and visualize SurveyResponse answers.',
+    description: 'Design and publish versioned survey instruments and assign counties.',
     visible: (can: ReturnType<typeof useAccess>['can']) =>
       can('SURVEY:READ', { allowAnyInstance: true }),
   },

@@ -14,7 +14,11 @@ export type TableActionIconName =
   | 'disconnect'
   | 'answer'
   | 'results'
-  | 'view';
+  | 'view'
+  | 'access'
+  | 'notes'
+  | 'attach'
+  | 'counties';
 
 type IconProps = SVGProps<SVGSVGElement>;
 
@@ -121,6 +125,32 @@ export function TableActionIcon({ name }: { name: TableActionIconName }) {
         <Svg>
           <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
           <circle cx="12" cy="12" r="3" />
+        </Svg>
+      );
+    case 'access':
+      return (
+        <Svg>
+          <rect x="5" y="11" width="14" height="10" rx="2" />
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </Svg>
+      );
+    case 'notes':
+      return (
+        <Svg>
+          <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z" />
+        </Svg>
+      );
+    case 'attach':
+      return (
+        <Svg>
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+        </Svg>
+      );
+    case 'counties':
+      return (
+        <Svg>
+          <path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11z" />
+          <circle cx="12" cy="10" r="2.25" />
         </Svg>
       );
     default:

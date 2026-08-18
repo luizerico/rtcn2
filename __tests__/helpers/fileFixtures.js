@@ -81,6 +81,20 @@ function docxBuffer() {
   ]);
 }
 
+function xlsxBuffer() {
+  return zipStore([
+    { name: '[Content_Types].xml', data: '<?xml version="1.0"?><Types></Types>' },
+    { name: 'xl/workbook.xml', data: '<?xml version="1.0"?><workbook></workbook>' },
+  ]);
+}
+
+function oleBuffer() {
+  return Buffer.concat([
+    Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),
+    Buffer.alloc(24),
+  ]);
+}
+
 module.exports = {
   pdfBuffer,
   pngBuffer,
@@ -88,4 +102,6 @@ module.exports = {
   svgBuffer,
   exeBuffer,
   docxBuffer,
+  xlsxBuffer,
+  oleBuffer,
 };

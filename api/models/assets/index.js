@@ -1,22 +1,16 @@
 /**
  * Concrete Asset subclasses — each has its own collection.
- * SurveyResponse is storage-only and is not part of the RBAC registry.
+ * Instrument responses are not RBAC asset kinds.
  */
-const DocumentAsset = require('./Document');
-const DashboardAsset = require('./Dashboard');
-const DatasetAsset = require('./Dataset');
 const Survey = require('./Survey');
-const SurveyResponse = require('./SurveyResponse');
 const Sponsor = require('./Sponsor');
 const Opportunity = require('./Opportunity');
 const Project = require('./Project');
+const { InstrumentResponse } = require('../survey');
 const { ASSET_KINDS, ASSET_TYPE_LABELS, ASSET_DISCRIMINATORS } = require('../../constants/assetTypes');
 const { activeFilter } = require('../../services/trash');
 
 const KIND_MODELS = {
-  DOCUMENT: DocumentAsset,
-  DASHBOARD: DashboardAsset,
-  DATASET: DatasetAsset,
   SURVEY: Survey,
   SPONSOR: Sponsor,
   OPPORTUNITY: Opportunity,
@@ -81,11 +75,9 @@ async function findAssets(filter = {}, options = {}) {
 }
 
 module.exports = {
-  DocumentAsset,
-  DashboardAsset,
-  DatasetAsset,
   Survey,
-  SurveyResponse,
+  SurveyResponse: InstrumentResponse,
+  InstrumentResponse,
   Sponsor,
   Opportunity,
   Project,

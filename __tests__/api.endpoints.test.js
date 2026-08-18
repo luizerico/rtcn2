@@ -17,6 +17,7 @@ const {
   disconnectTestDatabase,
   clearDatabase,
   createTestApp,
+  seedCounty,
 } = require('./helpers/apiTestUtils');
 const {
   createMemoryEmailSender,
@@ -488,7 +489,7 @@ describe('API endpoints', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           scopes: ['READ', 'WRITE'],
-          resourceType: 'DOCUMENT',
+          resourceType: 'SURVEY',
           allObjects: true,
         });
       expect(setPermissions.status).toBe(200);
@@ -804,14 +805,14 @@ describe('API endpoints', () => {
       expect(res.status).toBe(401);
     });
 
-    it('CRUD lifecycle works', async () => {
+    it('lists and updates survey assets via generic asset routes', async () => {
       const create = await request(app)
-        .post('/api/assets')
+        .post('/api/surveys')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
-          name: 'Billing Doc',
+          name: 'Billing Survey',
           description: 'Invoices',
-          kind: 'DOCUMENT',
+          questions: [{ prompt: 'Ok?', type: 'yes_no' }],
         });
       expect(create.status).toBe(201);
       expect(create.body.ownerId).toBe(String(userId));
@@ -824,7 +825,7 @@ describe('API endpoints', () => {
         .get('/api/assets')
         .set('Authorization', `Bearer ${authToken}`);
       expect(list.status).toBe(200);
-      expect(list.body).toHaveLength(1);
+      expect(list.body.some((row) => row._id === create.body._id)).toBe(true);
 
       const assetId = create.body._id;
 
@@ -845,6 +846,18 @@ describe('API endpoints', () => {
         .delete(`/api/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`);
       expect(remove.status).toBe(200);
+    });
+
+    it('rejects retired DOCUMENT, DASHBOARD, and DATASET kinds', async () => {
+      const auth = { Authorization: `Bearer ${authToken}` };
+      for (const kind of ['DOCUMENT', 'DASHBOARD', 'DATASET']) {
+        const res = await request(app)
+          .post('/api/assets')
+          .set(auth)
+          .send({ name: `retired-${kind}`, kind });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/Invalid asset kind/i);
+      }
     });
 
     it('rejects create without name', async () => {
@@ -891,12 +904,14 @@ describe('API endpoints', () => {
 
   describe('Surveys', () => {
     it('creates a survey, accepts answers, and visualizes response summary', async () => {
+      const { county } = await seedCounty();
       const create = await request(app)
         .post('/api/surveys')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           name: 'Customer pulse',
           description: 'Quick feedback',
+          countyIds: [county._id],
           questions: [
             { prompt: 'How was the service?', type: 'text' },
             { prompt: 'Would you recommend us?', type: 'yes_no' },
@@ -912,12 +927,13 @@ describe('API endpoints', () => {
       expect(create.body.kind).toBe('SURVEY');
       expect(create.body.questions).toHaveLength(3);
       expect(create.body.createdBy).toBe(String(userId));
+      expect(create.body.currentVersion).toBe(1);
 
       const surveyId = create.body._id;
       const [textQ, yesNoQ, choiceQ] = create.body.questions;
 
       const submit = await request(app)
-        .post(`/api/surveys/${surveyId}/responses`)
+        .put(`/api/surveys/${surveyId}/subjects/COUNTY/${county._id}`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           answers: [
@@ -926,10 +942,11 @@ describe('API endpoints', () => {
             { questionId: choiceQ.questionId, value: 'Chat' },
           ],
         });
-      expect(submit.status).toBe(201);
-      expect(submit.body.assetType).toBe('SurveyResponse');
-      expect(submit.body.kind).toBe('SURVEY_RESPONSE');
-      expect(submit.body.surveyId).toBe(surveyId);
+      expect(submit.status).toBe(200);
+      expect(submit.body.instrumentId).toBe(surveyId);
+      expect(submit.body.subjectType).toBe('COUNTY');
+      expect(String(submit.body.subjectId)).toBe(String(county._id));
+      expect(submit.body.revision).toBe(1);
 
       const results = await request(app)
         .get(`/api/surveys/${surveyId}/responses`)

@@ -16,6 +16,7 @@ export type StoredFileRecord = {
   ownerType: string;
   ownerId: string;
   obs: string;
+  questionId?: string | null;
   storageDriver: string;
   uploadedBy?: StoredFileUser | string | null;
   updatedBy?: StoredFileUser | string | null;
@@ -26,7 +27,9 @@ export type StoredFileRecord = {
   updatedAt?: string;
 };
 
-export const FILE_ACCEPT = '.pdf,.docx,.jpg,.jpeg,.png,.gif,.webp';
+export const FILE_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp';
+export const FILE_TYPES_HINT =
+  'PDF, Word (DOC/DOCX), Excel (XLS/XLSX), and images (JPEG, PNG, GIF, WEBP).';
 
 export function userLabel(user?: StoredFileUser | string | null): string {
   if (!user) return '—';
