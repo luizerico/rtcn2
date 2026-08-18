@@ -330,6 +330,30 @@ async function replaceAssetAcl({ resourceType, allObjects = false, objects = [],
   return listAssetAcl({ resourceType, allObjects, objectIds });
 }
 
+async function deleteAssetAcl({ resourceType, allObjects = false, objectIds = [] }) {
+  if (!PERMISSION_RESOURCE_TYPES.includes(resourceType)) {
+    throw new Error(
+      `Permissions only apply to asset subclasses: ${PERMISSION_RESOURCE_TYPES.join(', ')}`
+    );
+  }
+
+  const ids = (objectIds || []).map(String).filter(Boolean);
+  if (!allObjects && !ids.length) {
+    throw new Error('Select at least one asset, or choose all objects of this type.');
+  }
+
+  const deleteFilter = { resourceType };
+  if (allObjects) {
+    deleteFilter.resourceId = null;
+    deleteFilter.target = '*';
+  } else {
+    deleteFilter.resourceId = { $in: ids };
+  }
+
+  const result = await Permission.deleteMany(deleteFilter);
+  return { deletedCount: result.deletedCount || 0 };
+}
+
 async function listAssetAcl({ resourceType, allObjects = false, objectIds = [] }) {
   const filter = { resourceType };
   if (allObjects) {
@@ -436,6 +460,7 @@ module.exports = {
   replaceGroupClassPermissions,
   replaceGroupPermissions,
   replaceAssetAcl,
+  deleteAssetAcl,
   listAssetAcl,
   listPermissionCatalog,
   migratePermissionPrincipals,

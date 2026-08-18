@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { apiGet } from '@/lib/apiUtils';
 import { useAccess } from '@/components/AccessProvider';
-import PermissionModal from '@/components/ui/PermissionModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
@@ -136,9 +135,7 @@ function YearlyTable({
 export default function CountyDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
-  const { isAdmin, can } = useAccess();
-  const canManageAcl = can('GROUP:WRITE');
-  const [aclOpen, setAclOpen] = useState(false);
+  const { isAdmin } = useAccess();
   const columns = useMemo(() => EMISSION_COLUMNS, []);
   const { isVisible, toggle, visibleColumns } = useColumnVisibility('admin-geo-emissions', columns, {
     enabled: isAdmin,
@@ -245,15 +242,6 @@ export default function CountyDetailPage() {
         />
         <h1 className="mt-2 text-3xl font-semibold">{county?.name || 'County'}</h1>
         <p className="mt-2 text-[var(--muted)]">Read-only municipality catalog record.</p>
-        {county && canManageAcl ? (
-          <button
-            type="button"
-            onClick={() => setAclOpen(true)}
-            className="mt-3 rounded-md border border-[var(--border)] px-3 py-1.5 text-sm font-medium text-[var(--accent)] hover:bg-[var(--accent-soft)]"
-          >
-            Access
-          </button>
-        ) : null}
       </header>
 
       {loading ? <p className="text-[var(--muted)]">Loading…</p> : null}
@@ -475,16 +463,6 @@ export default function CountyDetailPage() {
             </div>
           </section>
         </>
-      ) : null}
-
-      {county ? (
-        <PermissionModal
-          isOpen={aclOpen}
-          onClose={() => setAclOpen(false)}
-          onApplied={() => setAclOpen(false)}
-          initialResourceType="COUNTY"
-          initialResourceId={county._id}
-        />
       ) : null}
     </div>
   );

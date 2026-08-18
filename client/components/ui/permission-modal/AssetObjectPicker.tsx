@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
+import { matchesAssetFilter } from './assetFilter';
 import type { CatalogObject } from './types';
 
 interface AssetObjectPickerProps {
@@ -22,11 +23,28 @@ export function AssetObjectPicker({
   initialResourceId,
   onToggleObject,
 }: AssetObjectPickerProps) {
+  const [assetFilter, setAssetFilter] = useState('');
+  const visibleObjects = useMemo(
+    () => selectableObjects.filter((object) => matchesAssetFilter(object, assetFilter)),
+    [assetFilter, selectableObjects]
+  );
+
   return (
     <fieldset>
       <legend className="mb-2 text-sm font-medium">
-        {selectionLocked ? 'Asset' : 'Select asset(s)'}
+        {selectionLocked ? 'Asset' : 'Select assets'}
       </legend>
+      {!selectionLocked && selectableObjects.length > 0 ? (
+        <label className="mb-2 flex min-w-0 flex-col gap-1 text-sm">
+          <span className="text-[var(--muted)]">Filter assets</span>
+          <input
+            value={assetFilter}
+            onChange={(event) => setAssetFilter(event.target.value)}
+            placeholder="Filter by name…"
+            className="w-full rounded-md border border-[var(--border)] bg-white px-3 py-2"
+          />
+        </label>
+      ) : null}
       <div className="max-h-36 space-y-2 overflow-y-auto rounded-md border border-[var(--border)] p-3">
         {catalogLoading ? (
           <p className="text-sm text-[var(--muted)]">Loading…</p>
@@ -34,8 +52,10 @@ export function AssetObjectPicker({
           <p className="text-sm font-medium">{initialResourceId || 'Selected asset'}</p>
         ) : !selectableObjects.length ? (
           <p className="text-sm text-[var(--muted)]">No assets of this type exist yet.</p>
+        ) : !visibleObjects.length ? (
+          <p className="text-sm text-[var(--muted)]">No matching assets.</p>
         ) : (
-          selectableObjects.map((object) => (
+          visibleObjects.map((object) => (
             <label
               key={object.id}
               className={`flex items-start gap-2 text-sm ${

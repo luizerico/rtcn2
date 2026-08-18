@@ -1,8 +1,8 @@
 const Group = require('../models/Group');
 const User = require('../models/User');
 const Permission = require('../models/Permission');
-const County = require('../models/geo/County');
 const { findAssets } = require('../models/assets');
+const { County } = require('../models/geo');
 const {
   RESOURCE_TYPE_LABELS,
   ASSET_KINDS,
@@ -77,6 +77,69 @@ async function resolvePrincipalNames(rows) {
   return { userNameById, groupNameById };
 }
 
+function geoRefId(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'object') return String(value._id || value.id || '') || null;
+  return String(value);
+}
+
+function geoRefName(value) {
+  if (!value || typeof value !== 'object') return null;
+  return value.name || null;
+}
+
+function emptyCountyGeo() {
+  return {
+    countyName: null,
+    stateId: null,
+    stateName: null,
+    regionId: null,
+    regionName: null,
+    biomeId: null,
+    biomeName: null,
+    microregionId: null,
+    microregionName: null,
+  };
+}
+
+async function buildCountyGeoMap(resourceIds = []) {
+  const ids = [...new Set(resourceIds.map((id) => String(id || '')).filter(Boolean))];
+  if (!ids.length) return new Map();
+
+  const counties = await County.find({ _id: { $in: ids } })
+    .populate([
+      {
+        path: 'state',
+        select: 'name code region',
+        populate: { path: 'region', select: 'name code' },
+      },
+      { path: 'region', select: 'name code' },
+      { path: 'biome', select: 'name code' },
+      { path: 'microregion', select: 'name code' },
+    ])
+    .lean();
+
+  return new Map(
+    counties.map((county) => {
+      const region = county.region || county.state?.region || null;
+      return [
+        String(county._id),
+        {
+          countyName: county.name || null,
+          stateId: geoRefId(county.state),
+          stateName: geoRefName(county.state),
+          regionId: geoRefId(region),
+          regionName: geoRefName(region),
+          biomeId: geoRefId(county.biome),
+          biomeName: geoRefName(county.biome),
+          microregionId: geoRefId(county.microregion),
+          microregionName: geoRefName(county.microregion),
+        },
+      ];
+    })
+  );
+}
+
 async function listAllPermissions(filters = {}) {
   const query = {
     resourceType: { $in: PERMISSION_RESOURCE_TYPES },
@@ -95,6 +158,10 @@ async function listAllPermissions(filters = {}) {
   const { userNameById, groupNameById } = await resolvePrincipalNames(permissions);
   const surveyIds = permissions.filter((row) => row.resourceId).map((row) => row.resourceId);
   const surveyOwners = await buildAssetOwnerMap(surveyIds);
+  const countyIds = permissions
+    .filter((row) => row.resourceType === 'COUNTY' && row.resourceId)
+    .map((row) => row.resourceId);
+  const countyGeoById = await buildCountyGeoMap(countyIds);
 
   return permissions.map((row) => {
     const principal = normalizePrincipal(row);
@@ -104,6 +171,10 @@ async function listAllPermissions(filters = {}) {
         : groupNameById.get(principal.principalId) || 'Unknown group';
 
     const owner = row.resourceId ? surveyOwners.get(String(row.resourceId)) || null : null;
+    const geo =
+      row.resourceType === 'COUNTY' && row.resourceId
+        ? countyGeoById.get(String(row.resourceId)) || emptyCountyGeo()
+        : emptyCountyGeo();
 
     return {
       _id: row._id,
@@ -117,12 +188,13 @@ async function listAllPermissions(filters = {}) {
       resourceId: row.resourceId,
       permission: row.permission,
       owner,
+      ...geo,
     };
   });
 }
 
 async function listPermissionCatalog() {
-  const [users, groups, assets, counties] = await Promise.all([
+  const [users, groups, assets] = await Promise.all([
     User.find({ deletedAt: null }).select('username email').sort({ username: 1 }).lean(),
     Group.find({ deletedAt: null }).select('name').sort({ name: 1 }).lean(),
     findAssets(
@@ -135,7 +207,6 @@ async function listPermissionCatalog() {
         sort: { name: 1 },
       }
     ),
-    County.find({ isDeleted: { $ne: true } }).select('name IBGECode').sort({ name: 1 }).lean(),
   ]);
 
   const classes = PERMISSION_RESOURCE_TYPES.map((kind) => {
@@ -143,11 +214,7 @@ async function listPermissionCatalog() {
       return {
         resourceType: kind,
         label: RESOURCE_TYPE_LABELS[kind] || kind,
-        objects: counties.map((county) => ({
-          id: String(county._id),
-          name: county.name,
-          label: county.IBGECode ? `${county.name} (${county.IBGECode})` : county.name,
-        })),
+        objects: [],
       };
     }
     return {

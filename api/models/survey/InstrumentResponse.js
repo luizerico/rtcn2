@@ -28,6 +28,8 @@ const computedScoreSchema = new Schema(
  * One current sheet per instrument + subject (a county cannot have two versions).
  * Viewing uses subject READ; starting a sheet uses SURVEY:READ + subject CREATE;
  * editing uses subject WRITE (or the owner while in_progress / need_changes).
+ * Deleting uses subject DELETE (or the owner while in_progress / need_changes)
+ * and moves the sheet to the recycle bin.
  * COUNTY subjects must be listed on the instrument's countyIds.
  */
 const instrumentResponseSchema = new Schema(

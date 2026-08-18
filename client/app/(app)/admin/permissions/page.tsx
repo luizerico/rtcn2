@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, Fragment, useEffect, useMemo, useState } from 'react';
-import { apiGet } from '@/lib/apiUtils';
+import { apiGet, apiPost } from '@/lib/apiUtils';
 import PermissionModal from '@/components/ui/PermissionModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
@@ -9,6 +9,7 @@ import { useAccess } from '@/components/AccessProvider';
 import { AccessPrimaryButton } from '@/components/ui/AccessControls';
 import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
+import type { PaginatedList } from '@/lib/listTypes';
 
 interface PermissionRecord {
   _id: string;
@@ -24,6 +25,15 @@ interface PermissionRecord {
   answeredBy?: string | null;
   submittedAt?: string | null;
   owner?: string | null;
+  countyName?: string | null;
+  stateId?: string | null;
+  stateName?: string | null;
+  regionId?: string | null;
+  regionName?: string | null;
+  biomeId?: string | null;
+  biomeName?: string | null;
+  microregionId?: string | null;
+  microregionName?: string | null;
 }
 
 interface CatalogClass {
@@ -50,6 +60,10 @@ const FALLBACK_TABS: CatalogClass[] = [
 
 const PERMISSION_COLUMNS: ColumnDef[] = [
   { id: 'asset', label: 'Asset', alwaysVisible: true },
+  { id: 'state', label: 'State' },
+  { id: 'region', label: 'Region' },
+  { id: 'biome', label: 'Biome' },
+  { id: 'microregion', label: 'Microregion' },
   { id: 'owner', label: 'Owner / Answered by' },
   { id: 'principals', label: 'Principals' },
   { id: 'grantedTo', label: 'Granted to' },
@@ -60,7 +74,17 @@ const DEFAULT_FILTERS = {
   q: '',
   principalType: '',
   principalName: '',
+  regionId: '',
+  stateId: '',
+  biomeId: '',
+  microregionId: '',
+  countyQ: '',
+  permission: '',
 };
+
+const GEO_COLUMN_IDS = ['state', 'region', 'biome', 'microregion'] as const;
+
+type GeoOption = { _id: string; name: string; code?: string };
 
 function groupBy<T>(items: T[], keyFn: (item: T) => string): Record<string, T[]> {
   return items.reduce<Record<string, T[]>>((acc, item) => {
@@ -73,6 +97,15 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Record<string, T[]>
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
+}
+
+function geoOptionId(row: GeoOption) {
+  return String(row._id || '');
+}
+
+function sameGeoId(left?: string | null, right?: string | null) {
+  if (!left || !right) return false;
+  return String(left) === String(right);
 }
 
 function principalLabel(row: PermissionRecord): string {
@@ -112,9 +145,17 @@ export default function AdminPermissionsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
+  const [geoOptions, setGeoOptions] = useState<{
+    regions: GeoOption[];
+    states: GeoOption[];
+    biomes: GeoOption[];
+    microregions: GeoOption[];
+  }>({ regions: [], states: [], biomes: [], microregions: [] });
 
   const columns = useMemo(() => PERMISSION_COLUMNS, []);
-  const { isVisible, toggle } = useColumnVisibility('admin-permissions', columns, {
+  const { isVisible, toggle } = useColumnVisibility('admin-permissions-v2', columns, {
     enabled: isAdmin,
   });
 
@@ -145,6 +186,34 @@ export default function AdminPermissionsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!showFilters && activeType !== 'COUNTY') return undefined;
+    let cancelled = false;
+    Promise.all([
+      apiGet<PaginatedList<GeoOption>>('/regions?limit=10000&sort=name&order=asc'),
+      apiGet<PaginatedList<GeoOption>>('/states?limit=10000&sort=name&order=asc'),
+      apiGet<PaginatedList<GeoOption>>('/biomes?limit=10000&sort=name&order=asc'),
+      apiGet<PaginatedList<GeoOption>>('/microregions?limit=10000&sort=name&order=asc'),
+    ])
+      .then(([regions, states, biomes, microregions]) => {
+        if (cancelled) return;
+        setGeoOptions({
+          regions: regions.items || [],
+          states: states.items || [],
+          biomes: biomes.items || [],
+          microregions: microregions.items || [],
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGeoOptions({ regions: [], states: [], biomes: [], microregions: [] });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showFilters, activeType]);
 
   /** Count distinct targets (objects / class-wide scopes), not individual action rows. */
   const grantCountByType = useMemo(() => {
@@ -188,6 +257,15 @@ export default function AdminPermissionsPage() {
           answeredBy: targetRows[0]?.answeredBy || null,
           submittedAt: targetRows[0]?.submittedAt || null,
           owner: targetRows[0]?.owner || null,
+          countyName: targetRows[0]?.countyName || null,
+          stateId: targetRows[0]?.stateId || null,
+          stateName: targetRows[0]?.stateName || null,
+          regionId: targetRows[0]?.regionId || null,
+          regionName: targetRows[0]?.regionName || null,
+          biomeId: targetRows[0]?.biomeId || null,
+          biomeName: targetRows[0]?.biomeName || null,
+          microregionId: targetRows[0]?.microregionId || null,
+          microregionName: targetRows[0]?.microregionName || null,
           principals: Object.keys(byPrincipal)
             .sort()
             .map((principalKey) => {
@@ -204,6 +282,18 @@ export default function AdminPermissionsPage() {
   }, [permissions, activeType]);
 
   const isSurveyTab = activeType === 'SURVEY';
+  const isCountyTab = activeType === 'COUNTY';
+  const showGeoColumn = (columnId: (typeof GEO_COLUMN_IDS)[number]) =>
+    isCountyTab && isVisible(columnId);
+  const menuColumns = useMemo(
+    () =>
+      isCountyTab
+        ? PERMISSION_COLUMNS
+        : PERMISSION_COLUMNS.filter(
+            (column) => !GEO_COLUMN_IDS.includes(column.id as (typeof GEO_COLUMN_IDS)[number])
+          ),
+    [isCountyTab]
+  );
 
   const catalogById = useMemo(() => {
     const map = new Map<string, CatalogClass['objects'][number]>();
@@ -230,6 +320,15 @@ export default function AdminPermissionsPage() {
         submittedAt: catalogObject?.submittedAt || target.submittedAt || null,
         owner: catalogObject?.owner || target.owner || null,
         detail: catalogObject?.detail || null,
+        countyName: target.countyName,
+        stateId: target.stateId,
+        stateName: target.stateName,
+        regionId: target.regionId,
+        regionName: target.regionName,
+        biomeId: target.biomeId,
+        biomeName: target.biomeName,
+        microregionId: target.microregionId,
+        microregionName: target.microregionName,
         principals: target.principals,
       };
     });
@@ -237,14 +336,34 @@ export default function AdminPermissionsPage() {
 
   const filteredGroups = useMemo(() => {
     const q = applied.q.trim().toLowerCase();
+    const countyNeedle = applied.countyQ.trim().toLowerCase();
     return assetGroups.filter((group) => {
       if (applied.principalType) {
         if (!group.principals.some((p) => p.principalType === applied.principalType)) return false;
       }
       if (applied.principalName.trim()) {
         const needle = applied.principalName.trim().toLowerCase();
-        if (!group.principals.some((p) => p.principalName.toLowerCase().includes(needle))) {
+        const nameMatches = group.principals.filter((p) =>
+          p.principalName.toLowerCase().includes(needle)
+        );
+        if (!nameMatches.length) return false;
+        if (!applied.principalType && !nameMatches.some((p) => p.principalType === 'USER')) {
           return false;
+        }
+      }
+      if (applied.permission) {
+        if (!group.principals.some((p) => p.actions.includes(applied.permission))) return false;
+      }
+      if (isCountyTab) {
+        if (applied.regionId && !sameGeoId(group.regionId, applied.regionId)) return false;
+        if (applied.stateId && !sameGeoId(group.stateId, applied.stateId)) return false;
+        if (applied.biomeId && !sameGeoId(group.biomeId, applied.biomeId)) return false;
+        if (applied.microregionId && !sameGeoId(group.microregionId, applied.microregionId)) {
+          return false;
+        }
+        if (countyNeedle) {
+          const hay = `${group.countyName || ''} ${group.objectLabel}`.toLowerCase();
+          if (!hay.includes(countyNeedle)) return false;
         }
       }
       if (!q) return true;
@@ -253,6 +372,11 @@ export default function AdminPermissionsPage() {
         group.detail,
         group.owner,
         group.answeredBy,
+        group.countyName,
+        group.stateName,
+        group.regionName,
+        group.biomeName,
+        group.microregionName,
         ...group.principals.map((p) => p.principalName),
       ]
         .filter(Boolean)
@@ -260,7 +384,7 @@ export default function AdminPermissionsPage() {
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [assetGroups, applied]);
+  }, [assetGroups, applied, isCountyTab]);
 
   const total = filteredGroups.length;
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
@@ -276,6 +400,12 @@ export default function AdminPermissionsPage() {
 
   const hasActiveFilters = Object.values(applied).some(Boolean);
 
+  const patchFilter = (patch: Partial<typeof DEFAULT_FILTERS>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
+    setApplied((prev) => ({ ...prev, ...patch }));
+    setPage(1);
+  };
+
   const onSubmitFilters = (event: FormEvent) => {
     event.preventDefault();
     setPage(1);
@@ -286,6 +416,62 @@ export default function AdminPermissionsPage() {
     setFilters(DEFAULT_FILTERS);
     setApplied(DEFAULT_FILTERS);
     setPage(1);
+    setSelectedKeys([]);
+  };
+
+  const pagedKeys = pagedGroups.map((group) => group.key);
+  const allPageSelected = pagedKeys.length > 0 && pagedKeys.every((key) => selectedKeys.includes(key));
+
+  const toggleRow = (key: string) => {
+    setSelectedKeys((prev) =>
+      prev.includes(key) ? prev.filter((value) => value !== key) : [...prev, key]
+    );
+  };
+
+  const togglePage = () => {
+    setSelectedKeys((prev) => {
+      if (allPageSelected) return prev.filter((key) => !pagedKeys.includes(key));
+      return [...new Set([...prev, ...pagedKeys])];
+    });
+  };
+
+  const deleteSelected = async () => {
+    const selected = assetGroups.filter((group) => selectedKeys.includes(group.key));
+    if (!selected.length || !canWrite) return;
+    const confirmed = window.confirm(
+      `Delete permissions for ${selected.length} selected asset${selected.length === 1 ? '' : 's'}? This cannot be undone until you recreate the grants.`
+    );
+    if (!confirmed) return;
+
+    const instanceIds = selected
+      .filter((group) => !group.allObjects && group.resourceId)
+      .map((group) => String(group.resourceId));
+    const hasAllObjects = selected.some((group) => group.allObjects);
+
+    setDeleting(true);
+    setError(null);
+    try {
+      if (instanceIds.length) {
+        await apiPost('/permissions/acl/delete', {
+          resourceType: activeType,
+          allObjects: false,
+          resourceIds: instanceIds,
+        });
+      }
+      if (hasAllObjects) {
+        await apiPost('/permissions/acl/delete', {
+          resourceType: activeType,
+          allObjects: true,
+        });
+      }
+      setSelectedKeys([]);
+      await loadData();
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete permissions.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const openEditForType = () => {
@@ -367,6 +553,7 @@ export default function AdminPermissionsPage() {
                     setActiveType(tab.resourceType);
                     setExpandedKey(null);
                     setPage(1);
+                    setSelectedKeys([]);
                   }}
                   className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition ${
                     selected
@@ -384,13 +571,23 @@ export default function AdminPermissionsPage() {
           </div>
         </div>
 
-        <AccessPrimaryButton
-          allowed={canWrite}
-          onClick={openEditForType}
-          className="w-full shrink-0 sm:w-auto"
-        >
-          Create permission
-        </AccessPrimaryButton>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+          <button
+            type="button"
+            disabled={!canWrite || selectedKeys.length === 0 || deleting}
+            onClick={() => void deleteSelected()}
+            className="w-full rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)] disabled:opacity-50 sm:w-auto"
+          >
+            {deleting ? 'Deleting…' : `Delete selected${selectedKeys.length ? ` (${selectedKeys.length})` : ''}`}
+          </button>
+          <AccessPrimaryButton
+            allowed={canWrite}
+            onClick={openEditForType}
+            className="w-full sm:w-auto"
+          >
+            Create permission
+          </AccessPrimaryButton>
+        </div>
       </div>
 
       {showFilters ? (
@@ -420,13 +617,102 @@ export default function AdminPermissionsPage() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-[var(--muted)]">Principal name</span>
+            <span className="text-[var(--muted)]">User</span>
             <input
               value={filters.principalName}
               onChange={(e) => setFilters((prev) => ({ ...prev, principalName: e.target.value }))}
+              placeholder="User name"
               className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
             />
           </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">Permission</span>
+            <select
+              value={filters.permission}
+              onChange={(e) => patchFilter({ permission: e.target.value })}
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            >
+              <option value="">All</option>
+              {PERMISSION_ACTIONS.map((action) => (
+                <option key={action} value={action}>
+                  {actionLabels[action] || action}
+                </option>
+              ))}
+            </select>
+          </label>
+          {isCountyTab ? (
+            <>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">Region</span>
+                <select
+                  value={filters.regionId}
+                  onChange={(e) => patchFilter({ regionId: e.target.value })}
+                  className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+                >
+                  <option value="">All</option>
+                  {geoOptions.regions.map((row) => (
+                    <option key={geoOptionId(row)} value={geoOptionId(row)}>
+                      {row.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">State</span>
+                <select
+                  value={filters.stateId}
+                  onChange={(e) => patchFilter({ stateId: e.target.value })}
+                  className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+                >
+                  <option value="">All</option>
+                  {geoOptions.states.map((row) => (
+                    <option key={geoOptionId(row)} value={geoOptionId(row)}>
+                      {row.code ? `${row.code} · ${row.name}` : row.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">Biome</span>
+                <select
+                  value={filters.biomeId}
+                  onChange={(e) => patchFilter({ biomeId: e.target.value })}
+                  className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+                >
+                  <option value="">All</option>
+                  {geoOptions.biomes.map((row) => (
+                    <option key={geoOptionId(row)} value={geoOptionId(row)}>
+                      {row.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">Microregion</span>
+                <select
+                  value={filters.microregionId}
+                  onChange={(e) => patchFilter({ microregionId: e.target.value })}
+                  className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+                >
+                  <option value="">All</option>
+                  {geoOptions.microregions.map((row) => (
+                    <option key={geoOptionId(row)} value={geoOptionId(row)}>
+                      {row.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-[var(--muted)]">County</span>
+                <input
+                  value={filters.countyQ}
+                  onChange={(e) => patchFilter({ countyQ: e.target.value })}
+                  placeholder="County name"
+                  className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+                />
+              </label>
+            </>
+          ) : null}
           <div className="flex items-end gap-2 md:col-span-3">
             <button
               type="submit"
@@ -476,7 +762,7 @@ export default function AdminPermissionsPage() {
               </select>
             </label>
             <TableOptionsMenu
-              columns={isAdmin ? columns : []}
+              columns={isAdmin ? menuColumns : []}
               isVisible={isAdmin ? isVisible : undefined}
               toggle={isAdmin ? toggle : undefined}
               showFilters={showFilters}
@@ -499,6 +785,14 @@ export default function AdminPermissionsPage() {
                 return (
                   <li key={group.key} className="p-4">
                     <div className="flex items-start justify-between gap-3">
+                      <label className="mt-1 shrink-0">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${group.objectLabel}`}
+                          checked={selectedKeys.includes(group.key)}
+                          onChange={() => toggleRow(group.key)}
+                        />
+                      </label>
                       <button
                         type="button"
                         onClick={() =>
@@ -510,6 +804,22 @@ export default function AdminPermissionsPage() {
                         <p className="font-medium break-words">{group.objectLabel}</p>
                         {group.detail ? (
                           <p className="mt-0.5 text-xs text-[var(--muted)]">{group.detail}</p>
+                        ) : null}
+                        {isCountyTab ? (
+                          <div className="mt-1 space-y-0.5 text-xs text-[var(--muted)]">
+                            {showGeoColumn('state') ? (
+                              <p>State: {group.stateName || '—'}</p>
+                            ) : null}
+                            {showGeoColumn('region') ? (
+                              <p>Region: {group.regionName || '—'}</p>
+                            ) : null}
+                            {showGeoColumn('biome') ? (
+                              <p>Biome: {group.biomeName || '—'}</p>
+                            ) : null}
+                            {showGeoColumn('microregion') ? (
+                              <p>Microregion: {group.microregionName || '—'}</p>
+                            ) : null}
+                          </div>
                         ) : null}
                         {isSurveyTab ? (
                           <p className="mt-1 text-xs text-[var(--muted)]">
@@ -571,9 +881,30 @@ export default function AdminPermissionsPage() {
               <table className="min-w-full text-left text-sm">
                 <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                   <tr>
+                    <th className="w-10 px-4 py-3 font-medium">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all grants on this page"
+                        checked={allPageSelected}
+                        onChange={togglePage}
+                        disabled={pagedKeys.length === 0}
+                      />
+                    </th>
                     <th className="w-10 px-4 py-3 font-medium" aria-label="Expand" />
                     {isVisible('asset') ? (
                       <th className="px-4 py-3 font-medium">Asset</th>
+                    ) : null}
+                    {showGeoColumn('state') ? (
+                      <th className="px-4 py-3 font-medium">State</th>
+                    ) : null}
+                    {showGeoColumn('region') ? (
+                      <th className="px-4 py-3 font-medium">Region</th>
+                    ) : null}
+                    {showGeoColumn('biome') ? (
+                      <th className="px-4 py-3 font-medium">Biome</th>
+                    ) : null}
+                    {showGeoColumn('microregion') ? (
+                      <th className="px-4 py-3 font-medium">Microregion</th>
                     ) : null}
                     {isVisible('owner') && isSurveyTab ? (
                       <th className="px-4 py-3 font-medium">Owner</th>
@@ -593,8 +924,12 @@ export default function AdminPermissionsPage() {
                   {pagedGroups.map((group) => {
                     const expanded = expandedKey === group.key;
                     const colSpan =
-                      1 +
+                      2 +
                       (isVisible('asset') ? 1 : 0) +
+                      (showGeoColumn('state') ? 1 : 0) +
+                      (showGeoColumn('region') ? 1 : 0) +
+                      (showGeoColumn('biome') ? 1 : 0) +
+                      (showGeoColumn('microregion') ? 1 : 0) +
                       (isVisible('owner') && isSurveyTab ? 1 : 0) +
                       (isVisible('principals') ? 1 : 0) +
                       (isVisible('grantedTo') ? 1 : 0) +
@@ -609,6 +944,14 @@ export default function AdminPermissionsPage() {
                           key={group.key}
                           className={`border-b border-[var(--border)] last:border-0 hover:bg-[var(--accent-soft)]/20 ${tableActionRowGroupClass}`}
                         >
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${group.objectLabel}`}
+                              checked={selectedKeys.includes(group.key)}
+                              onChange={() => toggleRow(group.key)}
+                            />
+                          </td>
                           <td className="px-4 py-3">
                             <button
                               type="button"
@@ -639,6 +982,18 @@ export default function AdminPermissionsPage() {
                                 <div className="mt-0.5 text-xs text-[var(--muted)]">{group.detail}</div>
                               ) : null}
                             </td>
+                          ) : null}
+                          {showGeoColumn('state') ? (
+                            <td className="px-4 py-3">{group.stateName || '—'}</td>
+                          ) : null}
+                          {showGeoColumn('region') ? (
+                            <td className="px-4 py-3">{group.regionName || '—'}</td>
+                          ) : null}
+                          {showGeoColumn('biome') ? (
+                            <td className="px-4 py-3">{group.biomeName || '—'}</td>
+                          ) : null}
+                          {showGeoColumn('microregion') ? (
+                            <td className="px-4 py-3">{group.microregionName || '—'}</td>
                           ) : null}
                           {isVisible('owner') && isSurveyTab ? (
                             <td className="px-4 py-3">{group.owner || '—'}</td>

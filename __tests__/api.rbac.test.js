@@ -91,8 +91,7 @@ describe('RBAC admin full access', () => {
     }
   });
 
-  it('lists counties as grantable permission objects', async () => {
-    const { county } = await seedCounty({ name: 'Aclville' });
+  it('lists COUNTY as a grantable class without embedding every municipality', async () => {
     const catalog = await request(app)
       .get('/api/permissions/catalog')
       .set('Authorization', `Bearer ${adminToken}`);
@@ -107,7 +106,7 @@ describe('RBAC admin full access', () => {
     );
     const countyClass = catalog.body.classes.find((entry) => entry.resourceType === 'COUNTY');
     expect(countyClass).toBeDefined();
-    expect(countyClass.objects.some((row) => row.id === String(county._id))).toBe(true);
+    expect(countyClass.objects).toEqual([]);
   });
 
   it('lists all permissions for management views', async () => {
@@ -389,4 +388,58 @@ describe('RBAC admin full access', () => {
     expect(gone).toBeNull();
   });
 
+  it('joins county geography onto permission list rows and bulk-deletes instance ACL', async () => {
+    const auth = { Authorization: `Bearer ${adminToken}` };
+    const { county, state } = await seedCounty({ name: 'Aclville' });
+
+    const apply = await request(app)
+      .post('/api/permissions/acl')
+      .set(auth)
+      .send({
+        resourceType: 'COUNTY',
+        allObjects: false,
+        objects: [{ id: String(county._id), name: county.name, label: county.name }],
+        entries: [
+          {
+            principalType: 'USER',
+            principalId: String(viewerUser._id),
+            scopes: ['READ'],
+          },
+        ],
+      });
+    expect(apply.status).toBe(200);
+
+    const listed = await request(app).get('/api/permissions').set(auth);
+    expect(listed.status).toBe(200);
+    const countyRow = listed.body.find(
+      (row) => row.resourceType === 'COUNTY' && String(row.resourceId) === String(county._id)
+    );
+    expect(countyRow).toEqual(
+      expect.objectContaining({
+        countyName: 'Aclville',
+        stateId: String(state._id),
+        stateName: state.name,
+        regionId: String(county.region || state.region),
+        permission: 'READ',
+      })
+    );
+
+    const removed = await request(app)
+      .post('/api/permissions/acl/delete')
+      .set(auth)
+      .send({
+        resourceType: 'COUNTY',
+        allObjects: false,
+        resourceIds: [String(county._id)],
+      });
+    expect(removed.status).toBe(200);
+    expect(removed.body.deletedCount).toBeGreaterThan(0);
+
+    const after = await request(app).get('/api/permissions').set(auth);
+    expect(
+      after.body.some(
+        (row) => row.resourceType === 'COUNTY' && String(row.resourceId) === String(county._id)
+      )
+    ).toBe(false);
+  });
 });

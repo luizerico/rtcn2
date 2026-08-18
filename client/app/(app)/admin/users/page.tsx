@@ -9,6 +9,7 @@ import ChangePasswordModal from '@/components/ui/ChangePasswordModal';
 import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import PermissionModal from '@/components/ui/PermissionModal';
 import { useAccess } from '@/components/AccessProvider';
 import { AccessPrimaryButton } from '@/components/ui/AccessControls';
 import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
@@ -66,6 +67,8 @@ export default function AdminUsersPage() {
   const canCreate = can('USER:CREATE');
   const canWrite = can('USER:WRITE');
   const canDelete = can('USER:DELETE');
+  const canManageAcl = can('GROUP:WRITE');
+  const [aclUser, setAclUser] = useState<UserRecord | null>(null);
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [applied, setApplied] = useState(DEFAULT_FILTERS);
@@ -152,11 +155,7 @@ export default function AdminUsersPage() {
     setError(null);
     try {
       await apiDelete(`/users/${pendingDelete._id}`);
-      pushToast({
-        tone: 'info',
-        title: 'User moved to recycle bin',
-        message: 'The account can be restored from Recycle bin.',
-      });
+      pushToast({ tone: 'info', title: 'User deleted', message: 'The account was removed.' });
       setPendingDelete(null);
       await loadUsers();
     } catch (err) {
@@ -429,6 +428,12 @@ export default function AdminUsersPage() {
                             disabled={verifyingId === user._id}
                           />
                           <AccessIconButton
+                            allowed={canManageAcl}
+                            icon="access"
+                            label="Access"
+                            onClick={() => setAclUser(user)}
+                          />
+                          <AccessIconButton
                             allowed={canWrite}
                             icon="password"
                             label="Change password"
@@ -507,18 +512,19 @@ export default function AdminUsersPage() {
         }}
       />
 
+      <PermissionModal
+        isOpen={Boolean(aclUser)}
+        onClose={() => setAclUser(null)}
+        onApplied={() => setAclUser(null)}
+        initialPrincipalType="USER"
+        initialPrincipalId={aclUser?._id || null}
+      />
+
       <ConfirmDeleteDialog
         isOpen={Boolean(pendingDelete)}
         onClose={() => setPendingDelete(null)}
         onConfirm={handleDelete}
-        title="Move to recycle bin"
         itemLabel={pendingDelete?.username}
-        description={
-          pendingDelete
-            ? `Move “${pendingDelete.username}” to the recycle bin? An administrator can restore it later.`
-            : undefined
-        }
-        confirmLabel="Move to bin"
         busy={deleting}
       />
     </div>

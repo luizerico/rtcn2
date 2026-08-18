@@ -57,6 +57,7 @@ async function ensureAdminBootstrap({
 
   await migrateObjectToAsset(mongooseConnection);
   await migratePermissionPrincipals();
+  await User.migrateUserGoogleIdIndex();
 
   let adminGroup = await Group.findOne({ name: 'admin' });
   if (!adminGroup) {

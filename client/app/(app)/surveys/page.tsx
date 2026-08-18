@@ -1,12 +1,15 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { apiGet } from '@/lib/apiUtils';
+import { apiDelete, apiGet } from '@/lib/apiUtils';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import { useAccess } from '@/components/AccessProvider';
+import { useToast } from '@/components/ToastProvider';
 import AnswerSurveyModal from '@/components/surveys/AnswerSurveyModal';
 import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import {
+  AccessIconButton,
   AccessIconLink,
   TableActionRow,
   tableActionRowGroupClass,
@@ -56,6 +59,16 @@ function canEditSheet(
   return ownerEditable && Boolean(opts.userId) && row.ownerId === opts.userId;
 }
 
+function canDeleteSheet(
+  row: AnswerRow,
+  opts: { can: (perm: string, options?: { resourceId?: string }) => boolean; isAdmin: boolean; userId?: string }
+) {
+  if (opts.isAdmin) return true;
+  if (opts.can(`${row.subjectType}:DELETE`, { resourceId: row.subjectId })) return true;
+  const ownerEditable = row.status === 'in_progress' || row.status === 'need_changes';
+  return ownerEditable && Boolean(opts.userId) && row.ownerId === opts.userId;
+}
+
 function formatStatus(value: string) {
   return value.replaceAll('_', ' ');
 }
@@ -66,10 +79,13 @@ function compareText(left: string, right: string) {
 
 export default function SurveyAnswersWorkspacePage() {
   const { can, isAdmin, user } = useAccess();
+  const { pushToast } = useToast();
   const [items, setItems] = useState<AnswerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [answerOpen, setAnswerOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<AnswerRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const canStart = can('SURVEY:READ', { allowAnyInstance: true });
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
@@ -156,6 +172,31 @@ export default function SurveyAnswersWorkspacePage() {
     setSort('updatedAt');
     setOrder('desc');
     setPage(1);
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await apiDelete(
+        `/surveys/${pendingDelete.instrumentId}/subjects/${pendingDelete.subjectType}/${pendingDelete.subjectId}`
+      );
+      pushToast({
+        tone: 'info',
+        title: 'Answer moved to recycle bin',
+        message: 'An administrator can restore it from Recycle bin.',
+      });
+      setPendingDelete(null);
+      await load();
+    } catch (err) {
+      pushToast({
+        tone: 'error',
+        title: 'Delete failed',
+        message: err instanceof Error ? err.message : 'Could not delete this answer.',
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const toggleSort = (field: SortField) => {
@@ -359,7 +400,9 @@ export default function SurveyAnswersWorkspacePage() {
               <tbody>
                 {pageRows.map((row) => {
                   const href = `/surveys/${row.instrumentId}/subjects/${row.subjectType}/${row.subjectId}`;
-                  const editable = canEditSheet(row, { can, isAdmin, userId: user?.id });
+                  const accessOpts = { can, isAdmin, userId: user?.id };
+                  const editable = canEditSheet(row, accessOpts);
+                  const deletable = canDeleteSheet(row, accessOpts);
                   const score = row.computedScore;
                   return (
                     <tr
@@ -404,6 +447,14 @@ export default function SurveyAnswersWorkspacePage() {
                               label="Edit"
                               reason="You cannot edit this sheet."
                             />
+                            <AccessIconButton
+                              allowed={deletable}
+                              icon="delete"
+                              label="Delete"
+                              danger
+                              reason="You cannot delete this sheet."
+                              onClick={() => setPendingDelete(row)}
+                            />
                           </TableActionRow>
                         </td>
                       ) : null}
@@ -445,6 +496,25 @@ export default function SurveyAnswersWorkspacePage() {
       </section>
 
       <AnswerSurveyModal isOpen={answerOpen} onClose={() => setAnswerOpen(false)} />
+
+      <ConfirmDeleteDialog
+        isOpen={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={handleDelete}
+        title="Move to recycle bin"
+        itemLabel={
+          pendingDelete
+            ? `${pendingDelete.surveyName} · ${pendingDelete.subjectLabel || pendingDelete.subjectId}`
+            : undefined
+        }
+        description={
+          pendingDelete
+            ? `Move the “${pendingDelete.surveyName}” sheet for ${pendingDelete.subjectLabel || pendingDelete.subjectId} to the recycle bin? An administrator can restore it later.`
+            : undefined
+        }
+        confirmLabel="Move to bin"
+        busy={deleting}
+      />
     </div>
   );
 }

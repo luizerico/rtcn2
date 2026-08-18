@@ -148,7 +148,7 @@ export default function AdminRecycleBinPage() {
           />
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Recycle bin</h1>
           <p className="mt-2 max-w-2xl text-[var(--muted)]">
-            Files, records, users, and groups stay here until restored or permanently deleted.
+            Files, records, users, groups, and survey answers stay here until restored or permanently deleted.
           </p>
         </div>
         <button

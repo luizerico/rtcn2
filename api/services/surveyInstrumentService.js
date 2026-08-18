@@ -16,7 +16,7 @@ const {
 const { listAccessibleResources, userHasPermission, userIsAdminGroupMember } = require('./rbacService');
 const { HttpError, ERROR_CODES } = require('../utils/httpErrors');
 const { ValidationError, objectId, oneOf } = require('../validation');
-const { activeFilter } = require('./trash');
+const { activeFilter, trashedFilter, applyTrash, clearTrash } = require('./trash');
 const { parseListQuery, clampPage, paginatedResponse, textSearchOr } = require('../utils/listQuery');
 
 const OWNER_EDITABLE_STATUSES = ['in_progress', 'need_changes'];
@@ -588,13 +588,27 @@ async function updateInstrumentCounties(survey, body, userId) {
   return serializeInstrument(survey);
 }
 
-const COUNTY_SORT_FIELDS = new Set(['name', 'code', 'IBGECode']);
+const COUNTY_SORT_FIELDS = new Set([
+  'name',
+  'code',
+  'IBGECode',
+  'state',
+  'region',
+  'biome',
+  'microregion',
+]);
 const COUNTY_POPULATE = [
   { path: 'region', select: 'code name' },
   { path: 'state', select: 'code name' },
   { path: 'microregion', select: 'code name' },
   { path: 'biome', select: 'code name' },
 ];
+const GEO_NAME_SORT = {
+  state: { from: 'states', localField: 'state' },
+  region: { from: 'regions', localField: 'region' },
+  biome: { from: 'biomes', localField: 'biome' },
+  microregion: { from: 'microregions', localField: 'microregion' },
+};
 const GEO_ASSIGN_TYPES = {
   region: { field: 'region', Model: Region, label: 'Region' },
   state: { field: 'state', Model: State, label: 'State' },
@@ -608,8 +622,62 @@ function optionalObjectId(value, label) {
   return objectId(value, label);
 }
 
+function assignedCountyObjectIds(ids) {
+  return ids
+    .filter((id) => mongoose.isValidObjectId(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+}
+
+async function findAssignedCountyPage(filter, { sortField, sortOrder, skip, limit }) {
+  const geoSort = GEO_NAME_SORT[sortField];
+  if (!geoSort) {
+    return County.find(filter)
+      .populate(COUNTY_POPULATE)
+      .sort({ [sortField]: sortOrder, _id: sortOrder })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+  }
+
+  const pageIds = await County.aggregate([
+    { $match: filter },
+    {
+      $lookup: {
+        from: geoSort.from,
+        localField: geoSort.localField,
+        foreignField: '_id',
+        as: '_sortGeo',
+      },
+    },
+    { $unwind: { path: '$_sortGeo', preserveNullAndEmptyArrays: true } },
+    { $sort: { '_sortGeo.name': sortOrder, name: sortOrder, _id: sortOrder } },
+    { $skip: skip },
+    { $limit: limit },
+    { $project: { _id: 1 } },
+  ]);
+  const ids = pageIds.map((row) => row._id);
+  if (!ids.length) return [];
+  const found = await County.find({ _id: { $in: ids } })
+    .populate(COUNTY_POPULATE)
+    .lean();
+  const byId = new Map(found.map((row) => [String(row._id), row]));
+  return ids.map((id) => byId.get(String(id))).filter(Boolean);
+}
+
+/** Live COUNTY sheets plus explicit countyIds (import/unassign can leave those out of sync). */
+async function effectiveAssignedCountyIds(survey) {
+  const fromAssignment = (survey.countyIds || []).map(String);
+  const fromSheets = await InstrumentResponse.find(
+    activeFilter({
+      instrumentId: survey._id,
+      subjectType: 'COUNTY',
+    })
+  ).distinct('subjectId');
+  return [...new Set([...fromAssignment, ...fromSheets.map(String)])];
+}
+
 async function listAssignedInstrumentCounties(survey, query = {}) {
-  const assigned = (survey.countyIds || []).map(String);
+  const assigned = await effectiveAssignedCountyIds(survey);
   const { page: rawPage, limit, sortField, sortOrder, orderLabel } = parseListQuery(
     { ...query, order: query.order || 'asc' },
     COUNTY_SORT_FIELDS,
@@ -627,7 +695,7 @@ async function listAssignedInstrumentCounties(survey, query = {}) {
     });
   }
 
-  const filter = { _id: { $in: assigned }, isDeleted: { $ne: true } };
+  const filter = { _id: { $in: assignedCountyObjectIds(assigned) }, isDeleted: { $ne: true } };
   const qOr = textSearchOr(['name', 'code', 'IBGECode'], query.search || query.q);
   if (qOr) filter.$or = qOr;
 
@@ -643,12 +711,7 @@ async function listAssignedInstrumentCounties(survey, query = {}) {
   const total = await County.countDocuments(filter);
   const { page, skip } = clampPage(rawPage, total, limit);
   const items = total
-    ? await County.find(filter)
-        .populate(COUNTY_POPULATE)
-        .sort({ [sortField]: sortOrder, _id: sortOrder })
-        .skip(skip)
-        .limit(limit)
-        .lean()
+    ? await findAssignedCountyPage(filter, { sortField, sortOrder, skip, limit })
     : [];
 
   const pageIds = items.map((row) => row._id);
@@ -661,23 +724,26 @@ async function listAssignedInstrumentCounties(survey, query = {}) {
             subjectType: 'COUNTY',
             subjectId: { $in: pageIds },
           })
-        ).select('subjectId')
+        ).select('subjectId instrumentVersionId')
       : [],
   ]);
   const versionNumberById = new Map(versionDocs.map((row) => [String(row._id), row.version]));
-  const locked = new Set(sheets.map((row) => String(row.subjectId)));
+  const sheetVersion = new Map(
+    sheets.map((row) => [String(row.subjectId), String(row.instrumentVersionId)])
+  );
   const assignedVersions = countyVersionMap(survey);
   const fallbackVersionId = defaultCountyVersionId(survey);
 
   return paginatedResponse({
     items: items.map((row) => {
-      const versionId = assignedVersions.get(String(row._id)) || fallbackVersionId;
+      const id = String(row._id);
+      const versionId = sheetVersion.get(id) || assignedVersions.get(id) || fallbackVersionId;
       return {
         ...row,
-        _id: String(row._id),
+        _id: id,
         versionId,
         version: versionId ? versionNumberById.get(versionId) || null : null,
-        versionLocked: locked.has(String(row._id)),
+        versionLocked: sheetVersion.has(id),
       };
     }),
     total,
@@ -836,6 +902,22 @@ async function assertCanEditSheet(user, type, subjectId, doc) {
   });
 }
 
+async function userCanDeleteSheet(user, type, subjectId, doc) {
+  if (!doc) return false;
+  if (await userIsAdminGroupMember(user)) return true;
+  if (await userHasPermission(user, `${type}:DELETE`, { resourceId: String(subjectId) })) {
+    return true;
+  }
+  return OWNER_EDITABLE_STATUSES.includes(doc.status) && isSheetOwner(doc, user);
+}
+
+async function assertCanDeleteSheet(user, type, subjectId, doc) {
+  if (await userCanDeleteSheet(user, type, subjectId, doc)) return;
+  throw new HttpError(403, `Forbidden: Insufficient permissions to delete this ${type} sheet.`, {
+    code: ERROR_CODES.FORBIDDEN,
+  });
+}
+
 async function assertCanViewSheet(user, type, subjectId, doc) {
   if (doc?.status === 'archived') {
     if (await userIsAdminGroupMember(user)) return;
@@ -989,14 +1071,14 @@ function serializeResponse(doc, extras = {}) {
 }
 
 async function sheetExtras(survey, user, type, subjectId, doc, version) {
-  const canEdit = doc
-    ? await userCanEditSheet(user, type, subjectId, doc)
-    : true;
+  const canEdit = doc ? await userCanEditSheet(user, type, subjectId, doc) : true;
+  const canDelete = doc ? await userCanDeleteSheet(user, type, subjectId, doc) : false;
   const labels = await resolveSubjectLabels([{ subjectType: type, subjectId }]);
   return {
     version: version.version,
     questions: version.items.map(serializeVersionItem),
     canEdit,
+    canDelete,
     surveyName: survey.name,
     subjectLabel: labels.get(`${String(type).toUpperCase()}:${subjectId}`) || '',
   };
@@ -1017,6 +1099,7 @@ async function readSubjectResponse(survey, subjectType, subjectId, user) {
       revision: 0,
       ownerId: null,
       canEdit: true,
+      canDelete: false,
       computedScore: computeScore(version.items, []),
       questions: version.items.map(serializeVersionItem),
       surveyName: survey.name,
@@ -1104,6 +1187,117 @@ async function saveSubjectResponse(survey, subjectType, subjectId, body, user) {
   return serializeResponse(doc, await sheetExtras(survey, user, type, subjectId, doc, version));
 }
 
+function actorRef(value) {
+  if (!value) return null;
+  if (typeof value === 'object') {
+    return {
+      _id: String(value._id || value.id || ''),
+      username: value.username,
+      email: value.email,
+    };
+  }
+  return { _id: String(value) };
+}
+
+async function trashSubjectResponse(survey, subjectType, subjectId, user) {
+  const { type, doc } = await loadSheetContext(survey, subjectType, subjectId);
+  if (!doc) {
+    throw new HttpError(404, 'Subject response not found.', { code: ERROR_CODES.NOT_FOUND });
+  }
+  await assertCanDeleteSheet(user, type, subjectId, doc);
+  applyTrash(doc, user._id);
+  await doc.save();
+  return {
+    message: 'Survey answer moved to recycle bin.',
+    _id: String(doc._id),
+    instrumentId: String(doc.instrumentId),
+    subjectType: type,
+    subjectId: String(doc.subjectId),
+  };
+}
+
+function serializeAnswerBinItem(doc, { surveyName, subjectLabel } = {}) {
+  const type = String(doc.subjectType).toUpperCase();
+  const label = subjectLabel || String(doc.subjectId);
+  return {
+    itemType: 'SURVEY_ANSWER',
+    _id: String(doc._id),
+    name: `${surveyName || 'Survey'} · ${label}`,
+    detail: `${type} · ${doc.status} · rev ${doc.revision || 1}`,
+    deletedAt: doc.deletedAt || null,
+    deletedBy: actorRef(doc.deletedBy),
+  };
+}
+
+async function toAnswerBinItem(doc) {
+  const type = String(doc.subjectType).toUpperCase();
+  const [survey, labels] = await Promise.all([
+    Survey.findById(doc.instrumentId).select('name').lean(),
+    resolveSubjectLabels([doc]),
+  ]);
+  return serializeAnswerBinItem(doc, {
+    surveyName: survey?.name,
+    subjectLabel: labels.get(`${type}:${doc.subjectId}`),
+  });
+}
+
+async function listTrashedResponses() {
+  const docs = await InstrumentResponse.find(trashedFilter())
+    .sort({ deletedAt: -1 })
+    .populate('deletedBy', 'username email');
+  if (!docs.length) return [];
+
+  const surveyIds = [...new Set(docs.map((row) => String(row.instrumentId)))];
+  const [surveys, labels] = await Promise.all([
+    Survey.find({ _id: { $in: surveyIds } }).select('name').lean(),
+    resolveSubjectLabels(docs),
+  ]);
+  const surveyById = new Map(surveys.map((row) => [String(row._id), row]));
+
+  return docs.map((doc) => {
+    const type = String(doc.subjectType).toUpperCase();
+    return serializeAnswerBinItem(doc, {
+      surveyName: surveyById.get(String(doc.instrumentId))?.name,
+      subjectLabel: labels.get(`${type}:${doc.subjectId}`),
+    });
+  });
+}
+
+async function restoreTrashedResponse(doc, userId) {
+  const clash = await InstrumentResponse.findOne(
+    activeFilter({
+      _id: { $ne: doc._id },
+      instrumentId: doc.instrumentId,
+      subjectType: doc.subjectType,
+      subjectId: doc.subjectId,
+    })
+  ).select('_id');
+  if (clash) {
+    throw new HttpError(409, 'Cannot restore: this survey already has a sheet for that subject.', {
+      code: ERROR_CODES.CONFLICT,
+    });
+  }
+  clearTrash(doc, userId);
+  await doc.save();
+  return doc;
+}
+
+async function purgeResponseDependents(responseId) {
+  await InstrumentRevision.deleteMany({ responseId });
+  const StoredFile = require('../models/StoredFile');
+  const { purgeStoredFile } = require('./storedFileService');
+  const files = await StoredFile.find({ ownerType: 'instrument_response', ownerId: responseId });
+  for (const file of files) {
+    await purgeStoredFile(file);
+  }
+}
+
+async function purgeTrashedResponse(doc) {
+  await purgeResponseDependents(doc._id);
+  await doc.deleteOne();
+  return { itemType: 'SURVEY_ANSWER', _id: String(doc._id) };
+}
+
 async function listSubjectRevisions(survey, subjectType, subjectId, user) {
   const { type, version, doc } = await loadSheetContext(survey, subjectType, subjectId);
   if (!doc) {
@@ -1147,11 +1341,12 @@ async function listInstrumentResponses(survey, user) {
     ? await InstrumentVersion.findById(survey.currentVersionId)
     : null;
   const extra = [{ $or: clauses }];
-  if ((survey.countyIds || []).length) {
+  const assignedCountyIds = await effectiveAssignedCountyIds(survey);
+  if (assignedCountyIds.length) {
     extra.push({
       $or: [
         { subjectType: { $ne: 'COUNTY' } },
-        { subjectId: { $in: survey.countyIds } },
+        { subjectId: { $in: assignedCountyIds } },
       ],
     });
   }
@@ -1380,9 +1575,8 @@ async function listSubjectInstruments(subjectType, subjectId, user) {
 
 async function purgeInstrumentDependents(surveyId) {
   const responses = await InstrumentResponse.find({ instrumentId: surveyId }).select('_id');
-  const responseIds = responses.map((row) => row._id);
-  if (responseIds.length) {
-    await InstrumentRevision.deleteMany({ responseId: { $in: responseIds } });
+  for (const row of responses) {
+    await purgeResponseDependents(row._id);
   }
   await InstrumentResponse.deleteMany({ instrumentId: surveyId });
   await InstrumentVersion.deleteMany({ instrumentId: surveyId });
@@ -1409,6 +1603,11 @@ module.exports = {
   assertCanMutateSubjectResponse,
   readSubjectResponse,
   saveSubjectResponse,
+  trashSubjectResponse,
+  listTrashedResponses,
+  restoreTrashedResponse,
+  purgeTrashedResponse,
+  toAnswerBinItem,
   listSubjectRevisions,
   listInstrumentResponses,
   listAccessibleAnswers,

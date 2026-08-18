@@ -4,7 +4,9 @@ const {
   listPermissions,
   getPermissionCatalog,
   getAssetAcl,
+  queryAssetAcl,
   applyAssetAcl,
+  deleteAssetAcl,
 } = require('../controllers/permissionController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
@@ -12,6 +14,8 @@ router.use(protect);
 
 router.get('/', authorize('GROUP:READ', { allowAnyInstance: true }), listPermissions);
 router.get('/catalog', authorize('GROUP:READ', { allowAnyInstance: true }), getPermissionCatalog);
+router.post('/acl/query', authorize('GROUP:READ', { allowAnyInstance: true }), queryAssetAcl);
+router.post('/acl/delete', authorize('GROUP:WRITE', { allowAnyInstance: true }), deleteAssetAcl);
 router.get('/acl', authorize('GROUP:READ', { allowAnyInstance: true }), getAssetAcl);
 router.post('/acl', authorize('GROUP:WRITE', { allowAnyInstance: true }), applyAssetAcl);
 
