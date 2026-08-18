@@ -1,12 +1,9 @@
+import { clearApiGetCache, getCachedGet, normalizeApiEndpoint } from '@/lib/apiGetCache';
+
 const GEO_KINDS = new Set(['regions', 'states', 'biomes', 'microregions', 'counties']);
 const OBJECT_ID = /^[a-fA-F0-9]{24}$/;
 
-const cache = new Map<string, unknown>();
-
-export function normalizeApiEndpoint(endpoint: string): string {
-  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  return path.split('#')[0];
-}
+export { normalizeApiEndpoint };
 
 export function isGeoCatalogEndpoint(endpoint: string): boolean {
   const [pathname] = normalizeApiEndpoint(endpoint).split('?');
@@ -18,21 +15,9 @@ export function isGeoCatalogEndpoint(endpoint: string): boolean {
 }
 
 export function clearGeoSessionCache() {
-  cache.clear();
+  clearApiGetCache();
 }
 
 export async function getCachedGeo<T>(key: string, loader: () => Promise<T>): Promise<T> {
-  const cached = cache.get(key);
-  if (cached !== undefined) return cached as T;
-  const pending = loader()
-    .then((value) => {
-      cache.set(key, value);
-      return value;
-    })
-    .catch((error) => {
-      cache.delete(key);
-      throw error;
-    });
-  cache.set(key, pending);
-  return pending;
+  return getCachedGet(key, loader);
 }

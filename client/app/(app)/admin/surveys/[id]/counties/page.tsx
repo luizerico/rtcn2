@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { apiGet, apiPost, apiPut } from '@/lib/apiUtils';
@@ -14,6 +14,7 @@ import { AccessPrimaryButton } from '@/components/ui/AccessControls';
 import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 import { buildListParams, type PaginatedList } from '@/lib/listTypes';
+import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
 import {
   geoLabel,
   type BiomeRecord,
@@ -261,7 +262,7 @@ function BulkCountyPreviewModal({
               <p className="p-4 text-sm text-[var(--muted)]">No counties match your search.</p>
             ) : (
               <div className="min-h-0 flex-1 overflow-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="headers-nowrap min-w-full text-left text-sm">
                   <thead className="sticky top-0 border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                     <tr>
                       {isVisible('name') ? (
@@ -402,11 +403,9 @@ export default function AssignSurveyCountiesPage() {
   const [surveyError, setSurveyError] = useState<string | null>(null);
   const [surveyLoading, setSurveyLoading] = useState(true);
 
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState(DEFAULT_FILTERS);
+  const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters(DEFAULT_FILTERS);
   const [sort, setSort] = useState<SortField>('name');
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
-  const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [showFilters, setShowFilters] = useState(false);
   const [data, setData] = useState<PaginatedList<AssignedCounty> | null>(null);
@@ -550,18 +549,10 @@ export default function AssignSurveyCountiesPage() {
     await Promise.all([loadSurvey(), loadRows()]);
   };
 
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setPage(1);
-    setApplied({ ...filters });
-  };
-
   const onReset = () => {
-    setFilters(DEFAULT_FILTERS);
-    setApplied(DEFAULT_FILTERS);
+    resetFilters(DEFAULT_FILTERS);
     setSort('name');
     setOrder('asc');
-    setPage(1);
   };
 
   const toggleSort = (field: SortField) => {
@@ -891,7 +882,7 @@ export default function AssignSurveyCountiesPage() {
 
       {showFilters ? (
         <form
-          onSubmit={onSubmit}
+          onSubmit={(event) => event.preventDefault()}
           className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3 lg:grid-cols-4"
         >
           <label className="flex flex-col gap-1 text-sm md:col-span-2">
@@ -966,12 +957,6 @@ export default function AssignSurveyCountiesPage() {
             </select>
           </label>
           <div className="flex items-end gap-2 md:col-span-2 lg:col-span-4">
-            <button
-              type="submit"
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
-              Apply filters
-            </button>
             <button
               type="button"
               onClick={onReset}
@@ -1061,7 +1046,7 @@ export default function AssignSurveyCountiesPage() {
             </ul>
 
             <div className="hidden overflow-x-auto md:block">
-              <table className="min-w-full text-left text-sm">
+              <table className="headers-nowrap min-w-full text-left text-sm">
                 <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                   <tr>
                     {isVisible('name') ? (

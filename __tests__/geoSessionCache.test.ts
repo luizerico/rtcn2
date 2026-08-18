@@ -1,18 +1,25 @@
-import { apiGet, clearLocalSessionHints } from '@/lib/apiUtils';
+import { apiGet, apiPost, clearApiGetCache, clearLocalSessionHints } from '@/lib/apiUtils';
 import {
   clearGeoSessionCache,
   getCachedGeo,
   isGeoCatalogEndpoint,
 } from '@/lib/geoSessionCache';
 
-describe('geoSessionCache', () => {
+function mockJson(body: unknown) {
+  return {
+    ok: true,
+    json: async () => body,
+  };
+}
+
+describe('apiGet cache', () => {
   beforeEach(() => {
-    clearGeoSessionCache();
+    clearApiGetCache();
     global.fetch = jest.fn();
   });
 
   afterEach(() => {
-    clearGeoSessionCache();
+    clearApiGetCache();
     jest.restoreAllMocks();
   });
 
@@ -43,11 +50,8 @@ describe('geoSessionCache', () => {
     expect(third).toEqual(first);
   });
 
-  it('caches identical geo list GETs through apiGet', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ items: [{ _id: 's1', name: 'Goiás' }] }),
-    });
+  it('caches identical list GETs through apiGet', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(mockJson({ items: [{ _id: 's1', name: 'Goiás' }] }));
 
     const first = await apiGet('/states?limit=100');
     const second = await apiGet('/states?limit=100');
@@ -56,26 +60,61 @@ describe('geoSessionCache', () => {
     expect(first).toEqual(second);
   });
 
-  it('does not cache county emissions', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ items: [] }),
-    });
+  it('caches identical user list queries', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(mockJson({ items: [], pagination: { page: 1 } }));
 
-    await apiGet('/counties/507f1f77bcf86cd799439011/emissions');
-    await apiGet('/counties/507f1f77bcf86cd799439011/emissions');
+    await apiGet('/users?page=1');
+    await apiGet('/users?page=1');
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('caches identical county emission queries by full URL', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(mockJson({ items: [] }));
+
+    await apiGet('/counties/507f1f77bcf86cd799439011/emissions?page=1');
+    await apiGet('/counties/507f1f77bcf86cd799439011/emissions?page=1');
+    await apiGet('/counties/507f1f77bcf86cd799439011/emissions?page=2');
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('clears cached geo data on logout', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ items: [] }),
-    });
+  it('invalidates GET cache after a mutation', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(mockJson({ items: [], _id: 'u1' }));
+
+    await apiGet('/users?page=1');
+    await apiPost('/users', { username: 'ada' });
+    await apiGet('/users?page=1');
+
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not persist /auth/me so refresh can refetch', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(
+      mockJson({ user: { _id: 'u1' }, permissions: [] })
+    );
+
+    await apiGet('/auth/me');
+    await apiGet('/auth/me');
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears cached GET data on logout', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(mockJson({ items: [] }));
 
     await apiGet('/regions');
     clearLocalSessionHints();
+    await apiGet('/regions');
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears cached geo data through the geo helper', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue(mockJson({ items: [] }));
+
+    await apiGet('/regions');
+    clearGeoSessionCache();
     await apiGet('/regions');
 
     expect(global.fetch).toHaveBeenCalledTimes(2);

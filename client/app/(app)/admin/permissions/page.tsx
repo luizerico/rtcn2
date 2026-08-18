@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { apiGet, apiPost } from '@/lib/apiUtils';
 import PermissionModal from '@/components/ui/PermissionModal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
@@ -10,6 +10,7 @@ import { AccessPrimaryButton } from '@/components/ui/AccessControls';
 import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 import type { PaginatedList } from '@/lib/listTypes';
+import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
 
 interface PermissionRecord {
   _id: string;
@@ -140,10 +141,8 @@ export default function AdminPermissionsPage() {
     principalId: null,
   });
 
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState(DEFAULT_FILTERS);
+  const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
-  const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
@@ -400,22 +399,8 @@ export default function AdminPermissionsPage() {
 
   const hasActiveFilters = Object.values(applied).some(Boolean);
 
-  const patchFilter = (patch: Partial<typeof DEFAULT_FILTERS>) => {
-    setFilters((prev) => ({ ...prev, ...patch }));
-    setApplied((prev) => ({ ...prev, ...patch }));
-    setPage(1);
-  };
-
-  const onSubmitFilters = (event: FormEvent) => {
-    event.preventDefault();
-    setPage(1);
-    setApplied({ ...filters });
-  };
-
   const onResetFilters = () => {
-    setFilters(DEFAULT_FILTERS);
-    setApplied(DEFAULT_FILTERS);
-    setPage(1);
+    resetFilters(DEFAULT_FILTERS);
     setSelectedKeys([]);
   };
 
@@ -592,7 +577,7 @@ export default function AdminPermissionsPage() {
 
       {showFilters ? (
         <form
-          onSubmit={onSubmitFilters}
+          onSubmit={(event) => event.preventDefault()}
           className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3"
         >
           <label className="flex flex-col gap-1 text-sm md:col-span-2">
@@ -629,7 +614,7 @@ export default function AdminPermissionsPage() {
             <span className="text-[var(--muted)]">Permission</span>
             <select
               value={filters.permission}
-              onChange={(e) => patchFilter({ permission: e.target.value })}
+              onChange={(e) => setFilters((prev) => ({ ...prev, permission: e.target.value }))}
               className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
             >
               <option value="">All</option>
@@ -646,7 +631,7 @@ export default function AdminPermissionsPage() {
                 <span className="text-[var(--muted)]">Region</span>
                 <select
                   value={filters.regionId}
-                  onChange={(e) => patchFilter({ regionId: e.target.value })}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, regionId: e.target.value }))}
                   className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
                 >
                   <option value="">All</option>
@@ -661,7 +646,7 @@ export default function AdminPermissionsPage() {
                 <span className="text-[var(--muted)]">State</span>
                 <select
                   value={filters.stateId}
-                  onChange={(e) => patchFilter({ stateId: e.target.value })}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, stateId: e.target.value }))}
                   className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
                 >
                   <option value="">All</option>
@@ -676,7 +661,7 @@ export default function AdminPermissionsPage() {
                 <span className="text-[var(--muted)]">Biome</span>
                 <select
                   value={filters.biomeId}
-                  onChange={(e) => patchFilter({ biomeId: e.target.value })}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, biomeId: e.target.value }))}
                   className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
                 >
                   <option value="">All</option>
@@ -691,7 +676,7 @@ export default function AdminPermissionsPage() {
                 <span className="text-[var(--muted)]">Microregion</span>
                 <select
                   value={filters.microregionId}
-                  onChange={(e) => patchFilter({ microregionId: e.target.value })}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, microregionId: e.target.value }))}
                   className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
                 >
                   <option value="">All</option>
@@ -706,7 +691,7 @@ export default function AdminPermissionsPage() {
                 <span className="text-[var(--muted)]">County</span>
                 <input
                   value={filters.countyQ}
-                  onChange={(e) => patchFilter({ countyQ: e.target.value })}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, countyQ: e.target.value }))}
                   placeholder="County name"
                   className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
                 />
@@ -714,12 +699,6 @@ export default function AdminPermissionsPage() {
             </>
           ) : null}
           <div className="flex items-end gap-2 md:col-span-3">
-            <button
-              type="submit"
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
-              Apply filters
-            </button>
             <button
               type="button"
               onClick={onResetFilters}
@@ -878,7 +857,7 @@ export default function AdminPermissionsPage() {
 
             {/* Desktop table */}
             <div className="hidden overflow-x-auto lg:block">
-              <table className="min-w-full text-left text-sm">
+              <table className="headers-nowrap min-w-full text-left text-sm">
                 <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                   <tr>
                     <th className="w-10 px-4 py-3 font-medium">
@@ -1026,7 +1005,7 @@ export default function AdminPermissionsPage() {
                                 Permission details
                               </p>
                               <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
+                                <table className="headers-nowrap w-full text-left text-sm">
                                   <thead className="text-[var(--muted)]">
                                     <tr>
                                       <th className="py-1 pr-3 font-medium">Name</th>

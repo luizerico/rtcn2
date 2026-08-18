@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { apiGet } from '@/lib/apiUtils';
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/TableActionIcon';
 import { formatScore, type SurveyScore } from '@/lib/surveyScore';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
+import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
 import type { StoredFileRecord } from '@/lib/storedFileTypes';
 
 type QuestionType = 'score' | 'text' | 'multiple_choice' | 'yes_no';
@@ -121,11 +122,9 @@ export default function SheetAnswersViewPage() {
   const [notesQuestionId, setNotesQuestionId] = useState<string | null>(null);
   const [filesQuestionId, setFilesQuestionId] = useState<string | null>(null);
 
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState(DEFAULT_FILTERS);
+  const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters(DEFAULT_FILTERS);
   const [sort, setSort] = useState<AnswerSortField>('code');
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
-  const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -293,18 +292,10 @@ export default function SheetAnswersViewPage() {
     ? answersByQuestion.get(notesQuestion.questionId)?.obs || ''
     : '';
 
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setPage(1);
-    setApplied({ ...filters });
-  };
-
   const onReset = () => {
-    setFilters(DEFAULT_FILTERS);
-    setApplied(DEFAULT_FILTERS);
+    resetFilters(DEFAULT_FILTERS);
     setSort('code');
     setOrder('asc');
-    setPage(1);
   };
 
   const toggleSort = (field: AnswerSortField) => {
@@ -396,7 +387,7 @@ export default function SheetAnswersViewPage() {
 
       {viewMode === 'table' && showFilters ? (
         <form
-          onSubmit={onSubmit}
+          onSubmit={(event) => event.preventDefault()}
           className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3 lg:grid-cols-4"
         >
           <label className="flex flex-col gap-1 text-sm md:col-span-2">
@@ -475,12 +466,6 @@ export default function SheetAnswersViewPage() {
             </select>
           </label>
           <div className="flex items-end gap-2 md:col-span-2 lg:col-span-4">
-            <button
-              type="submit"
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
-              Apply filters
-            </button>
             <button
               type="button"
               onClick={onReset}
@@ -573,7 +558,7 @@ export default function SheetAnswersViewPage() {
           <p className="p-5 text-[var(--muted)]">No answers match these filters.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="headers-nowrap min-w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                 <tr>
                   {isVisible('index') ? (
@@ -729,7 +714,7 @@ export default function SheetAnswersViewPage() {
           <p className="p-5 text-[var(--muted)]">No saved revisions yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="headers-nowrap min-w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                 <tr>
                   {isRevisionVisible('revision') ? (

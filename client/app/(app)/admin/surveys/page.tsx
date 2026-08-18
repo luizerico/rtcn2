@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { apiDelete, apiGet } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
@@ -16,6 +16,7 @@ import {
   tableActionRowGroupClass,
 } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
+import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
 
 interface SurveyRecord {
   _id: string;
@@ -74,12 +75,13 @@ export default function SurveysPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState('');
-  const [createdByInput, setCreatedByInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [createdBy, setCreatedBy] = useState('');
+  const { filters, setFilters, applied, page, setPage } = useAutoAppliedFilters({
+    search: '',
+    createdBy: '',
+  });
+  const search = applied.search;
+  const createdBy = applied.createdBy;
   const [showFilters, setShowFilters] = useState(false);
-  const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [sort, setSort] = useState<SortField>('updatedAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
@@ -110,13 +112,6 @@ export default function SurveysPage() {
   useEffect(() => {
     loadSurveys();
   }, [loadSurveys]);
-
-  const handleSearch = (event: FormEvent) => {
-    event.preventDefault();
-    setPage(1);
-    setSearch(searchInput.trim());
-    setCreatedBy(createdByInput.trim());
-  };
 
   const toggleSort = (field: SortField) => {
     if (sort === field) {
@@ -178,15 +173,15 @@ export default function SurveysPage() {
 
       {showFilters ? (
         <form
-          onSubmit={handleSearch}
+          onSubmit={(event) => event.preventDefault()}
           className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3"
         >
           <label className="flex flex-col gap-1 text-sm md:col-span-2">
             <span className="text-[var(--muted)]">Search</span>
             <input
               id="survey-search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              value={filters.search}
+              onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
               placeholder="Name or description"
               className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
             />
@@ -195,20 +190,12 @@ export default function SurveysPage() {
             <span className="text-[var(--muted)]">Created by (user id)</span>
             <input
               id="survey-created-by"
-              value={createdByInput}
-              onChange={(e) => setCreatedByInput(e.target.value)}
+              value={filters.createdBy}
+              onChange={(e) => setFilters((prev) => ({ ...prev, createdBy: e.target.value }))}
               placeholder="Optional filter"
               className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
             />
           </label>
-          <div className="flex items-end gap-2 md:col-span-3">
-            <button
-              type="submit"
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
-              Apply filters
-            </button>
-          </div>
         </form>
       ) : null}
 
@@ -311,7 +298,7 @@ export default function SurveysPage() {
             </ul>
 
             <div className="hidden overflow-x-auto md:block">
-              <table className="min-w-full text-left text-sm">
+              <table className="headers-nowrap min-w-full text-left text-sm">
                 <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                   <tr>
                     {isVisible('name') ? (

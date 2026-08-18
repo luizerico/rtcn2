@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { apiGet } from '@/lib/apiUtils';
@@ -19,6 +19,7 @@ import {
   type RegionRecord,
   type StateRecord,
 } from '@/lib/geoTypes';
+import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
 
 type SortField = 'name' | 'code' | 'IBGECode' | 'population';
 
@@ -49,11 +50,9 @@ export default function CountyCatalogList() {
     [searchParams]
   );
 
-  const [filters, setFilters] = useState(initialFilters);
-  const [applied, setApplied] = useState(initialFilters);
+  const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters(initialFilters);
   const [sort, setSort] = useState<SortField>('name');
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
-  const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [showFilters, setShowFilters] = useState(Object.values(initialFilters).some(Boolean));
   const [data, setData] = useState<PaginatedList<CountyRecord> | null>(null);
@@ -140,19 +139,10 @@ export default function CountyCatalogList() {
     void loadRows();
   }, [loadRows]);
 
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setPage(1);
-    setApplied({ ...filters });
-  };
-
   const onReset = () => {
-    const empty = { q: '', regionId: '', stateId: '', microregionId: '', biomeId: '' };
-    setFilters(empty);
-    setApplied(empty);
+    resetFilters({ q: '', regionId: '', stateId: '', microregionId: '', biomeId: '' });
     setSort('name');
     setOrder('asc');
-    setPage(1);
   };
 
   const toggleSort = (field: SortField) => {
@@ -189,7 +179,7 @@ export default function CountyCatalogList() {
 
       {showFilters ? (
         <form
-          onSubmit={onSubmit}
+          onSubmit={(event) => event.preventDefault()}
           className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3 lg:grid-cols-4"
         >
           <label className="flex flex-col gap-1 text-sm md:col-span-2">
@@ -269,12 +259,6 @@ export default function CountyCatalogList() {
           </label>
           <div className="flex items-end gap-2 md:col-span-2 lg:col-span-4">
             <button
-              type="submit"
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
-              Apply filters
-            </button>
-            <button
               type="button"
               onClick={onReset}
               className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]/40"
@@ -335,7 +319,7 @@ export default function CountyCatalogList() {
           <p className="p-5 text-[var(--muted)]">No counties match these filters.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="headers-nowrap min-w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                 <tr>
                   {isVisible('name') ? (

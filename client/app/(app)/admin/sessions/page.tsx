@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiDelete, apiGet } from '@/lib/apiUtils';
 import { useToast } from '@/components/ToastProvider';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
@@ -10,6 +10,7 @@ import { useAccess } from '@/components/AccessProvider';
 import { AccessIconButton, TableActionRow, tableActionRowGroupClass } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 import { buildListParams, type ListPagination, type ListSort } from '@/lib/listTypes';
+import { useAutoAppliedFilters } from '@/lib/useDebouncedValue';
 
 interface SessionRecord {
   _id: string;
@@ -54,11 +55,9 @@ export default function AdminSessionsPage() {
   const { can, user, isAdmin } = useAccess();
   const canDisconnectOthers = can('USER:WRITE');
 
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState(DEFAULT_FILTERS);
+  const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters(DEFAULT_FILTERS);
   const [sort, setSort] = useState<SortField>('lastSeenAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
-  const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -99,18 +98,10 @@ export default function AdminSessionsPage() {
     void loadSessions();
   }, [loadSessions]);
 
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setPage(1);
-    setApplied({ ...filters });
-  };
-
   const onReset = () => {
-    setFilters(DEFAULT_FILTERS);
-    setApplied(DEFAULT_FILTERS);
+    resetFilters(DEFAULT_FILTERS);
     setSort('lastSeenAt');
     setOrder('desc');
-    setPage(1);
   };
 
   const toggleSort = (field: SortField) => {
@@ -170,7 +161,7 @@ export default function AdminSessionsPage() {
 
       {showFilters ? (
         <form
-          onSubmit={onSubmit}
+          onSubmit={(event) => event.preventDefault()}
           className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3"
         >
           <label className="flex flex-col gap-1 text-sm md:col-span-2">
@@ -199,12 +190,6 @@ export default function AdminSessionsPage() {
             />
           </label>
           <div className="flex items-end gap-2 md:col-span-3">
-            <button
-              type="submit"
-              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-            >
-              Apply filters
-            </button>
             <button
               type="button"
               onClick={onReset}
@@ -269,7 +254,7 @@ export default function AdminSessionsPage() {
           <p className="p-5 text-[var(--muted)]">No sessions match these filters.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="headers-nowrap min-w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                 <tr>
                   {isVisible('user') ? (
