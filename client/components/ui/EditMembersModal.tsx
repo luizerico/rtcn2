@@ -156,7 +156,7 @@ const EditMembersModal: React.FC<EditMembersModalProps> = ({
     'w-full rounded-md border border-[var(--border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]';
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={title} size="xl" closeOnBackdrop={false}>
       <div className="space-y-4">
         <div className="grid items-start gap-4 md:grid-cols-2">
           <section className="grid min-w-0 grid-rows-[auto_auto_1fr] gap-2">

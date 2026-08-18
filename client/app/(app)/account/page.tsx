@@ -306,7 +306,7 @@ function ProfileContent() {
               />
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap justify-end gap-3">
               <button
                 type="button"
                 onClick={() => {

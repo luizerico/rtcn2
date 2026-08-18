@@ -1,0 +1,34 @@
+---
+description: Main list tables (10+ rows) use user-management search, filters, sort, pagination, and column visibility
+globs: client/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Main list tables
+
+Any **main list** that can show more than ~10 rows (surveys, users, groups, questions, catalogs, logs, etc.) must match the user-management table pattern.
+
+## Required
+
+- Hide/show **filters** via `TableOptionsMenu` (`Show filters`)
+- **Column visibility** via `useColumnVisibility` + `TableOptionsMenu`
+- Sortable headers where the data supports it
+- Page size (10/25/50/100) and Previous/Next
+- Prefer API `page`, `limit`, `sort`, `order`, and filter query params with `{ items, pagination, sort }`. If the endpoint is not paginated yet, filter/sort/page on the client and still show the same toolbar.
+- Row actions are icon buttons (`AccessIconButton` / `AccessIconLink`), not text links
+- `overflow-x-auto` so the table works on small screens; keep action icons always visible on touch (`TableActionRow`)
+
+```tsx
+<TableOptionsMenu
+  columns={columns}
+  isVisible={isVisible}
+  toggle={toggle}
+  showFilters={showFilters}
+  onToggleFilters={() => setShowFilters((prev) => !prev)}
+/>
+```
+
+## Do not
+
+- Ship a bare 10+ row table with no filters, sort, pagination, or column picker
+- Use this pattern for tiny summary tables (a handful of fixed rows)

@@ -1,5 +1,5 @@
 ---
-description: Breadcrumbs for hierarchy; action forms use Cancel then Save
+description: Breadcrumbs for hierarchy; action forms use Cancel then Save, right-aligned
 globs: client/app/**/*.{ts,tsx}
 alwaysApply: false
 ---
@@ -41,12 +41,13 @@ Create, edit, submit, or other mutating forms (`/new`, `/edit`, answer/submit fl
 
 - Breadcrumbs in the header (same as view pages)
 - Form footer must include **Cancel** then **Save** (or Create / Submit), in that order
-- **Cancel** is first (bordered secondary); **Save** is second (primary accent)
+- **Cancel** is first (leftmost of the group, bordered secondary); **Save** is last (rightmost, primary accent)
+- Align the whole action group to the **right** (`flex flex-wrap justify-end`); see `.cursor/rules/form-action-buttons.mdc`
 - **Cancel** navigates to the parent list/detail (same as the breadcrumb parent) and does not submit
 - For embedded create/edit forms on list pages, Cancel clears the form fields instead of navigating away
 
 ```tsx
-<div className="flex flex-wrap gap-3">
+<div className="flex flex-wrap justify-end gap-3">
   <Link
     href="/surveys"
     className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
@@ -61,11 +62,12 @@ Create, edit, submit, or other mutating forms (`/new`, `/edit`, answer/submit fl
 
 ## Modals
 
-- Footer actions also use **Cancel** then primary confirm/save
+- Footer actions also use **Cancel** then primary confirm/save, right-aligned
 
 ## Do not
 
 - Put Save before Cancel
+- Left-align form/page/modal action buttons (keep the group `justify-end`)
 - Omit Cancel on action forms
 - Omit breadcrumbs on nested app pages
 - Use `router.back()` as the only way to leave an action page

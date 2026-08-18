@@ -263,13 +263,15 @@ export default function OpportunityForm({
           />
         </Field>
       </div>
-      <button
-        type="submit"
-        disabled={saving || !canSubmit}
-        className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {saving ? 'Saving…' : submitLabel}
-      </button>
+      <div className="flex flex-wrap justify-end">
+        <button
+          type="submit"
+          disabled={saving || !canSubmit}
+          className="rounded-md bg-[var(--accent)] px-4 py-2 font-medium text-white hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {saving ? 'Saving…' : submitLabel}
+        </button>
+      </div>
     </form>
   );
 }
