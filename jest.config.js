@@ -6,6 +6,8 @@ module.exports = {
       testMatch: [
         '<rootDir>/__tests__/*Modal*.test.tsx',
         '<rootDir>/__tests__/access.test.ts',
+        '<rootDir>/__tests__/surveyScore.test.ts',
+        '<rootDir>/__tests__/AnswersAreaTree.test.tsx',
       ],
       testEnvironment: 'jsdom',
       setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],

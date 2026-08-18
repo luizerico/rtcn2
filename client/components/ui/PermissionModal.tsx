@@ -49,12 +49,14 @@ const PermissionModal: React.FC<PermissionModalProps> = ({
   });
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Asset permissions" size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Asset permissions" size="xl" closeOnBackdrop={false}>
       <form onSubmit={editor.handleApply} className="space-y-4">
         <p className="text-xs text-[var(--muted)]">
-          Permissions apply only to asset subclasses (documents, dashboards, datasets, surveys).
-          Users and groups are not assets — they appear only as who receives access. Survey answers
-          inherit survey read access; results are admin-only.
+          Grant access to asset subclasses (surveys, funding objects) or to counties. Users and
+          groups are principals only. Instrument questions use SURVEY write. County read views
+          sheets, create starts a new sheet, and modify edits an existing sheet (or send it back
+          to draft). The same read/create/modify rules apply to project, opportunity, and sponsor
+          subjects.
         </p>
 
         <div className="grid gap-3 sm:grid-cols-2">

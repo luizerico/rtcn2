@@ -10,10 +10,12 @@ const {
   svgBuffer,
   exeBuffer,
   docxBuffer,
+  xlsxBuffer,
+  oleBuffer,
 } = require('./helpers/fileFixtures');
 
 describe('file type allow-list', () => {
-  it('accepts PDF, DOCX, and images', () => {
+  it('accepts PDF, Word, Excel, and images', () => {
     expect(inspectUpload({ originalName: 'a.pdf', mimeType: 'application/pdf', buffer: pdfBuffer() }).kind).toBe(
       'pdf'
     );
@@ -28,11 +30,24 @@ describe('file type allow-list', () => {
         buffer: docxBuffer(),
       }).kind
     ).toBe('docx');
+    expect(
+      inspectUpload({
+        originalName: 'a.xlsx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        buffer: xlsxBuffer(),
+      }).kind
+    ).toBe('xlsx');
+    expect(
+      inspectUpload({ originalName: 'a.doc', mimeType: 'application/msword', buffer: oleBuffer() }).kind
+    ).toBe('doc');
+    expect(
+      inspectUpload({ originalName: 'a.xls', mimeType: 'application/vnd.ms-excel', buffer: oleBuffer() }).kind
+    ).toBe('xls');
   });
 
   it('rejects exe and svg by extension', () => {
-    expect(() => assertAllowedUploadMeta('payload.exe', 'application/octet-stream')).toThrow(/PDF, DOCX/);
-    expect(() => assertAllowedUploadMeta('icon.svg', 'image/svg+xml')).toThrow(/PDF, DOCX/);
+    expect(() => assertAllowedUploadMeta('payload.exe', 'application/octet-stream')).toThrow(/PDF, Word/);
+    expect(() => assertAllowedUploadMeta('icon.svg', 'image/svg+xml')).toThrow(/PDF, Word/);
   });
 
   it('rejects mismatched content vs extension', () => {

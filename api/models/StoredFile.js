@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const { trashFields } = require('../services/trash');
 
-const OWNER_TYPES = ['opportunity', 'project', 'sponsor'];
+const OWNER_TYPES = ['opportunity', 'project', 'sponsor', 'instrument_response'];
 const STORAGE_DRIVERS = ['tmp', 'azure', 'aws', 'gcs'];
 
 /**
@@ -20,6 +20,8 @@ const storedFileSchema = new Schema(
     ownerType: { type: String, required: true, enum: OWNER_TYPES, index: true },
     ownerId: { type: Schema.Types.ObjectId, required: true, index: true },
     obs: { type: String, default: '', trim: true, maxlength: 2000 },
+    /** Optional survey question id when the owner is an instrument response. */
+    questionId: { type: String, default: null, trim: true, maxlength: 64, index: true },
     storageDriver: { type: String, required: true, enum: STORAGE_DRIVERS },
     storageKey: { type: String, required: true, trim: true },
     uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -31,6 +33,7 @@ const storedFileSchema = new Schema(
 );
 
 storedFileSchema.index({ ownerType: 1, ownerId: 1, deletedAt: 1, createdAt: -1 });
+storedFileSchema.index({ ownerType: 1, ownerId: 1, questionId: 1, deletedAt: 1 });
 storedFileSchema.index({ sha256: 1 });
 
 module.exports = mongoose.models.StoredFile || mongoose.model('StoredFile', storedFileSchema);

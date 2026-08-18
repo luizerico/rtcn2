@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { County, CountyStatus, CountyEmission } = require('../models/geo');
-const { sendError, sendServerError, ERROR_CODES } = require('../utils/httpErrors');
+const { sendError, sendServerError, ERROR_CODES, HttpError } = require('../utils/httpErrors');
 const {
   parseListQuery,
   clampPage,
@@ -9,6 +9,7 @@ const {
   escapeRegex,
 } = require('../utils/listQuery');
 const { objectId, ValidationError } = require('../validation');
+const { listSubjectInstruments } = require('../services/surveyInstrumentService');
 
 const COUNTY_SORT_FIELDS = new Set(['name', 'code', 'IBGECode', 'population']);
 const EMISSION_SORT_FIELDS = new Set([
@@ -50,7 +51,7 @@ exports.listCounties = async (req, res) => {
     );
 
     const filter = notDeletedFilter();
-    const qOr = textSearchOr(['name', 'code', 'IBGECode'], req.query.q);
+    const qOr = textSearchOr(['name', 'code', 'IBGECode'], req.query.search || req.query.q);
     if (qOr) filter.$or = qOr;
 
     const regionId = optionalObjectId(req.query.regionId, 'regionId');
@@ -177,5 +178,20 @@ exports.listCountyEmissions = async (req, res) => {
       return sendError(res, 400, error.message, ERROR_CODES.VALIDATION);
     }
     return sendServerError(res, error, 'Error fetching county emissions');
+  }
+};
+
+exports.listCountyInstruments = async (req, res) => {
+  try {
+    const payload = await listSubjectInstruments('COUNTY', req.params.id, req.user);
+    return res.status(200).json(payload);
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return sendError(res, error.status, error.message, { code: error.code });
+    }
+    if (error instanceof ValidationError || error?.statusCode === 400) {
+      return sendError(res, 400, error.message, ERROR_CODES.VALIDATION);
+    }
+    return sendServerError(res, error, 'Error listing county instruments');
   }
 };

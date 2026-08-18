@@ -9,7 +9,7 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 interface QuestionSummary {
   questionId: string;
   prompt: string;
-  type: 'text' | 'multiple_choice' | 'yes_no';
+  type: 'text' | 'multiple_choice' | 'yes_no' | 'score';
   options?: string[];
   counts?: Record<string, number>;
   textAnswers?: Array<{
@@ -25,7 +25,11 @@ interface ResponseRow {
   _id: string;
   createdAt?: string;
   createdBy?: { username?: string; email?: string } | string;
-  answers: Array<{ questionId: string; value: string }>;
+  subjectType?: string;
+  subjectId?: string;
+  revision?: number;
+  computedScore?: { letter?: string; percent?: number; total?: number };
+  answers: Array<{ questionId: string; value: string | number }>;
 }
 
 interface ResponsesPayload {
@@ -34,6 +38,7 @@ interface ResponsesPayload {
     name: string;
     description?: string;
     questions: Array<{ questionId: string; prompt: string }>;
+    publishedQuestions?: Array<{ questionId: string; prompt: string }>;
     createdBy?: { username?: string } | string;
     createdAt?: string;
     updatedAt?: string;
@@ -76,7 +81,8 @@ export default function SurveyResponsesPage() {
         <Breadcrumbs
           items={[
             { label: 'Home', href: '/' },
-            { label: 'Surveys', href: '/surveys' },
+            { label: 'Admin', href: '/admin' },
+            { label: 'Surveys', href: '/admin/surveys' },
             { label: 'Results' },
           ]}
         />
@@ -86,6 +92,9 @@ export default function SurveyResponsesPage() {
   }
 
   const { survey, responses, summary } = data;
+  const sheetQuestions = survey.publishedQuestions?.length
+    ? survey.publishedQuestions
+    : survey.questions;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -93,8 +102,9 @@ export default function SurveyResponsesPage() {
         <Breadcrumbs
           items={[
             { label: 'Home', href: '/' },
-            { label: 'Surveys', href: '/surveys' },
-            { label: survey.name, href: `/surveys/${survey._id}` },
+            { label: 'Admin', href: '/admin' },
+            { label: 'Surveys', href: '/admin/surveys' },
+            { label: survey.name, href: `/admin/surveys/${survey._id}` },
             { label: 'Results' },
           ]}
         />
@@ -106,8 +116,8 @@ export default function SurveyResponsesPage() {
           {summary.responseCount} response{summary.responseCount === 1 ? '' : 's'}.
         </p>
         <p className="mt-3 text-sm">
-          <Link href={`/surveys/${survey._id}`} className="text-[var(--accent)] hover:underline">
-            Answer survey
+          <Link href={`/admin/surveys/${survey._id}`} className="text-[var(--accent)] hover:underline">
+            Design instrument
           </Link>
         </p>
       </header>
@@ -185,9 +195,10 @@ export default function SurveyResponsesPage() {
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Respondent</th>
+                  <th className="px-4 py-3 font-medium">Subject</th>
+                  <th className="px-4 py-3 font-medium">Grade</th>
                   <th className="px-4 py-3 font-medium">Submitted</th>
-                  {survey.questions.map((q) => (
+                  {sheetQuestions.map((q) => (
                     <th key={q.questionId} className="px-4 py-3 font-medium">
                       {q.prompt}
                     </th>
@@ -207,11 +218,28 @@ export default function SurveyResponsesPage() {
                           : '—'}
                       </td>
                       <td className="px-4 py-3">
+                        {response.subjectType && response.subjectId ? (
+                          <Link
+                            href={`/surveys/${survey._id}/subjects/${response.subjectType}/${response.subjectId}/view`}
+                            className="text-[var(--accent)] hover:underline"
+                          >
+                            {response.subjectType}
+                          </Link>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {response.computedScore?.letter
+                          ? `${response.computedScore.letter} (${response.computedScore.percent ?? 0}%)`
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-3">
                         {response.createdAt
                           ? new Date(response.createdAt).toLocaleString()
                           : '—'}
                       </td>
-                      {survey.questions.map((q) => (
+                      {sheetQuestions.map((q) => (
                         <td key={q.questionId} className="px-4 py-3">
                           {byQuestion.get(q.questionId) || '—'}
                         </td>

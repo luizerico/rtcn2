@@ -3,7 +3,7 @@ const User = require('../models/User');
 const Group = require('../models/Group');
 const Permission = require('../models/Permission');
 const StoredFile = require('../models/StoredFile');
-const SurveyResponse = require('../models/assets/SurveyResponse');
+const { purgeInstrumentDependents } = require('./surveyInstrumentService');
 const { KIND_MODELS, ASSET_KINDS, modelForKind } = require('../models/assets');
 const { trashedFilter, isTrashed, clearTrash, activeFilter } = require('./trash');
 const {
@@ -235,7 +235,7 @@ async function purgeBinItem(itemType, id) {
     await purgeFilesForOwner(ownerType, doc._id);
   }
   if (type === 'SURVEY') {
-    await SurveyResponse.deleteMany({ surveyId: doc._id });
+    await purgeInstrumentDependents(doc._id);
   }
   await doc.deleteOne();
   return { itemType: type, _id: String(doc._id) };

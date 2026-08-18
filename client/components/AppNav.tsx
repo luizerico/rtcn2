@@ -39,6 +39,7 @@ type NavIconName =
 const NAV_ICON_BY_HREF: Record<string, NavIconName> = {
   '/': 'home',
   '/surveys': 'surveys',
+  '/admin/surveys': 'surveys',
   '/sponsors': 'sponsors',
   '/opportunities': 'opportunities',
   '/projects': 'projects',
@@ -209,7 +210,9 @@ const links: NavItem[] = [
   {
     href: '/surveys',
     label: 'Surveys',
-    visible: (can) => can('SURVEY:READ', { allowAnyInstance: true }),
+    visible: (can) =>
+      can('SURVEY:READ', { allowAnyInstance: true }) ||
+      can('COUNTY:READ', { allowAnyInstance: true }),
   },
   {
     href: '/sponsors',
@@ -238,6 +241,12 @@ const links: NavItem[] = [
       can('USER:READ') ||
       can('GROUP:READ') ||
       can('LOG:READ'),
+  },
+  {
+    href: '/admin/surveys',
+    label: 'Surveys',
+    indent: true,
+    visible: (can) => can('SURVEY:READ', { allowAnyInstance: true }),
   },
   { href: '/admin/users', label: 'Users', indent: true, visible: (_c, isAdmin) => isAdmin },
   { href: '/admin/groups', label: 'Groups', indent: true, visible: (_c, isAdmin) => isAdmin },

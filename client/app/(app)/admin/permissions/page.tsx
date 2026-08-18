@@ -41,13 +41,11 @@ interface CatalogClass {
 }
 
 const FALLBACK_TABS: CatalogClass[] = [
-  { resourceType: 'DOCUMENT', label: 'Documents', objects: [] },
-  { resourceType: 'DASHBOARD', label: 'Dashboards', objects: [] },
-  { resourceType: 'DATASET', label: 'Datasets', objects: [] },
   { resourceType: 'SURVEY', label: 'Surveys', objects: [] },
   { resourceType: 'SPONSOR', label: 'Sponsors', objects: [] },
   { resourceType: 'OPPORTUNITY', label: 'Opportunities', objects: [] },
   { resourceType: 'PROJECT', label: 'Projects', objects: [] },
+  { resourceType: 'COUNTY', label: 'Counties', objects: [] },
 ];
 
 const PERMISSION_COLUMNS: ColumnDef[] = [

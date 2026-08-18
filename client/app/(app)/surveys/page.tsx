@@ -1,122 +1,161 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { apiDelete, apiGet } from '@/lib/apiUtils';
-import { useToast } from '@/components/ToastProvider';
+import { apiGet } from '@/lib/apiUtils';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
-import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
-import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useAccess } from '@/components/AccessProvider';
-import { AccessPrimaryButton } from '@/components/ui/AccessControls';
+import AnswerSurveyModal from '@/components/surveys/AnswerSurveyModal';
+import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import {
-  AccessIconButton,
   AccessIconLink,
   TableActionRow,
   tableActionRowGroupClass,
 } from '@/components/ui/TableActionIcon';
 import { useColumnVisibility, type ColumnDef } from '@/lib/useColumnVisibility';
 
-interface SurveyRecord {
+type AnswerRow = {
   _id: string;
-  name: string;
-  description?: string;
-  questionCount?: number;
-  createdAt?: string;
+  instrumentId: string;
+  surveyName: string;
+  instrumentType?: string;
+  subjectType: string;
+  subjectId: string;
+  subjectLabel?: string;
+  status: string;
+  revision: number;
   updatedAt?: string;
-  ownerId?: { username?: string; email?: string } | string;
-  createdBy?: { username?: string; email?: string } | string;
-}
+  ownerId?: string | null;
+  computedScore?: { letter?: string; percent?: number };
+};
 
-interface SurveyListResponse {
-  items: SurveyRecord[];
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-  sort: string;
-  order: 'asc' | 'desc';
-  search: string;
-  filters: { createdBy: string | null };
-}
+type SortField = 'surveyName' | 'subjectLabel' | 'status' | 'grade' | 'updatedAt';
 
-type SortField = 'name' | 'createdAt' | 'updatedAt' | 'questionCount';
-
-const SURVEY_COLUMNS: ColumnDef[] = [
-  { id: 'name', label: 'Name', alwaysVisible: true },
-  { id: 'questions', label: 'Questions' },
-  { id: 'owner', label: 'Owner' },
+const COLUMNS: ColumnDef[] = [
+  { id: 'survey', label: 'Survey', alwaysVisible: true },
+  { id: 'subject', label: 'Subject' },
+  { id: 'status', label: 'Status' },
+  { id: 'grade', label: 'Grade' },
   { id: 'updated', label: 'Updated' },
   { id: 'actions', label: 'Actions', alwaysVisible: true },
 ];
 
-function surveyOwnerName(survey: SurveyRecord): string {
-  const pick = (value: SurveyRecord['ownerId']) => {
-    if (value && typeof value === 'object') {
-      return value.username || value.email || null;
-    }
-    return null;
-  };
-  return pick(survey.ownerId) || pick(survey.createdBy) || '—';
+const DEFAULT_FILTERS = {
+  q: '',
+  status: '',
+  subjectType: '',
+};
+
+function canEditSheet(
+  row: AnswerRow,
+  opts: { can: (perm: string, options?: { resourceId?: string }) => boolean; isAdmin: boolean; userId?: string }
+) {
+  if (opts.isAdmin) return true;
+  if (row.status === 'archived') return false;
+  if (opts.can(`${row.subjectType}:WRITE`, { resourceId: row.subjectId })) return true;
+  const ownerEditable = row.status === 'in_progress' || row.status === 'need_changes';
+  return ownerEditable && Boolean(opts.userId) && row.ownerId === opts.userId;
 }
 
-export default function SurveysPage() {
-  const { pushToast } = useToast();
-  const { can, isAdmin } = useAccess();
-  const canCreate = can('SURVEY:CREATE', { classWideOnly: true });
-  const canViewResults = isAdmin;
-  const columns = useMemo(() => SURVEY_COLUMNS, []);
-  const { isVisible, toggle: toggleColumn } = useColumnVisibility('surveys', columns, {
-    enabled: isAdmin,
-  });
-  const [pendingDelete, setPendingDelete] = useState<SurveyRecord | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [data, setData] = useState<SurveyListResponse | null>(null);
+function formatStatus(value: string) {
+  return value.replaceAll('_', ' ');
+}
+
+function compareText(left: string, right: string) {
+  return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+export default function SurveyAnswersWorkspacePage() {
+  const { can, isAdmin, user } = useAccess();
+  const [items, setItems] = useState<AnswerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [answerOpen, setAnswerOpen] = useState(false);
+  const canStart = can('SURVEY:READ', { allowAnyInstance: true });
 
-  const [searchInput, setSearchInput] = useState('');
-  const [createdByInput, setCreatedByInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [createdBy, setCreatedBy] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [applied, setApplied] = useState(DEFAULT_FILTERS);
   const [sort, setSort] = useState<SortField>('updatedAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [showFilters, setShowFilters] = useState(false);
 
-  const loadSurveys = useCallback(async () => {
+  const columns = useMemo(() => COLUMNS, []);
+  const { isVisible, toggle } = useColumnVisibility('survey-answers', columns);
+
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: String(limit),
-        sort,
-        order,
-      });
-      if (search) params.set('search', search);
-      if (createdBy) params.set('createdBy', createdBy);
-
-      const response = await apiGet<SurveyListResponse>(`/surveys?${params.toString()}`);
-      setData(response);
+      const data = await apiGet<{ items: AnswerRow[] }>('/surveys/answers');
+      setItems(Array.isArray(data.items) ? data.items : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load surveys.');
-      setData(null);
+      setError(err instanceof Error ? err.message : 'Failed to load answers.');
+      setItems([]);
     } finally {
       setLoading(false);
     }
-  }, [page, limit, sort, order, search, createdBy]);
+  }, []);
 
   useEffect(() => {
-    loadSurveys();
-  }, [loadSurveys]);
+    void load();
+  }, [load]);
 
-  const handleSearch = (event: FormEvent) => {
+  const statusOptions = useMemo(
+    () => [...new Set(items.map((row) => row.status))].sort(),
+    [items]
+  );
+  const subjectTypeOptions = useMemo(
+    () => [...new Set(items.map((row) => row.subjectType))].sort(),
+    [items]
+  );
+
+  const filtered = useMemo(() => {
+    const query = applied.q.trim().toLowerCase();
+    const next = items.filter((row) => {
+      if (applied.status && row.status !== applied.status) return false;
+      if (applied.subjectType && row.subjectType !== applied.subjectType) return false;
+      if (!query) return true;
+      const haystack = [row.surveyName, row.subjectLabel, row.subjectType, row.status]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+    next.sort((left, right) => {
+      let result = 0;
+      if (sort === 'surveyName') result = compareText(left.surveyName, right.surveyName);
+      else if (sort === 'subjectLabel') {
+        result = compareText(left.subjectLabel || left.subjectId, right.subjectLabel || right.subjectId);
+      } else if (sort === 'status') result = compareText(left.status, right.status);
+      else if (sort === 'grade') {
+        result = (left.computedScore?.percent || 0) - (right.computedScore?.percent || 0);
+      } else {
+        result = new Date(left.updatedAt || 0).getTime() - new Date(right.updatedAt || 0).getTime();
+      }
+      return order === 'asc' ? result : -result;
+    });
+    return next;
+  }, [applied, items, order, sort]);
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit) || 1);
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((currentPage - 1) * limit, currentPage * limit);
+  const hasActiveFilters = Object.values(applied).some(Boolean);
+
+  const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     setPage(1);
-    setSearch(searchInput.trim());
-    setCreatedBy(createdByInput.trim());
+    setApplied({ ...filters });
+  };
+
+  const onReset = () => {
+    setFilters(DEFAULT_FILTERS);
+    setApplied(DEFAULT_FILTERS);
+    setSort('updatedAt');
+    setOrder('desc');
+    setPage(1);
   };
 
   const toggleSort = (field: SortField) => {
@@ -124,134 +163,142 @@ export default function SurveysPage() {
       setOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSort(field);
-      setOrder(field === 'name' ? 'asc' : 'desc');
+      setOrder(field === 'updatedAt' || field === 'grade' ? 'desc' : 'asc');
     }
     setPage(1);
   };
 
-  const handleDelete = async () => {
-    if (!pendingDelete) return;
-    setDeleting(true);
-    try {
-      await apiDelete(`/surveys/${pendingDelete._id}`);
-      pushToast({
-        tone: 'info',
-        title: 'Survey moved to recycle bin',
-        message: 'The survey can be restored from Recycle bin.',
-      });
-      setPendingDelete(null);
-      await loadSurveys();
-    } catch (err) {
-      pushToast({
-        tone: 'error',
-        title: 'Delete failed',
-        message: err instanceof Error ? err.message : 'Could not delete survey.',
-      });
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const sortMark = (field: SortField) => {
+  const sortIndicator = (field: SortField) => {
     if (sort !== field) return '';
     return order === 'asc' ? ' ↑' : ' ↓';
   };
-
-  const items = data?.items || [];
-  const totalPages = data?.totalPages || 0;
-  const total = data?.total || 0;
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Surveys' }]} />
-        <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Surveys</h1>
-        <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">
-          Browse, search, and manage surveys. Create new surveys from the table toolbar.
-        </p>
-      </header>
-
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
-          {error}
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold sm:text-3xl">Surveys</h1>
+            <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">
+              Sheets you can read. Start a new answer, then save a draft or mark it complete.
+            </p>
+          </div>
+          {canStart ? (
+            <button
+              type="button"
+              onClick={() => setAnswerOpen(true)}
+              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
+            >
+              Answer a survey
+            </button>
+          ) : null}
         </div>
-      )}
+      </header>
 
       {showFilters ? (
         <form
-          onSubmit={handleSearch}
-          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3"
+          onSubmit={onSubmit}
+          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3 lg:grid-cols-4"
         >
           <label className="flex flex-col gap-1 text-sm md:col-span-2">
             <span className="text-[var(--muted)]">Search</span>
             <input
-              id="survey-search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Name or description"
+              value={filters.q}
+              onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value }))}
+              placeholder="Survey or subject…"
               className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-[var(--muted)]">Created by (user id)</span>
-            <input
-              id="survey-created-by"
-              value={createdByInput}
-              onChange={(e) => setCreatedByInput(e.target.value)}
-              placeholder="Optional filter"
+            <span className="text-[var(--muted)]">Status</span>
+            <select
+              value={filters.status}
+              onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}
               className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
-            />
+            >
+              <option value="">All</option>
+              {statusOptions.map((value) => (
+                <option key={value} value={value}>
+                  {formatStatus(value)}
+                </option>
+              ))}
+            </select>
           </label>
-          <div className="flex items-end gap-2 md:col-span-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">Subject type</span>
+            <select
+              value={filters.subjectType}
+              onChange={(event) => setFilters((prev) => ({ ...prev, subjectType: event.target.value }))}
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            >
+              <option value="">All</option>
+              {subjectTypeOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-end gap-2 md:col-span-3 lg:col-span-4">
             <button
               type="submit"
               className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
             >
               Apply filters
             </button>
+            <button
+              type="button"
+              onClick={onReset}
+              className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]/40"
+            >
+              Reset
+            </button>
           </div>
         </form>
+      ) : null}
+
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
+          {error}
+        </div>
       ) : null}
 
       <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)]">
           <span>
-            {total === 0 ? '0 surveys' : `${total} survey${total === 1 ? '' : 's'} · page ${page} of ${totalPages || 1}`}
-            {search || createdBy ? ' · filters active' : ''}
+            {loading
+              ? '—'
+              : total === 0
+                ? '0 sheets'
+                : `${total} sheet${total === 1 ? '' : 's'} · page ${currentPage} of ${totalPages}`}
+            {hasActiveFilters ? ' · filters active' : ''}
           </span>
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2">
               <span>Page size</span>
               <select
-                id="survey-limit"
                 value={limit}
-                onChange={(e) => {
-                  setLimit(Number(e.target.value));
+                onChange={(event) => {
+                  setLimit(Number(event.target.value));
                   setPage(1);
                 }}
                 className="rounded-md border border-[var(--border)] bg-white px-2 py-1 text-[var(--foreground)]"
               >
-                {[5, 10, 20, 50].map((size) => (
+                {[10, 25, 50, 100].map((size) => (
                   <option key={size} value={size}>
                     {size}
                   </option>
                 ))}
               </select>
             </label>
-            {canCreate ? (
-              <Link
-                href="/surveys/new"
-                className="inline-flex items-center justify-center rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
-              >
-                Create survey
-              </Link>
-            ) : (
-              <AccessPrimaryButton allowed={false}>Create survey</AccessPrimaryButton>
-            )}
+            <span>
+              Sorted by {sort} ({order})
+            </span>
             <TableOptionsMenu
-              columns={isAdmin ? columns : []}
-              isVisible={isAdmin ? isVisible : undefined}
-              toggle={isAdmin ? toggleColumn : undefined}
+              columns={columns}
+              isVisible={isVisible}
+              toggle={toggle}
               showFilters={showFilters}
               onToggleFilters={() => setShowFilters((prev) => !prev)}
             />
@@ -259,157 +306,127 @@ export default function SurveysPage() {
         </div>
 
         {loading ? (
-          <p className="p-5 text-[var(--muted)]">Loading surveys…</p>
-        ) : items.length === 0 ? (
-          <p className="p-5 text-[var(--muted)]">No surveys match your filters.</p>
+          <p className="p-5 text-[var(--muted)]">Loading answers…</p>
+        ) : pageRows.length === 0 ? (
+          <p className="p-5 text-[var(--muted)]">
+            {items.length === 0 ? 'No answered surveys yet.' : 'No sheets match these filters.'}
+          </p>
         ) : (
-          <>
-            <ul className="divide-y divide-[var(--border)] md:hidden">
-              {items.map((survey) => (
-                <li key={survey._id} className="space-y-3 p-4">
-                  <div>
-                    <p className="font-medium break-words">{survey.name}</p>
-                    <p className="mt-0.5 text-xs text-[var(--muted)]">
-                      {survey.description || '—'}
-                    </p>
-                    <p className="mt-2 text-xs text-[var(--muted)]">
-                      {survey.questionCount ?? 0} questions · Owner: {surveyOwnerName(survey)}
-                    </p>
-                    <p className="text-xs text-[var(--muted)]">
-                      Updated{' '}
-                      {survey.updatedAt ? new Date(survey.updatedAt).toLocaleString() : '—'}
-                    </p>
-                  </div>
-                  <TableActionRow alwaysVisible>
-                    <AccessIconLink
-                      allowed={can('SURVEY:READ', { resourceId: survey._id })}
-                      href={`/surveys/${survey._id}`}
-                      icon="answer"
-                      label="Answer"
-                    />
-                    <AccessIconLink
-                      allowed={canViewResults}
-                      href={`/surveys/${survey._id}/responses`}
-                      icon="results"
-                      label="Results"
-                    />
-                    <AccessIconButton
-                      allowed={can('SURVEY:DELETE', { resourceId: survey._id })}
-                      icon="delete"
-                      label="Delete"
-                      danger
-                      onClick={() => setPendingDelete(survey)}
-                    />
-                  </TableActionRow>
-                </li>
-              ))}
-            </ul>
-
-            <div className="hidden overflow-x-auto md:block">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
-                  <tr>
-                    {isVisible('name') ? (
-                      <th className="px-4 py-3 font-medium">
-                        <button type="button" onClick={() => toggleSort('name')} className="hover:text-[var(--foreground)]">
-                          Name{sortMark('name')}
-                        </button>
-                      </th>
-                    ) : null}
-                    {isVisible('questions') ? (
-                      <th className="px-4 py-3 font-medium">
-                        <button
-                          type="button"
-                          onClick={() => toggleSort('questionCount')}
-                          className="hover:text-[var(--foreground)]"
-                        >
-                          Questions{sortMark('questionCount')}
-                        </button>
-                      </th>
-                    ) : null}
-                    {isVisible('owner') ? <th className="px-4 py-3 font-medium">Owner</th> : null}
-                    {isVisible('updated') ? (
-                      <th className="hidden px-4 py-3 font-medium lg:table-cell">
-                        <button
-                          type="button"
-                          onClick={() => toggleSort('updatedAt')}
-                          className="hover:text-[var(--foreground)]"
-                        >
-                          Updated{sortMark('updatedAt')}
-                        </button>
-                      </th>
-                    ) : null}
-                    {isVisible('actions') ? (
-                      <th className="px-4 py-3 font-medium text-right">Actions</th>
-                    ) : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((survey) => (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b border-[var(--border)] bg-[var(--accent-soft)]/40 text-[var(--muted)]">
+                <tr>
+                  {isVisible('survey') ? (
+                    <th className="px-4 py-3 font-medium">
+                      <button type="button" onClick={() => toggleSort('surveyName')} className="hover:text-[var(--accent)]">
+                        Survey{sortIndicator('surveyName')}
+                      </button>
+                    </th>
+                  ) : null}
+                  {isVisible('subject') ? (
+                    <th className="px-4 py-3 font-medium">
+                      <button type="button" onClick={() => toggleSort('subjectLabel')} className="hover:text-[var(--accent)]">
+                        Subject{sortIndicator('subjectLabel')}
+                      </button>
+                    </th>
+                  ) : null}
+                  {isVisible('status') ? (
+                    <th className="px-4 py-3 font-medium">
+                      <button type="button" onClick={() => toggleSort('status')} className="hover:text-[var(--accent)]">
+                        Status{sortIndicator('status')}
+                      </button>
+                    </th>
+                  ) : null}
+                  {isVisible('grade') ? (
+                    <th className="px-4 py-3 font-medium">
+                      <button type="button" onClick={() => toggleSort('grade')} className="hover:text-[var(--accent)]">
+                        Grade{sortIndicator('grade')}
+                      </button>
+                    </th>
+                  ) : null}
+                  {isVisible('updated') ? (
+                    <th className="px-4 py-3 font-medium">
+                      <button type="button" onClick={() => toggleSort('updatedAt')} className="hover:text-[var(--accent)]">
+                        Updated{sortIndicator('updatedAt')}
+                      </button>
+                    </th>
+                  ) : null}
+                  {isVisible('actions') ? (
+                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((row) => {
+                  const href = `/surveys/${row.instrumentId}/subjects/${row.subjectType}/${row.subjectId}`;
+                  const editable = canEditSheet(row, { can, isAdmin, userId: user?.id });
+                  const score = row.computedScore;
+                  return (
                     <tr
-                      key={survey._id}
+                      key={row._id}
                       className={`border-b border-[var(--border)] last:border-0 ${tableActionRowGroupClass}`}
                     >
-                      {isVisible('name') ? (
+                      {isVisible('survey') ? (
+                        <td className="px-4 py-3 font-medium">{row.surveyName}</td>
+                      ) : null}
+                      {isVisible('subject') ? (
                         <td className="px-4 py-3">
-                          <div className="font-medium">{survey.name}</div>
-                          <div className="text-xs text-[var(--muted)]">{survey.description || '—'}</div>
+                          {row.subjectLabel || row.subjectId}
+                          <span className="block text-xs text-[var(--muted)]">{row.subjectType}</span>
                         </td>
                       ) : null}
-                      {isVisible('questions') ? (
-                        <td className="px-4 py-3">{survey.questionCount ?? 0}</td>
+                      {isVisible('status') ? (
+                        <td className="whitespace-nowrap px-4 py-3">{formatStatus(row.status)}</td>
                       ) : null}
-                      {isVisible('owner') ? (
-                        <td className="px-4 py-3">{surveyOwnerName(survey)}</td>
+                      {isVisible('grade') ? (
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {score?.letter ? `${score.letter} (${score.percent ?? 0}%)` : '—'}
+                        </td>
                       ) : null}
                       {isVisible('updated') ? (
-                        <td className="hidden px-4 py-3 lg:table-cell">
-                          {survey.updatedAt ? new Date(survey.updatedAt).toLocaleString() : '—'}
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : '—'}
                         </td>
                       ) : null}
                       {isVisible('actions') ? (
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <td className="px-4 py-3 text-right">
                           <TableActionRow>
                             <AccessIconLink
-                              allowed={can('SURVEY:READ', { resourceId: survey._id })}
-                              href={`/surveys/${survey._id}`}
-                              icon="answer"
-                              label="Answer"
+                              allowed
+                              href={`${href}/view`}
+                              icon="view"
+                              label="View"
                             />
                             <AccessIconLink
-                              allowed={canViewResults}
-                              href={`/surveys/${survey._id}/responses`}
-                              icon="results"
-                              label="Results"
-                            />
-                            <AccessIconButton
-                              allowed={can('SURVEY:DELETE', { resourceId: survey._id })}
-                              icon="delete"
-                              label="Delete"
-                              danger
-                              onClick={() => setPendingDelete(survey)}
+                              allowed={editable}
+                              href={href}
+                              icon="edit"
+                              label="Edit"
+                              reason="You cannot edit this sheet."
                             />
                           </TableActionRow>
                         </td>
                       ) : null}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
 
         <div className="flex flex-col gap-3 border-t border-[var(--border)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[var(--muted)]">
-            {total === 0
-              ? '0 surveys'
-              : `Showing page ${data?.page || page} of ${totalPages} (${total} total)`}
+            {loading
+              ? '—'
+              : total === 0
+                ? '0 sheets'
+                : `Showing page ${currentPage} of ${totalPages} (${total} total)`}
           </p>
           <div className="flex gap-2">
             <button
               type="button"
-              disabled={page <= 1 || loading}
+              disabled={currentPage <= 1 || loading}
               onClick={() => setPage((prev) => Math.max(1, prev - 1))}
               className="rounded-md border border-[var(--border)] px-3 py-1.5 disabled:opacity-50"
             >
@@ -417,7 +434,7 @@ export default function SurveysPage() {
             </button>
             <button
               type="button"
-              disabled={totalPages === 0 || page >= totalPages || loading}
+              disabled={currentPage >= totalPages || loading}
               onClick={() => setPage((prev) => prev + 1)}
               className="rounded-md border border-[var(--border)] px-3 py-1.5 disabled:opacity-50"
             >
@@ -427,20 +444,7 @@ export default function SurveysPage() {
         </div>
       </section>
 
-      <ConfirmDeleteDialog
-        isOpen={Boolean(pendingDelete)}
-        onClose={() => setPendingDelete(null)}
-        onConfirm={handleDelete}
-        title="Move to recycle bin"
-        itemLabel={pendingDelete?.name}
-        description={
-          pendingDelete
-            ? `Move “${pendingDelete.name}” to the recycle bin? An administrator can restore it later.`
-            : undefined
-        }
-        confirmLabel="Move to bin"
-        busy={deleting}
-      />
+      <AnswerSurveyModal isOpen={answerOpen} onClose={() => setAnswerOpen(false)} />
     </div>
   );
 }

@@ -15,14 +15,16 @@ const {
  */
 async function migrateObjectToAsset(mongooseConnection) {
   await Permission.deleteMany({
-    resourceType: { $in: ['OBJECT', 'ASSET', 'SURVEY_RESPONSE'] },
+    resourceType: {
+      $in: ['OBJECT', 'ASSET', 'SURVEY_RESPONSE', 'DOCUMENT', 'DASHBOARD', 'DATASET'],
+    },
   });
 
   // Legacy: shared assets/objects collections are no longer used.
-  // Concrete types live in documents/dashboards/datasets/surveys/survey_responses.
+  // Concrete types live in surveys/sponsors/opportunities/projects.
   try {
     const db = mongooseConnection.db;
-    for (const name of ['objects', 'assets', 'questions']) {
+    for (const name of ['objects', 'assets']) {
       const existing = await db.listCollections({ name }).toArray();
       if (existing.length) {
         console.warn(

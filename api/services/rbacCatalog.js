@@ -1,6 +1,7 @@
 const Group = require('../models/Group');
 const User = require('../models/User');
 const Permission = require('../models/Permission');
+const County = require('../models/geo/County');
 const { findAssets } = require('../models/assets');
 const {
   RESOURCE_TYPE_LABELS,
@@ -76,10 +77,16 @@ async function resolvePrincipalNames(rows) {
   return { userNameById, groupNameById };
 }
 
-async function listAllPermissions() {
-  const permissions = await Permission.find({
+async function listAllPermissions(filters = {}) {
+  const query = {
     resourceType: { $in: PERMISSION_RESOURCE_TYPES },
-  })
+  };
+  const principalType = String(filters.principalType || '').toUpperCase();
+  const principalId = String(filters.principalId || '').trim();
+  if (principalType) query.principalType = principalType;
+  if (principalId) query.principalId = principalId;
+
+  const permissions = await Permission.find(query)
     .sort({ resourceType: 1, target: 1, permission: 1 })
     .lean();
 
@@ -115,7 +122,7 @@ async function listAllPermissions() {
 }
 
 async function listPermissionCatalog() {
-  const [users, groups, assets] = await Promise.all([
+  const [users, groups, assets, counties] = await Promise.all([
     User.find({ deletedAt: null }).select('username email').sort({ username: 1 }).lean(),
     Group.find({ deletedAt: null }).select('name').sort({ name: 1 }).lean(),
     findAssets(
@@ -128,25 +135,39 @@ async function listPermissionCatalog() {
         sort: { name: 1 },
       }
     ),
+    County.find({ isDeleted: { $ne: true } }).select('name IBGECode').sort({ name: 1 }).lean(),
   ]);
 
-  const classes = PERMISSION_RESOURCE_TYPES.map((kind) => ({
-    resourceType: kind,
-    label: RESOURCE_TYPE_LABELS[kind] || kind,
-    objects: assets
-      .filter((asset) => String(asset.kind).toUpperCase() === kind)
-      .map((asset) => {
-        const owner =
-          userDisplayName(asset.ownerId) || userDisplayName(asset.createdBy) || null;
-        return {
-          id: String(asset._id),
-          name: asset.name,
-          label: asset.name,
-          owner,
-          detail: owner ? `Owner: ${owner}` : undefined,
-        };
-      }),
-  }));
+  const classes = PERMISSION_RESOURCE_TYPES.map((kind) => {
+    if (kind === 'COUNTY') {
+      return {
+        resourceType: kind,
+        label: RESOURCE_TYPE_LABELS[kind] || kind,
+        objects: counties.map((county) => ({
+          id: String(county._id),
+          name: county.name,
+          label: county.IBGECode ? `${county.name} (${county.IBGECode})` : county.name,
+        })),
+      };
+    }
+    return {
+      resourceType: kind,
+      label: RESOURCE_TYPE_LABELS[kind] || kind,
+      objects: assets
+        .filter((asset) => String(asset.kind).toUpperCase() === kind)
+        .map((asset) => {
+          const owner =
+            userDisplayName(asset.ownerId) || userDisplayName(asset.createdBy) || null;
+          return {
+            id: String(asset._id),
+            name: asset.name,
+            label: asset.name,
+            owner,
+            detail: owner ? `Owner: ${owner}` : undefined,
+          };
+        }),
+    };
+  });
 
   return {
     classes,

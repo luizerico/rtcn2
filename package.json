@@ -17,7 +17,8 @@
     "api:only": "node api/server.js",
     "db:init": "node api/database-init.js",
     "db:seed-geo": "node api/scripts/seed-geo.js",
-    "db:import-data": "node api/scripts/import-sample-data.js"
+    "db:import-data": "node api/scripts/import-sample-data.js",
+    "db:embed-questions": "node api/scripts/embed-survey-questions.js"
   },
   "license": "ISC",
   "dependencies": {

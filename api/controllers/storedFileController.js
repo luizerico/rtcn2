@@ -53,7 +53,9 @@ async function pipeDownload(res, doc) {
 function createOwnerFileHandlers(ownerType) {
   const list = asyncHandler(async (req, res) => {
     try {
-      const items = await listFilesForOwner(ownerType, req.params.id);
+      const items = await listFilesForOwner(ownerType, req.params.id, {
+        questionId: req.query?.questionId,
+      });
       return res.json({ items });
     } catch (error) {
       return handleFileError(res, error, 'Failed to list files.');
@@ -68,6 +70,7 @@ function createOwnerFileHandlers(ownerType) {
         files: req.files && req.files.length ? req.files : req.file,
         displayNames: req.body?.displayName,
         obs: req.body?.obs,
+        questionId: req.body?.questionId,
         userId: req.user._id,
       });
       return res.status(201).json({ items: docs.map(serializeStoredFile) });

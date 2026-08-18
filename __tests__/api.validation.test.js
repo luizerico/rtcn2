@@ -116,7 +116,10 @@ describe('route schemas', () => {
     );
     expect(() => createAssetBody({ body: { kind: 'PROJECT', name: 'x' } })).toThrow(/projects API/);
     expect(() => createAssetBody({ body: { kind: 'WIDGET', name: 'x' } })).toThrow(/Invalid asset kind/);
-    expect(createAssetBody({ body: { name: ' Doc ' } }).kind).toBe('DOCUMENT');
+    expect(() => createAssetBody({ body: { name: ' Doc ' } })).toThrow(/Invalid asset kind/);
+    expect(() => createAssetBody({ body: { name: 'Doc', kind: 'DOCUMENT' } })).toThrow(
+      /Invalid asset kind/
+    );
   });
 });
 

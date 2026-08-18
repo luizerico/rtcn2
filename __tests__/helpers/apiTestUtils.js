@@ -67,6 +67,48 @@ async function seedUnprivilegedUser({
   return { user, password };
 }
 
+/**
+ * Seed a Region → State → County chain for subject-scoped survey tests.
+ */
+async function seedCounty({
+  name = 'Testville',
+  regionCode,
+  stateCode,
+  region: existingRegion,
+  state: existingState,
+  biome,
+  microregion,
+  IBGECode,
+} = {}) {
+  const crypto = require('crypto');
+  const Region = require('../../api/models/geo/Region');
+  const State = require('../../api/models/geo/State');
+  const County = require('../../api/models/geo/County');
+  const suffix = crypto.randomBytes(3).toString('hex');
+  const region =
+    existingRegion ||
+    (await Region.create({
+      code: regionCode || `R${suffix}`,
+      name: 'Test Region',
+    }));
+  const state =
+    existingState ||
+    (await State.create({
+      code: stateCode || `S${suffix}`,
+      name: 'TS',
+      region: region._id,
+    }));
+  const county = await County.create({
+    name,
+    state: state._id,
+    region: region._id,
+    ...(biome ? { biome: biome._id || biome } : {}),
+    ...(microregion ? { microregion: microregion._id || microregion } : {}),
+    ...(IBGECode ? { IBGECode } : {}),
+  });
+  return { region, state, county };
+}
+
 module.exports = {
   connectTestDatabase,
   disconnectTestDatabase,
@@ -74,4 +116,5 @@ module.exports = {
   createTestApp,
   seedAdminUser,
   seedUnprivilegedUser,
+  seedCounty,
 };

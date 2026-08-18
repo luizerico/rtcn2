@@ -12,7 +12,8 @@ const {
 const { PERMISSION_RESOURCE_TYPES } = require('../constants/rbac');
 
 const PERMISSION_SCOPES = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
-const ASSET_KINDS = ['DOCUMENT', 'DASHBOARD', 'DATASET'];
+/** No kinds are created via POST /api/assets; dedicated APIs own remaining types. */
+const GENERIC_CREATE_KINDS = [];
 
 /** Auth: POST /api/auth/register */
 function registerBody(req) {
@@ -150,11 +151,11 @@ const DEDICATED_ASSET_APIS = {
 /** Assets: POST /api/assets */
 function createAssetBody(req) {
   const name = nonEmptyString(req.body?.name, 'Asset name', { maxLength: 200 });
-  const kind = String(req.body?.kind || 'DOCUMENT').toUpperCase();
+  const kind = String(req.body?.kind || '').toUpperCase();
   if (DEDICATED_ASSET_APIS[kind]) {
     throw new ValidationError(DEDICATED_ASSET_APIS[kind]);
   }
-  if (!ASSET_KINDS.includes(kind)) {
+  if (!kind || !GENERIC_CREATE_KINDS.includes(kind)) {
     throw new ValidationError('Invalid asset kind.');
   }
   return {
@@ -178,7 +179,7 @@ function paramObjectId(paramName = 'id', label) {
 
 module.exports = {
   PERMISSION_SCOPES,
-  ASSET_KINDS,
+  GENERIC_CREATE_KINDS,
   registerBody,
   loginBody,
   changePasswordBody,

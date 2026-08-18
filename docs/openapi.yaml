@@ -270,7 +270,7 @@ components:
           example: [READ, WRITE]
         resourceType:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+          enum: [SURVEY, SPONSOR, OPPORTUNITY, PROJECT, COUNTY]
         allObjects:
           type: boolean
           description: When true, grants class-wide (*) access for this group only.
@@ -294,7 +294,7 @@ components:
       properties:
         resourceType:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+          enum: [SURVEY, SPONSOR, OPPORTUNITY, PROJECT, COUNTY]
         allObjects:
           type: boolean
           description: When true, replaces class-wide (*) ACL rows for this resource type.
@@ -335,7 +335,7 @@ components:
           type: string
         resourceType:
           type: string
-          enum: [USER, GROUP, ASSET, DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+          enum: [SURVEY, SPONSOR, OPPORTUNITY, PROJECT, COUNTY]
         resourceId:
           type: string
           nullable: true
@@ -358,10 +358,10 @@ components:
           type: string
         kind:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+          enum: [SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
         assetType:
           type: string
-          enum: [Document, Dashboard, Dataset, Survey, Sponsor, Opportunity, Project]
+          enum: [Survey, Sponsor, Opportunity, Project]
         createdBy:
           type: string
         updatedBy:
@@ -375,29 +375,38 @@ components:
 
     CreateAssetRequest:
       type: object
+      description: >
+        Generic asset create is retired. POST /api/assets rejects all kinds;
+        use the dedicated surveys, sponsors, opportunities, or projects APIs.
       required: [name]
       properties:
         name:
           type: string
-          example: Billing Doc
+          example: Policy Survey
         description:
           type: string
         kind:
           type: string
-          enum: [DOCUMENT, DASHBOARD, DATASET]
-          default: DOCUMENT
+          description: Any kind is rejected. Dedicated types return a pointer to their API.
 
     SurveyQuestion:
       type: object
       required: [prompt, type]
       properties:
+        _id:
+          type: string
+          description: Preserved question ObjectId. Omit on create to mint a new id.
         questionId:
+          type: string
+        code:
+          type: string
+        area:
           type: string
         prompt:
           type: string
         type:
           type: string
-          enum: [text, multiple_choice, yes_no]
+          enum: [score, text, multiple_choice, yes_no]
         options:
           type: array
           items:
@@ -405,24 +414,154 @@ components:
         required:
           type: boolean
           default: true
+        evidence:
+          type: string
+        criteria:
+          type: string
+        maxPoints:
+          type: number
+        weight:
+          type: number
+        todo:
+          type: string
+        revision:
+          type: integer
+          minimum: 1
+        questionRevision:
+          type: integer
+          minimum: 1
 
     CreateSurveyRequest:
       type: object
-      required: [name, questions]
+      required: [name]
       properties:
         name:
           type: string
         description:
           type: string
+        instrumentType:
+          type: string
+          enum: [poll, scored_diagnostic]
+          default: poll
         questions:
           type: array
           items:
             $ref: '#/components/schemas/SurveyQuestion'
+        countyIds:
+          type: array
+          items:
+            type: string
+          description: Counties that may open sheets for this instrument. Empty means no county sheets.
+
+    SetSurveyActiveVersionRequest:
+      type: object
+      properties:
+        versionId:
+          type: string
+          description: Instrument version id to use for new answers.
+        version:
+          type: integer
+          minimum: 1
+          description: Published version number. Used when versionId is omitted.
+      description: Provide versionId or version. Existing sheets keep the version they were started on.
+
+    InstrumentVersionSummary:
+      type: object
+      properties:
+        _id:
+          type: string
+        version:
+          type: integer
+        publishedAt:
+          type: string
+          format: date-time
+        active:
+          type: boolean
+          description: True when this snapshot is used for new answers.
+
+    AssignSurveyCountiesRequest:
+      type: object
+      required: [countyIds]
+      properties:
+        countyIds:
+          type: array
+          items:
+            type: string
+          description: Counties that may open sheets. Saving this list does not publish a new version.
+        versionId:
+          type: string
+          description: Published version for newly added counties. Existing assignments keep their version.
+
+    BulkSurveyCountiesRequest:
+      type: object
+      required: [action, geoType, geoId]
+      properties:
+        action:
+          type: string
+          enum: [assign, unassign]
+        geoType:
+          type: string
+          enum: [region, state, biome, microregion, county]
+        geoId:
+          type: string
+          description: Region, state, biome, microregion, or county id. Server resolves matching county ids.
+        countyIds:
+          type: array
+          items:
+            type: string
+          description: >
+            Optional on bulk confirm. When present, only these ids that also belong to the
+            resolved geography are assigned or unassigned. Extra ids outside that set are
+            ignored. Omitted means apply every county in the geography. Preview ignores this field.
+        versionId:
+          type: string
+          description: On assign, published version for newly added counties. Ignored on unassign.
+
+    BulkSurveyCountiesPreviewResponse:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [assign, unassign]
+        geoType:
+          type: string
+          enum: [region, state, biome, microregion, county]
+        geoId:
+          type: string
+        counties:
+          type: array
+          items:
+            type: object
+            properties:
+              _id:
+                type: string
+              name:
+                type: string
+              IBGECode:
+                type: string
+              code:
+                type: string
+        addCount:
+          type: integer
+          description: Counties that would be added (assign preview).
+        removeCount:
+          type: integer
+          description: Counties that would be removed (unassign preview).
 
     SubmitSurveyResponseRequest:
       type: object
       required: [answers]
       properties:
+        subjectType:
+          type: string
+          enum: [COUNTY, PROJECT, OPPORTUNITY, SPONSOR]
+        subjectId:
+          type: string
+        status:
+          type: string
+          enum: [in_progress, pending, need_changes, approved, archived]
+        partial:
+          type: boolean
         answers:
           type: array
           items:
@@ -432,7 +571,11 @@ components:
               questionId:
                 type: string
               value:
-                description: Text, Yes/No, or multiple-choice option
+                description: Number for score items; text or option for poll types
+              obs:
+                type: string
+              evidenceFileId:
+                type: string
 
     Sponsor:
       allOf:
@@ -638,11 +781,15 @@ components:
           type: string
         ownerType:
           type: string
-          enum: [opportunity, project, sponsor]
+          enum: [opportunity, project, sponsor, instrument_response]
         ownerId:
           type: string
         obs:
           type: string
+        questionId:
+          type: string
+          nullable: true
+          description: Survey question id when the file is evidence on an instrument response
         storageDriver:
           type: string
           enum: [tmp, azure, aws, gcs]
@@ -674,7 +821,7 @@ components:
       properties:
         itemType:
           type: string
-          enum: [FILE, USER, GROUP, DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+          enum: [FILE, USER, GROUP, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
         _id:
           type: string
         name:
@@ -1959,6 +2106,18 @@ paths:
       operationId: listPermissions
       security:
         - bearerAuth: []
+      parameters:
+        - in: query
+          name: principalType
+          schema:
+            type: string
+            enum: [USER, GROUP]
+          description: Optional filter to a principal kind
+        - in: query
+          name: principalId
+          schema:
+            type: string
+          description: Optional filter to a user or group id
       responses:
         '200':
           description: All permission rows for management screens
@@ -2009,7 +2168,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+            enum: [SURVEY, SPONSOR, OPPORTUNITY, PROJECT, COUNTY]
         - in: query
           name: allObjects
           schema:
@@ -2142,7 +2301,10 @@ paths:
           description: Unauthorized
     post:
       tags: [Assets]
-      summary: Create asset
+      summary: Create asset (retired)
+      description: >
+        Generic asset create is retired. Always returns 400. Use the dedicated
+        surveys, sponsors, opportunities, or projects APIs.
       operationId: createAsset
       security:
         - bearerAuth: []
@@ -2153,14 +2315,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateAssetRequest'
       responses:
-        '201':
-          description: Asset created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AssetResource'
         '400':
-          description: Validation error
+          description: Validation error — no generic create kinds remain
         '401':
           description: Unauthorized
 
@@ -2260,7 +2416,7 @@ paths:
           name: search
           schema:
             type: string
-          description: Case-insensitive search on name and description
+          description: Case-insensitive search on name, description, and question code/prompt/area
         - in: query
           name: q
           schema:
@@ -2285,7 +2441,7 @@ paths:
           description: Filter by creator user id
       responses:
         '200':
-          description: Paginated survey list
+          description: Paginated survey list (items omit the questions array; use GET by id for full questions)
           content:
             application/json:
               schema:
@@ -2319,7 +2475,7 @@ paths:
           description: Unauthorized
     post:
       tags: [Surveys]
-      summary: Create a survey asset with questions
+      summary: Create a versioned survey instrument
       operationId: createSurvey
       security:
         - bearerAuth: []
@@ -2334,6 +2490,19 @@ paths:
           description: Survey created
         '400':
           description: Validation error
+        '401':
+          description: Unauthorized
+
+  /api/surveys/answers:
+    get:
+      tags: [Surveys]
+      summary: List answer sheets the caller can read via subject RBAC
+      operationId: listAccessibleAnswers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Answer sheets with survey name and subject label
         '401':
           description: Unauthorized
 
@@ -2392,10 +2561,229 @@ paths:
         '200':
           description: Deleted
 
+  /api/surveys/{id}/counties:
+    get:
+      tags: [Surveys]
+      summary: List counties assigned to this instrument
+      operationId: listSurveyCounties
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: q
+          schema:
+            type: string
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: regionId
+          schema:
+            type: string
+        - in: query
+          name: stateId
+          schema:
+            type: string
+        - in: query
+          name: biomeId
+          schema:
+            type: string
+        - in: query
+          name: microregionId
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 25
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [name, code, IBGECode]
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Paginated assigned counties
+        '403':
+          description: Missing SURVEY:READ
+        '404':
+          description: Survey not found
+    put:
+      tags: [Surveys]
+      summary: Assign counties without publishing a new instrument version
+      operationId: updateSurveyCounties
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignSurveyCountiesRequest'
+      responses:
+        '200':
+          description: County assignment updated; currentVersion unchanged
+        '403':
+          description: Missing SURVEY:WRITE
+        '404':
+          description: Survey not found
+
+  /api/surveys/{id}/counties/{countyId}:
+    put:
+      tags: [Surveys]
+      summary: Set which published version a county uses for new answers
+      operationId: setSurveyCountyVersion
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: countyId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSurveyActiveVersionRequest'
+      responses:
+        '200':
+          description: County version updated
+        '400':
+          description: County already has a sheet on another version, or is not assigned
+        '403':
+          description: Missing SURVEY:WRITE
+        '404':
+          description: Survey or version not found
+
+  /api/surveys/{id}/counties/bulk/preview:
+    post:
+      tags: [Surveys]
+      summary: Preview counties that a bulk assign or unassign would change
+      operationId: previewSurveyCounties
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkSurveyCountiesRequest'
+      responses:
+        '200':
+          description: Read-only preview; countyIds are not changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkSurveyCountiesPreviewResponse'
+        '400':
+          description: Invalid action, geoType, or geoId
+        '403':
+          description: Missing SURVEY:READ
+        '404':
+          description: Survey or geography unit not found
+
+  /api/surveys/{id}/counties/bulk:
+    post:
+      tags: [Surveys]
+      summary: Assign or unassign counties in a geography unit, optionally a pruned subset
+      operationId: bulkUpdateSurveyCounties
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkSurveyCountiesRequest'
+      responses:
+        '200':
+          description: County assignment updated; currentVersion unchanged
+        '400':
+          description: Invalid action, geoType, geoId, or countyIds
+        '403':
+          description: Missing SURVEY:WRITE
+        '404':
+          description: Survey or geography unit not found
+
+  /api/surveys/{id}/answerable-counties:
+    get:
+      tags: [Surveys]
+      summary: Assigned counties the caller can start answering (CREATE, no existing sheet)
+      operationId: listAnswerableCounties
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 25
+      responses:
+        '200':
+          description: Paginated counties
+        '403':
+          description: Missing SURVEY:READ
+
   /api/surveys/{id}/responses:
     get:
       tags: [Surveys]
-      summary: List responses and visualization summary (admin only)
+      summary: List sheets the caller can read via COUNTY or associated asset RBAC
       operationId: listSurveyResponses
       security:
         - bearerAuth: []
@@ -2408,9 +2796,11 @@ paths:
       responses:
         '200':
           description: Responses and summary
+        '403':
+          description: Missing SURVEY:READ on this instrument
     post:
       tags: [Surveys]
-      summary: Submit survey answers (requires SURVEY:READ)
+      summary: Upsert a subject sheet (subject CREATE to start, WRITE or owner to edit)
       operationId: submitSurveyResponse
       security:
         - bearerAuth: []
@@ -2431,6 +2821,230 @@ paths:
           description: Response saved
         '400':
           description: Validation error
+        '403':
+          description: Missing SURVEY:READ, subject CREATE, or edit rights
+
+  /api/surveys/{id}/publish:
+    post:
+      tags: [Surveys]
+      summary: Publish an immutable instrument version
+      operationId: publishSurvey
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Instrument published
+        '400':
+          description: Cannot publish without questions
+
+  /api/surveys/{id}/active-version:
+    put:
+      tags: [Surveys]
+      summary: Choose which published version new answers use
+      operationId: setSurveyActiveVersion
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSurveyActiveVersionRequest'
+      responses:
+        '200':
+          description: Active version updated; existing sheets are unchanged
+        '400':
+          description: Missing or invalid version
+        '403':
+          description: Missing SURVEY:WRITE
+        '404':
+          description: Survey or version not found
+
+  /api/surveys/{id}/subjects/{subjectType}/{subjectId}:
+    get:
+      tags: [Surveys]
+      summary: Read the current sheet for a subject
+      operationId: getSubjectResponse
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: subjectType
+          required: true
+          schema:
+            type: string
+            enum: [COUNTY, PROJECT, OPPORTUNITY, SPONSOR]
+        - in: path
+          name: subjectId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current sheet or empty in-progress draft
+        '403':
+          description: Missing subject READ
+    put:
+      tags: [Surveys]
+      summary: Upsert the current sheet for a subject (CREATE to start; WRITE or owner to edit)
+      operationId: putSubjectResponse
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: subjectType
+          required: true
+          schema:
+            type: string
+            enum: [COUNTY, PROJECT, OPPORTUNITY, SPONSOR]
+        - in: path
+          name: subjectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitSurveyResponseRequest'
+      responses:
+        '200':
+          description: Sheet saved
+        '403':
+          description: Missing SURVEY:READ, subject CREATE, WRITE, or owner edit rights
+
+  /api/surveys/{id}/subjects/{subjectType}/{subjectId}/revisions:
+    get:
+      tags: [Surveys]
+      summary: List revision snapshots for a subject sheet
+      operationId: listSubjectRevisions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: subjectType
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: subjectId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Revision timeline
+
+  /api/surveys/{id}/subjects/{subjectType}/{subjectId}/files:
+    get:
+      tags: [Surveys, Files]
+      summary: List evidence files for a subject sheet
+      operationId: listSubjectResponseFiles
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: subjectType
+          required: true
+          schema:
+            type: string
+            enum: [COUNTY, PROJECT, OPPORTUNITY, SPONSOR]
+        - in: path
+          name: subjectId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: questionId
+          required: false
+          schema: { type: string }
+          description: Limit the list to files attached to one question
+      responses:
+        '200':
+          description: File metadata list
+        '404':
+          description: Sheet not saved yet
+    post:
+      tags: [Surveys, Files]
+      summary: Upload evidence files onto a saved subject sheet
+      operationId: uploadSubjectResponseFile
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: subjectType
+          required: true
+          schema:
+            type: string
+            enum: [COUNTY, PROJECT, OPPORTUNITY, SPONSOR]
+        - in: path
+          name: subjectId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                displayName:
+                  type: array
+                  items:
+                    type: string
+                obs:
+                  type: string
+                questionId:
+                  type: string
+                  description: Question that this evidence belongs to
+      responses:
+        '201':
+          description: Files stored
+        '400':
+          description: Unsupported type or validation error
+        '404':
+          description: Sheet not saved yet
 
   /api/sponsors:
     get:
@@ -2685,7 +3299,7 @@ paths:
           description: Opportunity not found
     post:
       tags: [Opportunities, Files]
-      summary: Upload PDF, DOCX, or image files onto an opportunity
+      summary: Upload PDF, Word, Excel, or image files onto an opportunity
       operationId: uploadOpportunityFile
       security:
         - bearerAuth: []
@@ -2715,6 +3329,9 @@ paths:
                 obs:
                   type: string
                   description: Optional notes applied to every file in the upload
+                questionId:
+                  type: string
+                  description: Optional survey question id when attaching evidence to a sheet
       responses:
         '201':
           description: Files stored
@@ -2842,7 +3459,7 @@ paths:
           name: type
           schema:
             type: string
-            enum: [FILE, USER, GROUP, DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+            enum: [FILE, USER, GROUP, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
       responses:
         '200':
           description: Trashed items
@@ -2882,7 +3499,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [FILE, USER, GROUP, DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+            enum: [FILE, USER, GROUP, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
         - in: path
           name: id
           required: true
@@ -2914,7 +3531,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [FILE, USER, GROUP, DOCUMENT, DASHBOARD, DATASET, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
+            enum: [FILE, USER, GROUP, SURVEY, SPONSOR, OPPORTUNITY, PROJECT]
         - in: path
           name: id
           required: true
@@ -3666,6 +4283,11 @@ paths:
           schema:
             type: string
         - in: query
+          name: search
+          schema:
+            type: string
+          description: Alias for q
+        - in: query
           name: regionId
           schema:
             type: string
@@ -3716,6 +4338,25 @@ paths:
           description: Not authenticated
         '404':
           description: Not found
+
+  /api/counties/{id}/instruments:
+    get:
+      tags: [Counties]
+      summary: List published instruments and this county's current sheets
+      operationId: listCountyInstruments
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Instruments with optional current response
+        '403':
+          description: Missing COUNTY:READ
 
   /api/counties/{id}/emissions:
     get:

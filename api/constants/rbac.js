@@ -5,22 +5,21 @@ const IDENTITY_RESOURCE_TYPES = ['USER', 'GROUP', 'LOG'];
 const PRINCIPAL_TYPES = ['USER', 'GROUP'];
 
 /**
- * Permissions apply only to Asset subclasses.
- * USER and GROUP are not assets and are not stored as permission resource types.
+ * COUNTY is a geo subject (seeded catalog), not an Asset kind.
+ * USER and GROUP are principals only — never resourceType values.
  */
-const RESOURCE_TYPES = [...ASSET_KINDS];
-const PERMISSION_RESOURCE_TYPES = [...ASSET_KINDS];
+const SUBJECT_RESOURCE_TYPES = ['COUNTY'];
+const RESOURCE_TYPES = [...ASSET_KINDS, ...SUBJECT_RESOURCE_TYPES];
+const PERMISSION_RESOURCE_TYPES = [...RESOURCE_TYPES];
 
 const ACTIONS = ['READ', 'WRITE', 'CREATE', 'DELETE', 'ADMIN'];
 
 const RESOURCE_TYPE_LABELS = {
-  DOCUMENT: 'Documents',
-  DASHBOARD: 'Dashboards',
-  DATASET: 'Datasets',
   SURVEY: 'Surveys',
   SPONSOR: 'Sponsors',
   OPPORTUNITY: 'Opportunities',
   PROJECT: 'Projects',
+  COUNTY: 'Counties',
 };
 
 const ACTION_LABELS = {
@@ -94,6 +93,7 @@ module.exports = {
   RESOURCE_TYPE_LABELS,
   ACTION_LABELS,
   ASSET_KINDS,
+  SUBJECT_RESOURCE_TYPES,
   buildFullAdminPermissions,
   parsePermissionString,
   actionIsAllowed,
