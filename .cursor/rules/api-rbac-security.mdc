@@ -10,7 +10,8 @@ alwaysApply: false
 
 - Mount under `/api/*` via `api/app.js`
 - Protect with `protect`, then `authorize('RESOURCE:ACTION')` or `requireAdmin` for admin-group-only routes
-- Valid authorize resources for assets: `SURVEY`, `SPONSOR`, `OPPORTUNITY`, `PROJECT`. COUNTY is a subject, not an Asset kind. **USER and GROUP are not Asset subclasses and are never permission `resourceType` values.**
+- Valid authorize resources for assets: `SURVEY`, `SPONSOR`, `OPPORTUNITY`, `PROJECT`, `LOCALPLAN`. COUNTY is a subject, not an Asset kind. **USER and GROUP are not Asset subclasses and are never permission `resourceType` values.**
+- Local plans are county-scoped: `LOCALPLAN:READ` plus `COUNTY:READ` to view the default plan; `LOCALPLAN:WRITE` is required to open non-default drafts. Create requires `LOCALPLAN:CREATE` and an approved COUNTY survey sheet.
 - Identity admin routes still use `authorize('USER:…')` / `authorize('GROUP:…')`; those resolve via **admin group membership**, not permission rows.
 - Principals on asset grants: `USER` or `GROUP` (`principalType` + `principalId`) — who receives access, not what is secured.
 - Grant access to all objects of an asset class (`*`) or specific asset ids. Questions are not permission resources (`SURVEY:WRITE` edits the catalog/instrument). Survey **answers** are gated by the subject: `COUNTY:READ` (or PROJECT/…) to view, `CREATE` to start a sheet, `WRITE` to edit an existing sheet. Sheet owners can edit while status is `in_progress` or `need_changes`. `DELETE` (or the owner while `in_progress` / `need_changes`) moves the sheet to the recycle bin. Only admins can see or set `archived`.

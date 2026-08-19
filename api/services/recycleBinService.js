@@ -291,6 +291,8 @@ async function purgeBinItem(itemType, id) {
     await purgeFilesForOwner(ownerType, doc._id);
   }
   if (type === 'SURVEY') {
+    const { assertSurveyPurgeAllowed } = require('./localPlanService');
+    await assertSurveyPurgeAllowed(doc._id);
     await purgeInstrumentDependents(doc._id);
   }
   await doc.deleteOne();

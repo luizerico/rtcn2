@@ -9,6 +9,7 @@ const ASSET_KINDS = [
   'SPONSOR',
   'OPPORTUNITY',
   'PROJECT',
+  'LOCALPLAN',
 ];
 
 /** Human-readable type labels stored on documents as assetType (not discriminators). */
@@ -17,6 +18,7 @@ const ASSET_TYPE_LABELS = {
   SPONSOR: 'Sponsor',
   OPPORTUNITY: 'Opportunity',
   PROJECT: 'Project',
+  LOCALPLAN: 'Local plan',
 };
 
 /** @deprecated Use ASSET_TYPE_LABELS — kept as alias for older imports. */

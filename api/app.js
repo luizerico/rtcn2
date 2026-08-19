@@ -59,6 +59,7 @@ function createApp({ fallback } = {}) {
   app.use('/api/organizations', require('./routes/organizationRoutes'));
   app.use('/api/assets', assetRoutes);
   app.use('/api/surveys', surveyRoutes);
+  app.use('/api/localplans', require('./routes/localPlanRoutes'));
   app.use('/api/sponsors', require('./routes/sponsorRoutes'));
   app.use('/api/opportunities', require('./routes/opportunityRoutes'));
   app.use('/api/files', require('./routes/storedFileRoutes'));

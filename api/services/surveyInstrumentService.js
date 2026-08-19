@@ -1169,6 +1169,10 @@ async function saveSubjectResponse(survey, subjectType, subjectId, body, user) {
       snapshot: created.toObject(),
       createdBy: user._id,
     });
+    if (created.status === 'approved') {
+      const { syncDefaultLocalPlanForResponse } = require('./localPlanService');
+      await syncDefaultLocalPlanForResponse(created, user._id);
+    }
     return serializeResponse(created, await sheetExtras(survey, user, type, subjectId, created, version));
   }
 
@@ -1184,6 +1188,10 @@ async function saveSubjectResponse(survey, subjectType, subjectId, body, user) {
     snapshot: doc.toObject(),
     createdBy: user._id,
   });
+  if (doc.status === 'approved') {
+    const { syncDefaultLocalPlanForResponse } = require('./localPlanService');
+    await syncDefaultLocalPlanForResponse(doc, user._id);
+  }
   return serializeResponse(doc, await sheetExtras(survey, user, type, subjectId, doc, version));
 }
 

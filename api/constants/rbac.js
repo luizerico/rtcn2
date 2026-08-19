@@ -20,6 +20,7 @@ const RESOURCE_TYPE_LABELS = {
   SPONSOR: 'Sponsors',
   OPPORTUNITY: 'Opportunities',
   PROJECT: 'Projects',
+  LOCALPLAN: 'Local plans',
   COUNTY: 'Counties',
 };
 

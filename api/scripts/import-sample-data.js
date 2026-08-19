@@ -5,11 +5,16 @@ const dotenv = require('dotenv');
 const { resolveMongoUri } = require('../config/mongoUri');
 const User = require('../models/User');
 const Organization = require('../models/Organization');
-const { Sponsor, Opportunity, Project } = require('../models/assets');
+const { Sponsor, Opportunity, Project, LocalPlan } = require('../models/assets');
 const Survey = require('../models/assets/Survey');
 const { InstrumentVersion, InstrumentResponse, InstrumentRevision } = require('../models/survey');
 const County = require('../models/geo/County');
 const { ASSET_TYPE_LABELS } = require('../constants/assetTypes');
+const {
+  mapLegacyYesNo,
+  mapLegacyLevel,
+  withPriorities,
+} = require('../constants/localPlan');
 const { computeScore } = require('../services/surveyInstrumentService');
 const {
   SPONSOR_ORIGEM,
@@ -33,7 +38,6 @@ const SKIPPED_FILES = [
   ['rtcn-database.counties.json', 'use npm run db:seed-geo'],
   ['rtcn-database.groups.json', 'legacy groups are not the current RBAC model'],
   ['rtcn-database.permissions.json', 'legacy ACL rows are not current Permission grants'],
-  ['rtcn-database.localplans.json', 'no LocalPlan collection'],
   ['rtcn-database.refreshtokens.json', 'skipped (secrets / unused)'],
   ['rtcn-database.securitylogs.json', 'skipped (legacy logs)'],
 ];
@@ -775,6 +779,140 @@ function normalizeProject(raw, fallbackOwnerId) {
   };
 }
 
+function mapPlanEntry(raw, questionMap) {
+  const questionId = unwrapOid(raw?.question || raw?.questionId);
+  if (!questionId) return null;
+  const question = questionMap?.get(String(questionId));
+  const technical = raw.technical || {};
+  const consultant = raw.consultant || {};
+  return withPriorities({
+    questionId: String(questionId),
+    code: question?.code || optionalString(raw.code),
+    area: question?.area || optionalString(raw.area),
+    todo: question?.todo || question?.prompt || optionalString(raw.todo),
+    technical: {
+      opportunities: {
+        federal: mapLegacyYesNo(technical.opportunities?.federal),
+        state: mapLegacyYesNo(technical.opportunities?.state),
+        partners: mapLegacyYesNo(technical.opportunities?.partners),
+      },
+      complexity: {
+        administrative: mapLegacyLevel(technical.complexity?.administrative),
+        financial: mapLegacyLevel(technical.complexity?.financial),
+      },
+      isMandatory: Boolean(technical.isMandatory),
+    },
+    consultant: {
+      financialCapacity: mapLegacyLevel(consultant.financialCapacity),
+      planCapacity: mapLegacyLevel(consultant.planCapacity),
+      interCooperation: mapLegacyLevel(consultant.interCooperation),
+    },
+    isLocalAgenda: Boolean(raw.isLocalAgenda),
+  });
+}
+
+function normalizeLocalPlan(raw, extra = {}) {
+  if (!raw) return { skipReason: 'empty row' };
+  if (isSourceDeleted(raw) && !includeDeleted()) return { skipReason: 'deleted in source' };
+  const _id = unwrapOid(raw._id);
+  const responseId = unwrapOid(raw.answer || raw.instrumentResponseId);
+  const surveyId = unwrapOid(raw.questionary || raw.surveyId);
+  const countyId = unwrapOid(raw.county || raw.countyId);
+  if (!_id) return { skipReason: 'missing id' };
+  if (!responseId) return { skipReason: 'missing answer' };
+  if (!surveyId) return { skipReason: 'missing questionary' };
+  if (!countyId) return { skipReason: 'missing county' };
+  if (extra.responseIds && !extra.responseIds.has(String(responseId))) {
+    return { skipReason: 'answer not imported' };
+  }
+  const version = extra.versionsByQuestionary?.get(String(surveyId));
+  if (extra.versionsByQuestionary && !version) {
+    return { skipReason: 'questionary not imported' };
+  }
+  const entries = Array.isArray(raw.plan)
+    ? raw.plan.map((row) => mapPlanEntry(row, extra.questionMap)).filter(Boolean)
+    : [];
+  if (!entries.length) return { skipReason: 'no plan entries' };
+  const sourceStatus = trimmed(raw.status);
+  const audit = auditFields(raw, extra.fallbackOwnerId);
+  const name = optionalString(raw.name) || `Local plan · ${String(countyId).slice(-6)}`;
+  return {
+    doc: {
+      _id,
+      name,
+      description: optionalString(raw.obs),
+      kind: 'LOCALPLAN',
+      assetType: ASSET_TYPE_LABELS.LOCALPLAN,
+      surveyId,
+      instrumentResponseId: responseId,
+      instrumentVersionId: version?._id || unwrapOid(raw.instrumentVersionId),
+      countyId,
+      sourceRevision: toNumber(raw.sourceRevision) || toNumber(raw.version) || 1,
+      inclusionMode: 'gaps',
+      includedQuestionIds: [],
+      status: 'draft',
+      entries,
+      obs: optionalString(raw.obs),
+      sourceCompleted: sourceStatus === 'completed',
+      ...audit,
+      ...trashFromSource(raw),
+    },
+  };
+}
+
+async function importLocalPlans(fallbackOwnerId, { responseIds, versionsByQuestionary, questionMap }) {
+  const filename = 'rtcn-database.localplans.json';
+  const filePath = path.join(SAMPLE_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    console.log(`${filename}: missing — skipped`);
+    return;
+  }
+  const rows = readSampleJson(filename);
+  if (!Array.isArray(rows)) {
+    console.log(`${filename}: missing or not an array — skipped`);
+    return;
+  }
+  const docs = [];
+  const skips = [];
+  for (const raw of rows) {
+    const { doc, skipReason } = normalizeLocalPlan(raw, {
+      fallbackOwnerId,
+      responseIds,
+      versionsByQuestionary,
+      questionMap,
+    });
+    if (!doc) {
+      skips.push(skipReason);
+      continue;
+    }
+    docs.push(doc);
+  }
+
+  const newestCompleted = new Map();
+  for (const doc of docs) {
+    const key = `${doc.countyId}|${doc.surveyId}`;
+    if (!doc.sourceCompleted) continue;
+    const prev = newestCompleted.get(key);
+    const stamp = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
+    if (!prev || stamp >= prev.stamp) newestCompleted.set(key, { id: String(doc._id), stamp });
+  }
+  for (const doc of docs) {
+    const key = `${doc.countyId}|${doc.surveyId}`;
+    const winner = newestCompleted.get(key);
+    doc.status = winner && winner.id === String(doc._id) ? 'default' : 'draft';
+    delete doc.sourceCompleted;
+  }
+
+  const stats = { count: 0, skipped: skips.length };
+  for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+    const batch = docs.slice(i, i + BATCH_SIZE);
+    await upsertMany(LocalPlan, batch);
+    stats.count += batch.length;
+  }
+  console.log(`Local plans: ${stats.count} imported; skipped ${stats.skipped}`);
+  if (skips.length) console.log(`  skip reasons: ${summarizeSkips(skips)}`);
+}
+
 function readSampleJson(filename) {
   const filePath = path.join(SAMPLE_DIR, filename);
   if (!fs.existsSync(filePath)) {
@@ -910,6 +1048,11 @@ async function importSampleData() {
   const { versionsByQuestionary } = await importQuestionaries(fallbackOwnerId, questionMap);
   const answers = await importAnswers(fallbackOwnerId, versionsByQuestionary);
   await importHistoryAnswers(fallbackOwnerId, answers.ids);
+  await importLocalPlans(fallbackOwnerId, {
+    responseIds: answers.ids,
+    versionsByQuestionary,
+    questionMap,
+  });
   await dropRetiredQuestionCollections();
 
   console.log('Skipped files (no matching collection, or handled elsewhere):');
@@ -945,6 +1088,7 @@ module.exports = {
   normalizeQuestion,
   normalizeOrganization,
   normalizeUser,
+  normalizeLocalPlan,
   importSampleData,
   SAMPLE_DIR,
 };

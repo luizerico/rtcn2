@@ -25,6 +25,7 @@ const {
   listAnswerableCounties,
   listSubjectInstruments,
 } = require('../services/surveyInstrumentService');
+const { listLocalPlanLinksForSurvey } = require('../services/localPlanService');
 
 function handleError(res, error, fallback) {
   if (error instanceof HttpError) {
@@ -196,6 +197,16 @@ exports.setSurveyCountyVersion = async (req, res) => {
     res.json(await setCountyInstrumentVersion(survey, req.params.countyId, req.body, req.user._id));
   } catch (error) {
     return handleError(res, error, 'Error setting county survey version');
+  }
+};
+
+exports.listSurveyLocalPlanLinks = async (req, res) => {
+  try {
+    const survey = await loadSurvey(req.params.id);
+    if (!survey) return sendError(res, 404, 'Survey not found.', ERROR_CODES.NOT_FOUND);
+    res.status(200).json(await listLocalPlanLinksForSurvey(survey._id));
+  } catch (error) {
+    return handleError(res, error, 'Error listing linked local plans');
   }
 };
 

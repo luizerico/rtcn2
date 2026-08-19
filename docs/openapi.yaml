@@ -27,6 +27,7 @@ tags:
   - name: Permissions
   - name: Assets
   - name: Surveys
+  - name: Local plans
   - name: Sponsors
   - name: Opportunities
   - name: Files
@@ -2848,6 +2849,26 @@ paths:
         '401':
           description: Unauthorized
 
+  /api/surveys/{id}/localplan-links:
+    get:
+      tags: [Surveys]
+      summary: List local plans linked to a survey
+      operationId: listSurveyLocalPlanLinks
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Linked local plan count and summaries
+        '403':
+          description: Forbidden
+        '404':
+          description: Survey not found
+
   /api/surveys/{id}:
     get:
       tags: [Surveys]
@@ -4020,6 +4041,218 @@ paths:
               schema:
                 type: string
                 format: binary
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+
+  /api/localplans:
+    get:
+      tags: [Local plans]
+      summary: List local plans
+      operationId: listLocalPlans
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: surveyId
+          schema: { type: string }
+        - in: query
+          name: countyId
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string, enum: [draft, default, archived] }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [name, status, createdAt, updatedAt, sourceRevision], default: updatedAt }
+        - in: query
+          name: order
+          schema: { type: string, enum: [asc, desc], default: desc }
+      responses:
+        '200':
+          description: Paginated local plan list
+        '403':
+          description: Forbidden
+    post:
+      tags: [Local plans]
+      summary: Create a local plan from an approved county survey sheet
+      operationId: createLocalPlan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [instrumentResponseId]
+              properties:
+                instrumentResponseId: { type: string }
+                inclusionMode: { type: string, enum: [gaps, all, selected], default: gaps }
+                questionIds:
+                  type: array
+                  items: { type: string }
+                sourceRevision: { type: integer, minimum: 1 }
+                name: { type: string }
+                description: { type: string }
+                obs: { type: string }
+      responses:
+        '201':
+          description: Local plan created
+        '400':
+          description: Validation error
+        '403':
+          description: Forbidden
+
+  /api/localplans/preview:
+    get:
+      tags: [Local plans]
+      summary: Preview codes that would be included in a new local plan
+      operationId: previewLocalPlan
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: instrumentResponseId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: inclusionMode
+          schema: { type: string, enum: [gaps, all, selected], default: gaps }
+        - in: query
+          name: sourceRevision
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: questionIds
+          schema: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Candidate codes and areas
+        '400':
+          description: Validation error
+        '403':
+          description: Forbidden
+
+  /api/localplans/{id}:
+    get:
+      tags: [Local plans]
+      summary: Get local plan by ID
+      operationId: getLocalPlan
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Local plan found
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    put:
+      tags: [Local plans]
+      summary: Update local plan entries
+      operationId: updateLocalPlan
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                obs: { type: string }
+                entries:
+                  type: array
+                  items:
+                    type: object
+                    required: [questionId]
+                    properties:
+                      questionId: { type: string }
+                      isLocalAgenda: { type: boolean }
+                      technical: { type: object }
+                      consultant: { type: object }
+      responses:
+        '200':
+          description: Local plan updated
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+    delete:
+      tags: [Local plans]
+      summary: Move local plan to recycle bin
+      operationId: deleteLocalPlan
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Moved to recycle bin
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+
+  /api/localplans/{id}/default:
+    post:
+      tags: [Local plans]
+      summary: Mark a local plan as the default for its county and survey
+      operationId: setDefaultLocalPlan
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Plan is now default
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+
+  /api/localplans/{id}/changes:
+    get:
+      tags: [Local plans]
+      summary: List local plan change-log diffs
+      operationId: listLocalPlanChanges
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Change log
         '403':
           description: Forbidden
         '404':

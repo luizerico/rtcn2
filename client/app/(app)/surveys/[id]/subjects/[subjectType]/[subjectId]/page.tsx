@@ -398,6 +398,14 @@ export default function SubjectInstrumentPage() {
                 Compare revisions
               </Link>
             ) : null}
+            {sheet.status === 'approved' && subjectType === 'COUNTY' ? (
+              <Link
+                href={`/localplans/new?responseId=${sheet._id || ''}`}
+                className="text-[var(--accent)] hover:underline"
+              >
+                Create local plan
+              </Link>
+            ) : null}
             {canDelete ? (
               <button
                 type="button"
