@@ -167,6 +167,50 @@ async function getAnalysis(jobId) {
   return result.data;
 }
 
+async function getAnalysisStatus(jobId) {
+  const result = await rtcnaiRequest(`/v1/analyses/${encodeURIComponent(jobId)}/status`);
+  return result.data;
+}
+
+async function getQueue() {
+  const result = await rtcnaiRequest('/v1/queue');
+  return result.data || {};
+}
+
+async function cancelAnalysis(jobId) {
+  const result = await rtcnaiRequest(`/v1/analyses/${encodeURIComponent(jobId)}/cancel`, {
+    method: 'POST',
+  });
+  return result.data;
+}
+
+function queueItems(queue) {
+  const queued = Array.isArray(queue?.queued) ? queue.queued : [];
+  const running = Array.isArray(queue?.running) ? queue.running : [];
+  return [...queued, ...running];
+}
+
+function findQueueJob(queue, { jobId, uri } = {}) {
+  const items = queueItems(queue);
+  const wantedJob = String(jobId || '').trim();
+  if (wantedJob) {
+    const match = items.find((item) => String(item.job_id || item.jobId || '') === wantedJob);
+    if (match) return match;
+  }
+  const wantedUri = String(uri || '')
+    .replace(/\\/g, '/')
+    .trim();
+  if (!wantedUri) return null;
+  return (
+    items.find((item) => {
+      const itemUri = String(item.uri || '')
+        .replace(/\\/g, '/')
+        .trim();
+      return itemUri === wantedUri || itemUri.endsWith(`/${wantedUri}`);
+    }) || null
+  );
+}
+
 module.exports = {
   DEFAULT_FUNDING_PROMPT,
   ANALYZABLE_MIME_TYPES,
@@ -177,4 +221,8 @@ module.exports = {
   analysisLocationForStoredFile,
   createAnalysis,
   getAnalysis,
+  getAnalysisStatus,
+  getQueue,
+  findQueueJob,
+  cancelAnalysis,
 };

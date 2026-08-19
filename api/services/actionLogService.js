@@ -6,6 +6,9 @@ const SENSITIVE_KEYS = new Set([
   'password',
   'token',
   'authorization',
+  'api-key',
+  'apikey',
+  'x-api-key',
   'resetToken',
   'resetTokenHash',
   'currentPassword',
@@ -46,7 +49,10 @@ function sanitizeMeta(value, depth = 0, key = '') {
   }
   if (typeof value !== 'object') {
     if (typeof value === 'string') {
-      const max = key === 'debugError' || key === 'stack' ? 8000 : 500;
+      const max =
+        key === 'debugError' || key === 'stack' || key === 'result' || key === 'rtcnaiMessage'
+          ? 8000
+          : 500;
       if (value.length > max) return `${value.slice(0, max)}…`;
     }
     return value;
@@ -140,6 +146,13 @@ function deriveAction(method, path) {
   if (root === 'geo') {
     if (leaf === 'sync' && upperMethod === 'POST') return 'geo.sync_start';
     return `geo.${leaf || verb}`;
+  }
+
+  if (parts.includes('analyses')) {
+    const resource = RESOURCE_ALIASES[root]
+      ? RESOURCE_ALIASES[root].toLowerCase()
+      : root.replace(/s$/, '') || 'resource';
+    return `${resource}.analyze`;
   }
 
   const resource = RESOURCE_ALIASES[root]
