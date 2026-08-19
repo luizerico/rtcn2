@@ -19,6 +19,7 @@ const ERROR_CODES = Object.freeze({
   BAD_REQUEST: 'BAD_REQUEST',
   INTERNAL: 'INTERNAL',
   CONFIG: 'CONFIG',
+  UNAVAILABLE: 'UNAVAILABLE',
 });
 
 class HttpError extends Error {

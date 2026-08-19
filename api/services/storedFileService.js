@@ -28,6 +28,19 @@ function refId(value) {
   return String(value);
 }
 
+function serializeAnalysis(analysis) {
+  if (!analysis || !analysis.jobId) return null;
+  return {
+    jobId: analysis.jobId,
+    status: analysis.status || null,
+    result: analysis.result || null,
+    error: analysis.error || null,
+    model: analysis.model || null,
+    requestedAt: analysis.requestedAt || null,
+    completedAt: analysis.completedAt || null,
+  };
+}
+
 function serializeStoredFile(doc) {
   if (!doc) return doc;
   const obj = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
@@ -45,6 +58,7 @@ function serializeStoredFile(doc) {
     obs: obj.obs || '',
     questionId: obj.questionId || null,
     storageDriver: obj.storageDriver,
+    analysis: serializeAnalysis(obj.analysis),
     uploadedBy: obj.uploadedBy,
     updatedBy: obj.updatedBy || null,
     deletedAt: obj.deletedAt || null,
@@ -332,6 +346,7 @@ function contentDisposition(storedFile) {
 
 module.exports = {
   OWNER_KIND,
+  serializeAnalysis,
   serializeStoredFile,
   requireOwner,
   assertParentFileAccess,

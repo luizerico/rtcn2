@@ -216,6 +216,13 @@ In Docker Compose the reports port is internal; the UI calls same-origin `/api/r
 - Auth: send `Authorization: Bearer <token>` from the main app login
 - Details: [`reports/README.md`](reports/README.md)
 
+## Opportunity document analysis (RTCNAI)
+
+The opportunity detail page can send an attached **PDF or DOCX** to the separate RTCNAI service (`RTCNAI_URL`, default `http://localhost:8008`) and show a persisted summary of relevant funding points.
+
+- The browser calls same-origin `/api/opportunities/{id}/files/{fileId}/analyses`. This app authenticates to RTCNAI with `RTCNAI_API_KEY` (`X-API-Key`).
+- RTCNAI reads the file from storage by URI (it does not accept an upload). For local `FILE_STORAGE_DRIVER=tmp`, set RTCNAI `STORAGE_TMP_ROOT` to the **absolute** path of `FILE_STORAGE_TMP_DIR` (default `tmp/uploads`) and keep the RTCNAI analysis worker running.
+
 ## RBAC notes
 
 - Permissions live in the **`permissions`** collection (not embedded on groups).
