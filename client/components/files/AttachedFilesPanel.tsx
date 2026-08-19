@@ -9,13 +9,16 @@ import {
   apiDownload,
   apiGet,
   apiPatch,
+  apiPost,
   apiUpload,
 } from '@/lib/apiUtils';
 import {
   FILE_ACCEPT,
   FILE_TYPES_HINT,
   formatBytes,
+  isAnalyzableFile,
   userLabel,
+  type FileAnalysisRecord,
   type StoredFileRecord,
 } from '@/lib/storedFileTypes';
 
@@ -25,6 +28,7 @@ type AttachedFilesPanelProps = {
   title?: string;
   questionId?: string;
   variant?: 'section' | 'plain';
+  enableAnalysis?: boolean;
   onItemsChange?: (items: StoredFileRecord[]) => void;
 };
 
@@ -33,21 +37,56 @@ type UploadDraft = {
   displayName: string;
 };
 
+type FileAnalysisResponse = {
+  jobId: string | null;
+  status: string | null;
+  summary: string | null;
+  error: string | null;
+  model: string | null;
+  requestedAt?: string | null;
+  completedAt?: string | null;
+  file?: StoredFileRecord;
+};
+
+const ANALYSIS_POLL_MS = 2000;
+const ANALYSIS_TIMEOUT_MS = 120000;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function toFileAnalysis(response: FileAnalysisResponse): FileAnalysisRecord {
+  return {
+    jobId: response.jobId,
+    status: response.status,
+    result: response.summary,
+    error: response.error,
+    model: response.model,
+    requestedAt: response.requestedAt,
+    completedAt: response.completedAt,
+  };
+}
+
 export default function AttachedFilesPanel({
   listEndpoint,
   canWrite,
   title = 'Files',
   questionId,
   variant = 'section',
+  enableAnalysis = false,
   onItemsChange,
 }: AttachedFilesPanelProps) {
   const { pushToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const onItemsChangeRef = useRef(onItemsChange);
   onItemsChangeRef.current = onItemsChange;
+  const analyzeCancelRef = useRef<{ fileId: string | null }>({ fileId: null });
   const [items, setItems] = useState<StoredFileRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [drafts, setDrafts] = useState<UploadDraft[]>([]);
@@ -80,6 +119,12 @@ export default function AttachedFilesPanel({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    return () => {
+      analyzeCancelRef.current.fileId = null;
+    };
+  }, []);
 
   const resetAttachForm = () => {
     setDrafts([]);
@@ -192,6 +237,75 @@ export default function AttachedFilesPanel({
       });
     } finally {
       setSavingObs(false);
+    }
+  };
+
+  const applyAnalysis = (fileId: string, response: FileAnalysisResponse) => {
+    const analysis = response.file?.analysis || toFileAnalysis(response);
+    setItems((prev) => {
+      const next = prev.map((item) =>
+        item._id === fileId ? { ...item, ...(response.file || {}), analysis } : item
+      );
+      onItemsChangeRef.current?.(next);
+      return next;
+    });
+    return analysis;
+  };
+
+  const handleAnalyze = async (row: StoredFileRecord) => {
+    analyzeCancelRef.current.fileId = row._id;
+    setAnalyzingId(row._id);
+    try {
+      const started = await apiPost<FileAnalysisResponse>(
+        `${listEndpoint}/${row._id}/analyses`
+      );
+      applyAnalysis(row._id, started);
+      const jobId = started.jobId;
+      if (!jobId) {
+        throw new Error('Analysis job did not start.');
+      }
+      const pollStarted = Date.now();
+      let latest = started;
+      while (analyzeCancelRef.current.fileId === row._id) {
+        const status = String(latest.status || '').toLowerCase();
+        if (status === 'succeeded' || status === 'failed') break;
+        if (Date.now() - pollStarted >= ANALYSIS_TIMEOUT_MS) {
+          throw new Error('Analysis timed out. Try again in a moment.');
+        }
+        await sleep(ANALYSIS_POLL_MS);
+        if (analyzeCancelRef.current.fileId !== row._id) return;
+        latest = await apiGet<FileAnalysisResponse>(
+          `${listEndpoint}/${row._id}/analyses/${encodeURIComponent(jobId)}`
+        );
+        applyAnalysis(row._id, latest);
+      }
+      if (analyzeCancelRef.current.fileId !== row._id) return;
+      const status = String(latest.status || '').toLowerCase();
+      if (status === 'failed') {
+        pushToast({
+          tone: 'error',
+          title: 'Summary failed',
+          message: latest.error || 'Document analysis failed.',
+        });
+      } else if (status === 'succeeded') {
+        pushToast({
+          tone: 'success',
+          title: 'Summary ready',
+          message: row.displayName,
+        });
+      }
+    } catch (err) {
+      if (analyzeCancelRef.current.fileId !== row._id) return;
+      pushToast({
+        tone: 'error',
+        title: 'Summary failed',
+        message: err instanceof Error ? err.message : 'Failed to summarize file.',
+      });
+    } finally {
+      if (analyzeCancelRef.current.fileId === row._id) {
+        analyzeCancelRef.current.fileId = null;
+        setAnalyzingId(null);
+      }
     }
   };
 
@@ -313,6 +427,30 @@ export default function AttachedFilesPanel({
                   >
                     Download
                   </button>
+                  {enableAnalysis && canWrite && isAnalyzableFile(row) ? (
+                    <button
+                      type="button"
+                      disabled={analyzingId === row._id}
+                      onClick={() => void handleAnalyze(row)}
+                      className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--accent-soft)]/40 disabled:opacity-60"
+                    >
+                      {analyzingId === row._id
+                        ? 'Analyzing…'
+                        : row.analysis?.result
+                          ? 'Re-run'
+                          : 'Summarize'}
+                    </button>
+                  ) : null}
+                  {enableAnalysis && canWrite && !isAnalyzableFile(row) ? (
+                    <button
+                      type="button"
+                      disabled
+                      title="Summarize is available for PDF and Word (DOCX) files."
+                      className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] opacity-50"
+                    >
+                      Summarize
+                    </button>
+                  ) : null}
                   {canWrite ? (
                     <>
                       <button
@@ -338,6 +476,35 @@ export default function AttachedFilesPanel({
               </div>
               {row.obs && editingId !== row._id ? (
                 <p className="whitespace-pre-wrap text-sm text-[var(--muted)]">{row.obs}</p>
+              ) : null}
+              {enableAnalysis &&
+              (row.analysis?.result ||
+                row.analysis?.error ||
+                analyzingId === row._id ||
+                row.analysis?.status === 'queued' ||
+                row.analysis?.status === 'running') ? (
+                <details
+                  open
+                  className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+                >
+                  <summary className="cursor-pointer text-sm font-medium">
+                    {analyzingId === row._id ||
+                    row.analysis?.status === 'queued' ||
+                    row.analysis?.status === 'running'
+                      ? 'Analyzing document…'
+                      : row.analysis?.status === 'failed'
+                        ? 'Summary failed'
+                        : 'Document summary'}
+                  </summary>
+                  {row.analysis?.error ? (
+                    <p className="mt-2 text-sm text-red-700">{row.analysis.error}</p>
+                  ) : null}
+                  {row.analysis?.result ? (
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--muted)]">
+                      {row.analysis.result}
+                    </p>
+                  ) : null}
+                </details>
               ) : null}
               {canWrite && editingId === row._id ? (
                 <div className="space-y-2">

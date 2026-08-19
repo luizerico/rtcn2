@@ -8,7 +8,9 @@ export function normalizeApiEndpoint(endpoint: string): string {
 
 function persistGet(endpoint: string): boolean {
   const [pathname] = normalizeApiEndpoint(endpoint).split('?');
-  return pathname !== '/auth/me';
+  if (pathname === '/auth/me') return false;
+  if (/\/analyses\//.test(pathname)) return false;
+  return true;
 }
 
 export function clearApiGetCache() {

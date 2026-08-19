@@ -55,6 +55,8 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
       GCS_CLIENT_EMAIL: ${GCS_CLIENT_EMAIL:-}
       GCS_PRIVATE_KEY: ${GCS_PRIVATE_KEY:-}
+      RTCNAI_URL: ${RTCNAI_URL:-http://localhost:8008}
+      RTCNAI_API_KEY: ${RTCNAI_API_KEY:-}
     volumes:
       - ./:/app
     command: >

@@ -883,6 +883,8 @@ components:
         storageDriver:
           type: string
           enum: [tmp, azure, aws, gcs]
+        analysis:
+          $ref: '#/components/schemas/StoredFileAnalysis'
         uploadedBy:
           type: object
         updatedBy:
@@ -904,6 +906,62 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    StoredFileAnalysis:
+      type: object
+      nullable: true
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed]
+        result:
+          type: string
+          nullable: true
+          description: Summary and relevant points from RTCNAI
+        error:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        requestedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    FileAnalysisJob:
+      type: object
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed]
+        summary:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        requestedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        file:
+          $ref: '#/components/schemas/StoredFile'
 
     RecycleBinItem:
       type: object
@@ -3744,6 +3802,72 @@ paths:
           description: Forbidden
         '413':
           description: File too large
+
+  /api/opportunities/{id}/files/{fileId}/analyses:
+    post:
+      tags: [Opportunities, Files]
+      summary: Queue RTCNAI summary of an attached PDF or DOCX
+      operationId: startOpportunityFileAnalysis
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: fileId
+          required: true
+          schema: { type: string }
+      responses:
+        '202':
+          description: Analysis job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileAnalysisJob'
+        '400':
+          description: Unsupported file type
+        '403':
+          description: Forbidden
+        '404':
+          description: Opportunity or file not found
+        '503':
+          description: RTCNAI unreachable or not configured
+
+  /api/opportunities/{id}/files/{fileId}/analyses/{jobId}:
+    get:
+      tags: [Opportunities, Files]
+      summary: Poll RTCNAI job status and persisted summary
+      operationId: getOpportunityFileAnalysis
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: fileId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: jobId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Job status, including summary when succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileAnalysisJob'
+        '403':
+          description: Forbidden
+        '404':
+          description: Opportunity, file, or job not found
+        '503':
+          description: RTCNAI unreachable or not configured
 
   /api/files/bin:
     get:

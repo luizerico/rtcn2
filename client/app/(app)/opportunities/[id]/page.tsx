@@ -108,6 +108,7 @@ export default function OpportunityDetailPage() {
         <AttachedFilesPanel
           listEndpoint={`/opportunities/${params.id}/files`}
           canWrite={canWrite}
+          enableAnalysis
           title="Attached files"
         />
       ) : null}

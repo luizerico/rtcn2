@@ -7,6 +7,10 @@ const {
   updateOpportunity,
   deleteOpportunity,
 } = require('../controllers/opportunityController');
+const {
+  startOpportunityFileAnalysis,
+  getOpportunityFileAnalysis,
+} = require('../controllers/opportunityAnalysisController');
 const { createOwnerFileHandlers } = require('../controllers/storedFileController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 const { validate } = require('../middleware/validate');
@@ -54,6 +58,20 @@ router.post(
   authorize('OPPORTUNITY:WRITE', { param: 'id' }),
   upload.array('file'),
   opportunityFiles.upload
+);
+router.post(
+  '/:id/files/:fileId/analyses',
+  validate(paramObjectId('id', 'Opportunity id')),
+  validate(paramObjectId('fileId', 'File id')),
+  authorize('OPPORTUNITY:WRITE', { param: 'id' }),
+  startOpportunityFileAnalysis
+);
+router.get(
+  '/:id/files/:fileId/analyses/:jobId',
+  validate(paramObjectId('id', 'Opportunity id')),
+  validate(paramObjectId('fileId', 'File id')),
+  authorize('OPPORTUNITY:READ', { param: 'id' }),
+  getOpportunityFileAnalysis
 );
 
 module.exports = router;
