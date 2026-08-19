@@ -7,6 +7,7 @@ const {
   parseAzureAccountName,
   isAnalyzableMime,
   fundingPrompt,
+  findQueueJob,
   DEFAULT_FUNDING_PROMPT,
 } = require('../api/services/rtcnaiService');
 const { HttpError } = require('../api/utils/httpErrors');
@@ -107,5 +108,15 @@ describe('rtcnaiService URI mapping', () => {
     expect(fundingPrompt()).toBe(DEFAULT_FUNDING_PROMPT);
     process.env.RTCNAI_PROMPT = 'Custom prompt';
     expect(fundingPrompt()).toBe('Custom prompt');
+  });
+
+  it('finds a queue job by id or storage uri', () => {
+    const queue = {
+      queued: [{ job_id: 'job-a', uri: 'opportunity/abc/file.pdf', outcome: 'queued', position: 2 }],
+      running: [{ job_id: 'job-b', uri: 's3://bucket/other.pdf', outcome: 'running' }],
+    };
+    expect(findQueueJob(queue, { jobId: 'job-b' }).job_id).toBe('job-b');
+    expect(findQueueJob(queue, { uri: 'opportunity/abc/file.pdf' }).position).toBe(2);
+    expect(findQueueJob(queue, { jobId: 'missing', uri: 'nope.pdf' })).toBeNull();
   });
 });

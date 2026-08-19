@@ -12,6 +12,11 @@ export type FileAnalysisRecord = {
   model: string | null;
   requestedAt?: string | null;
   completedAt?: string | null;
+  statusSummary?: string | null;
+  progressStep?: string | null;
+  progressCompleted?: number | null;
+  progressTotal?: number | null;
+  queuePosition?: number | null;
 };
 
 export type StoredFileRecord = {
@@ -55,6 +60,26 @@ export function isAnalyzableFile(row: Pick<StoredFileRecord, 'mimeType' | 'origi
   if (ANALYZABLE_MIME.has(mime)) return true;
   const name = String(row.originalName || '').toLowerCase();
   return name.endsWith('.pdf') || name.endsWith('.docx');
+}
+
+export function isInFlightAnalysis(status?: string | null): boolean {
+  const value = String(status || '').toLowerCase();
+  return value === 'queued' || value === 'running';
+}
+
+export function isTerminalAnalysis(status?: string | null): boolean {
+  const value = String(status || '').toLowerCase();
+  return value === 'succeeded' || value === 'failed' || value === 'cancelled';
+}
+
+export const ANALYSIS_POLL_INITIAL_MS = 3000;
+export const ANALYSIS_POLL_MAX_MS = 60000;
+
+export function nextAnalysisPollDelay(currentMs: number, failed = false): number {
+  const base =
+    Number.isFinite(currentMs) && currentMs > 0 ? currentMs : ANALYSIS_POLL_INITIAL_MS;
+  const next = Math.round(base * (failed ? 2 : 1.5));
+  return Math.min(ANALYSIS_POLL_MAX_MS, Math.max(ANALYSIS_POLL_INITIAL_MS, next));
 }
 
 export function userLabel(user?: StoredFileUser | string | null): string {

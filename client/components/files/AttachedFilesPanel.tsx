@@ -15,8 +15,12 @@ import {
 import {
   FILE_ACCEPT,
   FILE_TYPES_HINT,
+  ANALYSIS_POLL_INITIAL_MS,
   formatBytes,
   isAnalyzableFile,
+  isInFlightAnalysis,
+  isTerminalAnalysis,
+  nextAnalysisPollDelay,
   userLabel,
   type FileAnalysisRecord,
   type StoredFileRecord,
@@ -41,21 +45,25 @@ type FileAnalysisResponse = {
   jobId: string | null;
   status: string | null;
   summary: string | null;
+  statusSummary?: string | null;
   error: string | null;
   model: string | null;
   requestedAt?: string | null;
   completedAt?: string | null;
+  progressStep?: string | null;
+  progressCompleted?: number | null;
+  progressTotal?: number | null;
+  queuePosition?: number | null;
   file?: StoredFileRecord;
 };
 
-const ANALYSIS_POLL_MS = 2000;
-const ANALYSIS_TIMEOUT_MS = 120000;
-
-function sleep(ms: number) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
+type AnalysisPoll = {
+  fileId: string;
+  jobId: string;
+  delayMs: number;
+  timer: ReturnType<typeof window.setTimeout> | null;
+  request: Promise<void> | null;
+};
 
 function toFileAnalysis(response: FileAnalysisResponse): FileAnalysisRecord {
   return {
@@ -66,6 +74,24 @@ function toFileAnalysis(response: FileAnalysisResponse): FileAnalysisRecord {
     model: response.model,
     requestedAt: response.requestedAt,
     completedAt: response.completedAt,
+    statusSummary: response.statusSummary || null,
+    progressStep: response.progressStep || null,
+    progressCompleted: response.progressCompleted ?? null,
+    progressTotal: response.progressTotal ?? null,
+    queuePosition: response.queuePosition ?? null,
+  };
+}
+
+function isNotInQueueMessage(message?: string | null) {
+  return String(message || '').toLowerCase().includes('not in the analysis queue');
+}
+
+function analysisErrorToast(message?: string | null) {
+  const text = message || 'Document analysis failed.';
+  return {
+    tone: 'error' as const,
+    title: isNotInQueueMessage(text) ? 'Not in queue' : 'Summary failed',
+    message: text,
   };
 }
 
@@ -82,11 +108,19 @@ export default function AttachedFilesPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const onItemsChangeRef = useRef(onItemsChange);
   onItemsChangeRef.current = onItemsChange;
-  const analyzeCancelRef = useRef<{ fileId: string | null }>({ fileId: null });
+  const pushToastRef = useRef(pushToast);
+  pushToastRef.current = pushToast;
+  const listEndpointRef = useRef(listEndpoint);
+  listEndpointRef.current = listEndpoint;
+  const itemsRef = useRef<StoredFileRecord[]>([]);
+  const pollsRef = useRef(new Map<string, AnalysisPoll>());
   const [items, setItems] = useState<StoredFileRecord[]>([]);
+  itemsRef.current = items;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [busyByFileId, setBusyByFileId] = useState<Record<string, 'starting' | 'checking' | 'cancelling'>>(
+    {}
+  );
   const [attachOpen, setAttachOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [drafts, setDrafts] = useState<UploadDraft[]>([]);
@@ -109,6 +143,7 @@ export default function AttachedFilesPanel({
       const next = Array.isArray(data.items) ? data.items : [];
       setItems(next);
       onItemsChangeRef.current?.(next);
+      return next;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load files.');
     } finally {
@@ -119,12 +154,6 @@ export default function AttachedFilesPanel({
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    return () => {
-      analyzeCancelRef.current.fileId = null;
-    };
-  }, []);
 
   const resetAttachForm = () => {
     setDrafts([]);
@@ -247,67 +276,232 @@ export default function AttachedFilesPanel({
         item._id === fileId ? { ...item, ...(response.file || {}), analysis } : item
       );
       onItemsChangeRef.current?.(next);
+      itemsRef.current = next;
       return next;
     });
     return analysis;
   };
 
-  const handleAnalyze = async (row: StoredFileRecord) => {
-    analyzeCancelRef.current.fileId = row._id;
-    setAnalyzingId(row._id);
-    try {
-      const started = await apiPost<FileAnalysisResponse>(
-        `${listEndpoint}/${row._id}/analyses`
+  const setFileBusy = (fileId: string, busy: 'starting' | 'checking' | 'cancelling' | null) => {
+    setBusyByFileId((prev) => {
+      if (!busy) {
+        if (!(fileId in prev)) return prev;
+        const next = { ...prev };
+        delete next[fileId];
+        return next;
+      }
+      return { ...prev, [fileId]: busy };
+    });
+  };
+
+  const stopAnalysisPoll = (jobId: string) => {
+    const poll = pollsRef.current.get(jobId);
+    if (poll?.timer) window.clearTimeout(poll.timer);
+    pollsRef.current.delete(jobId);
+  };
+
+  const scheduleAnalysisPoll = (fileId: string, jobId: string, delayMs: number) => {
+    const current = pollsRef.current.get(jobId) || {
+      fileId,
+      jobId,
+      delayMs,
+      timer: null,
+      request: null,
+    };
+    if (current.timer) window.clearTimeout(current.timer);
+    current.fileId = fileId;
+    current.delayMs = delayMs;
+    current.timer = window.setTimeout(() => {
+      void refreshAnalysis(fileId, jobId, { manual: false });
+    }, delayMs);
+    pollsRef.current.set(jobId, current);
+  };
+
+  const announceAnalysis = (fileId: string, latest: FileAnalysisResponse) => {
+    const status = String(latest.status || '').toLowerCase();
+    const row = itemsRef.current.find((item) => item._id === fileId);
+    if (status === 'failed') {
+      pushToastRef.current(
+        analysisErrorToast(latest.statusSummary || latest.error || 'Document analysis failed.')
       );
+    } else if (status === 'succeeded') {
+      pushToastRef.current({
+        tone: 'success',
+        title: 'Summary ready',
+        message: latest.statusSummary || row?.displayName || 'Document summary is ready.',
+      });
+    } else if (status === 'cancelled') {
+      pushToastRef.current({
+        tone: 'info',
+        title: 'Summary cancelled',
+        message: latest.statusSummary || 'Document analysis was cancelled.',
+      });
+    }
+  };
+
+  const refreshAnalysis = async (
+    fileId: string,
+    jobId: string,
+    { manual }: { manual: boolean }
+  ) => {
+    const existing = pollsRef.current.get(jobId);
+    if (existing?.request) {
+      await existing.request;
+      return;
+    }
+
+    if (manual) setFileBusy(fileId, 'checking');
+
+    const run = (async () => {
+      try {
+        const latest = await apiGet<FileAnalysisResponse>(
+          `${listEndpointRef.current}/${fileId}/analyses/${encodeURIComponent(jobId)}`
+        );
+        applyAnalysis(fileId, latest);
+        const status = String(latest.status || '').toLowerCase();
+        if (isTerminalAnalysis(status)) {
+          stopAnalysisPoll(jobId);
+          announceAnalysis(fileId, latest);
+          return;
+        }
+        const poll = pollsRef.current.get(jobId);
+        const delay = nextAnalysisPollDelay(poll?.delayMs || ANALYSIS_POLL_INITIAL_MS, false);
+        scheduleAnalysisPoll(fileId, jobId, delay);
+      } catch (err) {
+        const poll = pollsRef.current.get(jobId);
+        const delay = nextAnalysisPollDelay(poll?.delayMs || ANALYSIS_POLL_INITIAL_MS, true);
+        if (isInFlightAnalysis(itemsRef.current.find((item) => item._id === fileId)?.analysis?.status)) {
+          scheduleAnalysisPoll(fileId, jobId, delay);
+        }
+        if (manual) {
+          pushToastRef.current({
+            tone: 'error',
+            title: 'Status check failed',
+            message: err instanceof Error ? err.message : 'Failed to check analysis status.',
+          });
+        }
+      }
+    })();
+
+    const poll = pollsRef.current.get(jobId) || {
+      fileId,
+      jobId,
+      delayMs: ANALYSIS_POLL_INITIAL_MS,
+      timer: null,
+      request: null,
+    };
+    poll.request = run;
+    pollsRef.current.set(jobId, poll);
+    try {
+      await run;
+    } finally {
+      const current = pollsRef.current.get(jobId);
+      if (current) current.request = null;
+      if (manual) setFileBusy(fileId, null);
+    }
+  };
+
+  const beginAnalysisPoll = (fileId: string, jobId: string) => {
+    if (pollsRef.current.has(jobId)) return;
+    pollsRef.current.set(jobId, {
+      fileId,
+      jobId,
+      delayMs: ANALYSIS_POLL_INITIAL_MS,
+      timer: null,
+      request: null,
+    });
+    scheduleAnalysisPoll(fileId, jobId, ANALYSIS_POLL_INITIAL_MS);
+  };
+
+  const handleAnalyze = async (row: StoredFileRecord) => {
+    if (isInFlightAnalysis(row.analysis?.status) && row.analysis?.jobId) {
+      await refreshAnalysis(row._id, row.analysis.jobId, { manual: true });
+      return;
+    }
+    setFileBusy(row._id, 'starting');
+    try {
+      const started = await apiPost<FileAnalysisResponse>(`${listEndpoint}/${row._id}/analyses`);
       applyAnalysis(row._id, started);
+      const status = String(started.status || '').toLowerCase();
+      if (isTerminalAnalysis(status)) {
+        announceAnalysis(row._id, started);
+        return;
+      }
       const jobId = started.jobId;
       if (!jobId) {
         throw new Error('Analysis job did not start.');
       }
-      const pollStarted = Date.now();
-      let latest = started;
-      while (analyzeCancelRef.current.fileId === row._id) {
-        const status = String(latest.status || '').toLowerCase();
-        if (status === 'succeeded' || status === 'failed') break;
-        if (Date.now() - pollStarted >= ANALYSIS_TIMEOUT_MS) {
-          throw new Error('Analysis timed out. Try again in a moment.');
-        }
-        await sleep(ANALYSIS_POLL_MS);
-        if (analyzeCancelRef.current.fileId !== row._id) return;
-        latest = await apiGet<FileAnalysisResponse>(
-          `${listEndpoint}/${row._id}/analyses/${encodeURIComponent(jobId)}`
-        );
-        applyAnalysis(row._id, latest);
-      }
-      if (analyzeCancelRef.current.fileId !== row._id) return;
-      const status = String(latest.status || '').toLowerCase();
-      if (status === 'failed') {
-        pushToast({
-          tone: 'error',
-          title: 'Summary failed',
-          message: latest.error || 'Document analysis failed.',
-        });
-      } else if (status === 'succeeded') {
-        pushToast({
-          tone: 'success',
-          title: 'Summary ready',
-          message: row.displayName,
-        });
-      }
+      beginAnalysisPoll(row._id, jobId);
     } catch (err) {
-      if (analyzeCancelRef.current.fileId !== row._id) return;
       pushToast({
         tone: 'error',
         title: 'Summary failed',
         message: err instanceof Error ? err.message : 'Failed to summarize file.',
       });
     } finally {
-      if (analyzeCancelRef.current.fileId === row._id) {
-        analyzeCancelRef.current.fileId = null;
-        setAnalyzingId(null);
-      }
+      setFileBusy(row._id, null);
     }
   };
+
+  const handleCheckStatus = async (row: StoredFileRecord) => {
+    const jobId = row.analysis?.jobId;
+    if (!jobId || isTerminalAnalysis(row.analysis?.status)) return;
+    await refreshAnalysis(row._id, jobId, { manual: true });
+  };
+
+  const handleCancelAnalysis = async (row: StoredFileRecord) => {
+    const jobId = row.analysis?.jobId;
+    if (!jobId || isTerminalAnalysis(row.analysis?.status)) return;
+    stopAnalysisPoll(jobId);
+    setFileBusy(row._id, 'cancelling');
+    try {
+      const cancelled = await apiPost<FileAnalysisResponse>(
+        `${listEndpoint}/${row._id}/analyses/${encodeURIComponent(jobId)}/cancel`
+      );
+      applyAnalysis(row._id, cancelled);
+      const status = String(cancelled.status || '').toLowerCase();
+      if (status === 'cancelled') {
+        pushToast({
+          tone: 'info',
+          title: 'Summary cancelled',
+          message: cancelled.statusSummary || 'Document analysis was cancelled.',
+        });
+        return;
+      }
+      if (isTerminalAnalysis(status)) {
+        announceAnalysis(row._id, cancelled);
+        return;
+      }
+      beginAnalysisPoll(row._id, jobId);
+    } catch (err) {
+      beginAnalysisPoll(row._id, jobId);
+      pushToast({
+        tone: 'error',
+        title: 'Cancel failed',
+        message: err instanceof Error ? err.message : 'Failed to cancel analysis.',
+      });
+    } finally {
+      setFileBusy(row._id, null);
+    }
+  };
+
+  useEffect(() => {
+    if (!enableAnalysis) return;
+    for (const row of items) {
+      const jobId = row.analysis?.jobId;
+      if (!isInFlightAnalysis(row.analysis?.status) || !jobId) continue;
+      beginAnalysisPoll(row._id, jobId);
+    }
+  }, [enableAnalysis, items]);
+
+  useEffect(() => {
+    return () => {
+      for (const poll of pollsRef.current.values()) {
+        if (poll.timer) window.clearTimeout(poll.timer);
+      }
+      pollsRef.current.clear();
+    };
+  }, []);
 
   const wrapperClass =
     variant === 'plain'
@@ -427,15 +621,40 @@ export default function AttachedFilesPanel({
                   >
                     Download
                   </button>
-                  {enableAnalysis && canWrite && isAnalyzableFile(row) ? (
+                  {enableAnalysis && isInFlightAnalysis(row.analysis?.status) && row.analysis?.jobId ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busyByFileId[row._id] === 'checking'}
+                        onClick={() => void handleCheckStatus(row)}
+                        className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--accent-soft)]/40 disabled:opacity-60"
+                      >
+                        {busyByFileId[row._id] === 'checking' ? 'Checking…' : 'Check status'}
+                      </button>
+                      {canWrite ? (
+                        <button
+                          type="button"
+                          disabled={busyByFileId[row._id] === 'cancelling'}
+                          onClick={() => void handleCancelAnalysis(row)}
+                          className="rounded border border-red-200 px-2 py-0.5 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
+                        >
+                          {busyByFileId[row._id] === 'cancelling' ? 'Cancelling…' : 'Cancel'}
+                        </button>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {enableAnalysis &&
+                  canWrite &&
+                  isAnalyzableFile(row) &&
+                  !isInFlightAnalysis(row.analysis?.status) ? (
                     <button
                       type="button"
-                      disabled={analyzingId === row._id}
+                      disabled={busyByFileId[row._id] === 'starting'}
                       onClick={() => void handleAnalyze(row)}
                       className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--accent-soft)]/40 disabled:opacity-60"
                     >
-                      {analyzingId === row._id
-                        ? 'Analyzing…'
+                      {busyByFileId[row._id] === 'starting'
+                        ? 'Starting…'
                         : row.analysis?.result
                           ? 'Re-run'
                           : 'Summarize'}
@@ -480,22 +699,38 @@ export default function AttachedFilesPanel({
               {enableAnalysis &&
               (row.analysis?.result ||
                 row.analysis?.error ||
-                analyzingId === row._id ||
-                row.analysis?.status === 'queued' ||
-                row.analysis?.status === 'running') ? (
+                row.analysis?.statusSummary ||
+                busyByFileId[row._id] ||
+                isInFlightAnalysis(row.analysis?.status)) ? (
                 <details
                   open
                   className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
                 >
                   <summary className="cursor-pointer text-sm font-medium">
-                    {analyzingId === row._id ||
-                    row.analysis?.status === 'queued' ||
-                    row.analysis?.status === 'running'
-                      ? 'Analyzing document…'
+                    {isInFlightAnalysis(row.analysis?.status)
+                      ? row.analysis?.statusSummary || 'Analyzing document…'
                       : row.analysis?.status === 'failed'
-                        ? 'Summary failed'
-                        : 'Document summary'}
+                        ? isNotInQueueMessage(row.analysis?.error || row.analysis?.statusSummary)
+                          ? 'Not in queue'
+                          : 'Summary failed'
+                        : row.analysis?.status === 'cancelled'
+                          ? 'Summary cancelled'
+                          : 'Document summary'}
                   </summary>
+                  {isInFlightAnalysis(row.analysis?.status) && row.analysis?.statusSummary ? (
+                    <p className="mt-2 text-sm text-[var(--muted)]">{row.analysis.statusSummary}</p>
+                  ) : null}
+                  {row.analysis?.status === 'queued' && row.analysis?.queuePosition != null ? (
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      Queue position {row.analysis.queuePosition}
+                    </p>
+                  ) : null}
+                  {row.analysis?.progressTotal ? (
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      Step {row.analysis.progressCompleted || 0} of {row.analysis.progressTotal}
+                      {row.analysis.progressStep ? ` · ${row.analysis.progressStep}` : ''}
+                    </p>
+                  ) : null}
                   {row.analysis?.error ? (
                     <p className="mt-2 text-sm text-red-700">{row.analysis.error}</p>
                   ) : null}

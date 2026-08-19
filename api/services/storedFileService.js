@@ -38,6 +38,11 @@ function serializeAnalysis(analysis) {
     model: analysis.model || null,
     requestedAt: analysis.requestedAt || null,
     completedAt: analysis.completedAt || null,
+    statusSummary: analysis.statusSummary || null,
+    progressStep: analysis.progressStep || null,
+    progressCompleted: analysis.progressCompleted ?? null,
+    progressTotal: analysis.progressTotal ?? null,
+    queuePosition: analysis.queuePosition ?? null,
   };
 }
 

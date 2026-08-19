@@ -915,7 +915,7 @@ components:
           type: string
         status:
           type: string
-          enum: [queued, running, succeeded, failed]
+          enum: [queued, running, succeeded, failed, cancelled]
         result:
           type: string
           nullable: true
@@ -926,6 +926,23 @@ components:
         model:
           type: string
           nullable: true
+        statusSummary:
+          type: string
+          nullable: true
+          description: Latest RTCNAI processing status message
+        progressStep:
+          type: string
+          nullable: true
+        progressCompleted:
+          type: integer
+          nullable: true
+        progressTotal:
+          type: integer
+          nullable: true
+        queuePosition:
+          type: integer
+          nullable: true
+          description: Position in the RTCNAI queue while the job is waiting
         requestedAt:
           type: string
           format: date-time
@@ -942,8 +959,11 @@ components:
           type: string
         status:
           type: string
-          enum: [queued, running, succeeded, failed]
+          enum: [queued, running, succeeded, failed, cancelled]
         summary:
+          type: string
+          nullable: true
+        statusSummary:
           type: string
           nullable: true
         error:
@@ -951,6 +971,18 @@ components:
           nullable: true
         model:
           type: string
+          nullable: true
+        progressStep:
+          type: string
+          nullable: true
+        progressCompleted:
+          type: integer
+          nullable: true
+        progressTotal:
+          type: integer
+          nullable: true
+        queuePosition:
+          type: integer
           nullable: true
         requestedAt:
           type: string
@@ -3807,6 +3839,11 @@ paths:
     post:
       tags: [Opportunities, Files]
       summary: Queue RTCNAI summary of an attached PDF or DOCX
+      description: >
+        Checks GET /v1/queue first. If this file already has a queued or running job
+        (by job id or storage URI), returns that job without creating another.
+        Otherwise creates one RTCNAI job. If a locally in-flight job is missing from
+        the queue, the job is marked failed with "Document is not in the analysis queue."
       operationId: startOpportunityFileAnalysis
       security:
         - bearerAuth: []
@@ -3821,7 +3858,7 @@ paths:
           schema: { type: string }
       responses:
         '202':
-          description: Analysis job queued
+          description: Analysis job queued or already in progress
           content:
             application/json:
               schema:
@@ -3834,11 +3871,49 @@ paths:
           description: Opportunity or file not found
         '503':
           description: RTCNAI unreachable or not configured
+    get:
+      tags: [Opportunities, Files]
+      summary: Get the persisted RTCNAI job for a file
+      description: >
+        Returns stored processing state. Refreshes from GET /v1/queue first. If the job
+        is still queued or running, returns queue position and step without extra
+        analysis requests. If it has left the queue, checks GET /v1/analyses/{job_id}/status
+        and fetches the full result only when it succeeds. Missing queue and status
+        entries are returned as a failed job with "Document is not in the analysis queue."
+      operationId: getCurrentOpportunityFileAnalysis
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: fileId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Current job status and summary when available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileAnalysisJob'
+        '403':
+          description: Forbidden
+        '404':
+          description: Opportunity, file, or job not found
+        '503':
+          description: RTCNAI unreachable or not configured
 
   /api/opportunities/{id}/files/{fileId}/analyses/{jobId}:
     get:
       tags: [Opportunities, Files]
       summary: Poll RTCNAI job status and persisted summary
+      description: >
+        Checks GET /v1/queue first. Status and result endpoints are called only after the
+        job has left the queue. Full GET /v1/analyses/{job_id} is called only after the
+        job succeeds, and the result is stored on the file.
       operationId: getOpportunityFileAnalysis
       security:
         - bearerAuth: []
@@ -3866,6 +3941,46 @@ paths:
           description: Forbidden
         '404':
           description: Opportunity, file, or job not found
+        '503':
+          description: RTCNAI unreachable or not configured
+
+  /api/opportunities/{id}/files/{fileId}/analyses/{jobId}/cancel:
+    post:
+      tags: [Opportunities, Files]
+      summary: Cancel a queued or running RTCNAI job
+      description: >
+        Forwards POST /v1/analyses/{job_id}/cancel. Queued and running jobs are marked
+        cancelled and removed from the RTCNAI queue. Already cancelled is idempotent.
+        If the job already succeeded or failed, returns the current stored status.
+      operationId: cancelOpportunityFileAnalysis
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: fileId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: jobId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Job cancelled, or current terminal status if it already completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileAnalysisJob'
+        '403':
+          description: Forbidden
+        '404':
+          description: Opportunity, file, or job not found
+        '409':
+          description: Local job already succeeded or failed
         '503':
           description: RTCNAI unreachable or not configured
 
