@@ -70,6 +70,7 @@ export default function SurveysPage() {
     enabled: isAdmin,
   });
   const [pendingDelete, setPendingDelete] = useState<SurveyRecord | null>(null);
+  const [pendingLinks, setPendingLinks] = useState(0);
   const [deleting, setDeleting] = useState(false);
   const [data, setData] = useState<SurveyListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -134,6 +135,7 @@ export default function SurveysPage() {
         message: 'The survey can be restored from Recycle bin.',
       });
       setPendingDelete(null);
+      setPendingLinks(0);
       await loadSurveys();
     } catch (err) {
       pushToast({
@@ -143,6 +145,16 @@ export default function SurveysPage() {
       });
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const requestDelete = async (survey: SurveyRecord) => {
+    setPendingDelete(survey);
+    try {
+      const links = await apiGet<{ count: number }>(`/surveys/${survey._id}/localplan-links`);
+      setPendingLinks(links.count || 0);
+    } catch {
+      setPendingLinks(0);
     }
   };
 
@@ -290,7 +302,7 @@ export default function SurveysPage() {
                       icon="delete"
                       label="Delete"
                       danger
-                      onClick={() => setPendingDelete(survey)}
+                      onClick={() => void requestDelete(survey)}
                     />
                   </TableActionRow>
                 </li>
@@ -385,7 +397,7 @@ export default function SurveysPage() {
                               icon="delete"
                               label="Delete"
                               danger
-                              onClick={() => setPendingDelete(survey)}
+                              onClick={() => void requestDelete(survey)}
                             />
                           </TableActionRow>
                         </td>
@@ -427,13 +439,20 @@ export default function SurveysPage() {
 
       <ConfirmDeleteDialog
         isOpen={Boolean(pendingDelete)}
-        onClose={() => setPendingDelete(null)}
+        onClose={() => {
+          setPendingDelete(null);
+          setPendingLinks(0);
+        }}
         onConfirm={handleDelete}
         title="Move to recycle bin"
         itemLabel={pendingDelete?.name}
         description={
           pendingDelete
-            ? `Move “${pendingDelete.name}” to the recycle bin? An administrator can restore it later.`
+            ? pendingLinks > 0
+              ? `Move “${pendingDelete.name}” to the recycle bin? ${pendingLinks} linked local plan${
+                  pendingLinks === 1 ? '' : 's'
+                } will remain until deleted separately. Permanent survey purge will be blocked while they exist.`
+              : `Move “${pendingDelete.name}” to the recycle bin? An administrator can restore it later.`
             : undefined
         }
         confirmLabel="Move to bin"

@@ -12,6 +12,7 @@ const {
   normalizeQuestion,
   normalizeOrganization,
   normalizeUser,
+  normalizeLocalPlan,
 } = require('../api/scripts/import-sample-data');
 
 const OWNER = new mongoose.Types.ObjectId('66fb10a147cf43795d325466');
@@ -215,5 +216,58 @@ describe('import-sample-data mapping', () => {
       new Set()
     );
     expect(doc.organization).toBeNull();
+  });
+
+  it('maps legacy local plan numeric scales onto yes/no and low/medium/high', () => {
+    const planId = new mongoose.Types.ObjectId();
+    const answerId = new mongoose.Types.ObjectId();
+    const surveyId = new mongoose.Types.ObjectId();
+    const countyId = new mongoose.Types.ObjectId();
+    const questionId = new mongoose.Types.ObjectId();
+    const questionMap = new Map([
+      [String(questionId), { code: 'MC1', area: 'MC', todo: 'Establish policy' }],
+    ]);
+    const { doc, skipReason } = normalizeLocalPlan(
+      {
+        _id: { $oid: String(planId) },
+        answer: { $oid: String(answerId) },
+        questionary: { $oid: String(surveyId) },
+        county: { $oid: String(countyId) },
+        status: 'completed',
+        plan: [
+          {
+            question: { $oid: String(questionId) },
+            technical: {
+              complexity: { administrative: 1, financial: 5 },
+              opportunities: { federal: 3, state: 0, partners: 10 },
+              isMandatory: true,
+            },
+            consultant: { financialCapacity: 0, planCapacity: 2, interCooperation: 10 },
+            isLocalAgenda: true,
+          },
+        ],
+      },
+      { fallbackOwnerId: OWNER, questionMap }
+    );
+    expect(skipReason).toBeUndefined();
+    expect(doc.kind).toBe('LOCALPLAN');
+    expect(doc.status).toBe('draft');
+    expect(doc.sourceCompleted).toBe(true);
+    expect(doc.entries).toHaveLength(1);
+    expect(doc.entries[0].code).toBe('MC1');
+    expect(doc.entries[0].technical.opportunities).toEqual({
+      federal: 'yes',
+      state: 'no',
+      partners: 'yes',
+    });
+    expect(doc.entries[0].technical.complexity).toEqual({
+      administrative: 'medium',
+      financial: 'high',
+    });
+    expect(doc.entries[0].consultant.financialCapacity).toBe('low');
+    expect(doc.entries[0].consultant.planCapacity).toBe('medium');
+    expect(doc.entries[0].consultant.interCooperation).toBe('high');
+    expect(doc.entries[0].isLocalAgenda).toBe(true);
+    expect(doc.entries[0].technicalPriority.score).toBeGreaterThan(0);
   });
 });

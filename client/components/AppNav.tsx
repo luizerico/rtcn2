@@ -33,6 +33,7 @@ type NavIconName =
   | 'bin'
   | 'reports'
   | 'geography'
+  | 'localplans'
   | 'profile'
   | 'switchAccount'
   | 'logout';
@@ -40,6 +41,7 @@ type NavIconName =
 const NAV_ICON_BY_HREF: Record<string, NavIconName> = {
   '/': 'home',
   '/surveys': 'surveys',
+  '/localplans': 'localplans',
   '/admin/surveys': 'surveys',
   '/sponsors': 'sponsors',
   '/opportunities': 'opportunities',
@@ -82,6 +84,14 @@ function NavIcon({ name, className = 'h-5 w-5' }: { name: NavIconName; className
           <path {...stroke} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
           <path {...stroke} d="M14 2v6h6" />
           <path {...stroke} d="M8 13h8M8 17h5" />
+        </svg>
+      );
+    case 'localplans':
+      return (
+        <svg {...common}>
+          <path {...stroke} d="M4 6h16v12H4z" />
+          <path {...stroke} d="M8 6V4h8v2" />
+          <path {...stroke} d="M8 10h8M8 14h5" />
         </svg>
       );
     case 'sponsors':
@@ -225,6 +235,13 @@ const links: NavItem[] = [
       can('COUNTY:READ', { allowAnyInstance: true }),
   },
   {
+    href: '/localplans',
+    label: 'Local plans',
+    visible: (can) =>
+      can('LOCALPLAN:READ', { allowAnyInstance: true }) ||
+      can('COUNTY:READ', { allowAnyInstance: true }),
+  },
+  {
     href: '/sponsors',
     label: 'Sponsors',
     visible: (can) => can('SPONSOR:READ', { allowAnyInstance: true }),
@@ -245,6 +262,7 @@ const links: NavItem[] = [
     visible: (can, isAdmin) =>
       isAdmin ||
       can('SURVEY:READ', { allowAnyInstance: true }) ||
+      can('LOCALPLAN:READ', { allowAnyInstance: true }) ||
       can('SPONSOR:READ', { allowAnyInstance: true }) ||
       can('OPPORTUNITY:READ', { allowAnyInstance: true }) ||
       can('PROJECT:READ', { allowAnyInstance: true }) ||

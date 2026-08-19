@@ -88,6 +88,7 @@ export default function SurveyAnswersWorkspacePage() {
   const [pendingDelete, setPendingDelete] = useState<AnswerRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const canStart = can('SURVEY:READ', { allowAnyInstance: true });
+  const canCreatePlan = can('LOCALPLAN:CREATE', { classWideOnly: true }) || isAdmin;
 
   const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters(DEFAULT_FILTERS);
   const [sort, setSort] = useState<SortField>('updatedAt');
@@ -431,6 +432,17 @@ export default function SurveyAnswersWorkspacePage() {
                               icon="edit"
                               label="Edit"
                               reason="You cannot edit this sheet."
+                            />
+                            <AccessIconLink
+                              allowed={
+                                canCreatePlan &&
+                                row.status === 'approved' &&
+                                row.subjectType === 'COUNTY'
+                              }
+                              href={`/localplans/new?responseId=${row._id}`}
+                              icon="add"
+                              label="Create local plan"
+                              reason="Local plans can be created from approved county surveys."
                             />
                             <AccessIconButton
                               allowed={deletable}

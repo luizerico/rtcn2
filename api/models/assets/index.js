@@ -6,6 +6,8 @@ const Survey = require('./Survey');
 const Sponsor = require('./Sponsor');
 const Opportunity = require('./Opportunity');
 const Project = require('./Project');
+const LocalPlan = require('./LocalPlan');
+const LocalPlanChange = require('./LocalPlanChange');
 const { InstrumentResponse } = require('../survey');
 const { ASSET_KINDS, ASSET_TYPE_LABELS, ASSET_DISCRIMINATORS } = require('../../constants/assetTypes');
 const { activeFilter } = require('../../services/trash');
@@ -15,6 +17,7 @@ const KIND_MODELS = {
   SPONSOR: Sponsor,
   OPPORTUNITY: Opportunity,
   PROJECT: Project,
+  LOCALPLAN: LocalPlan,
 };
 
 function modelForKind(kind) {
@@ -81,6 +84,8 @@ module.exports = {
   Sponsor,
   Opportunity,
   Project,
+  LocalPlan,
+  LocalPlanChange,
   ASSET_KINDS,
   ASSET_TYPE_LABELS,
   ASSET_DISCRIMINATORS,

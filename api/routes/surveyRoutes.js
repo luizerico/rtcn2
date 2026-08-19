@@ -21,6 +21,7 @@ const {
   listSurveyResponses,
   listAccessibleAnswers,
   listAnswerableCounties,
+  listSurveyLocalPlanLinks,
 } = require('../controllers/surveyController');
 const { createOwnerFileHandlers } = require('../controllers/storedFileController');
 const { protect, authorize } = require('../middleware/authMiddleware');
@@ -202,6 +203,12 @@ router.get(
   listSurveyResponses
 );
 router.post('/:id/responses', validate(paramObjectId('id', 'Survey id')), submitSurveyResponse);
+router.get(
+  '/:id/localplan-links',
+  validate(paramObjectId('id', 'Survey id')),
+  authorize('SURVEY:READ', { param: 'id' }),
+  listSurveyLocalPlanLinks
+);
 router.get(
   '/:id',
   validate(paramObjectId('id', 'Survey id')),
