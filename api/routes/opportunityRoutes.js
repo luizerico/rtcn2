@@ -12,6 +12,10 @@ const {
   getOpportunityFileAnalysis,
   cancelOpportunityFileAnalysis,
 } = require('../controllers/opportunityAnalysisController');
+const {
+  listMatchesForOpportunity,
+  createProjectFromCountyMatch,
+} = require('../controllers/opportunityMatchController');
 const { createOwnerFileHandlers } = require('../controllers/storedFileController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 const { validate } = require('../middleware/validate');
@@ -87,6 +91,21 @@ router.post(
   validate(paramObjectId('fileId', 'File id')),
   authorize('OPPORTUNITY:WRITE', { param: 'id' }),
   cancelOpportunityFileAnalysis
+);
+
+router.get(
+  '/:id/matches',
+  validate(paramObjectId('id', 'Opportunity id')),
+  authorize('OPPORTUNITY:READ', { param: 'id' }),
+  listMatchesForOpportunity
+);
+router.post(
+  '/:id/matches/:runId/counties/:countyId/project',
+  validate(paramObjectId('id', 'Opportunity id')),
+  validate(paramObjectId('runId', 'Run id')),
+  validate(paramObjectId('countyId', 'County id')),
+  authorize('OPPORTUNITY:READ', { param: 'id' }),
+  createProjectFromCountyMatch
 );
 
 module.exports = router;

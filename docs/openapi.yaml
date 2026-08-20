@@ -30,6 +30,7 @@ tags:
   - name: Local plans
   - name: Sponsors
   - name: Opportunities
+  - name: Opportunity matches
   - name: Files
   - name: Recycle bin
   - name: Projects
@@ -917,9 +918,12 @@ components:
           type: string
           enum: [queued, running, succeeded, failed, cancelled]
         result:
+          description: Structured JSON when RTCNAI response_format=json, otherwise a text summary
+          nullable: true
+        responseFormat:
           type: string
           nullable: true
-          description: Summary and relevant points from RTCNAI
+          enum: [json, text]
         error:
           type: string
           nullable: true
@@ -961,8 +965,12 @@ components:
           type: string
           enum: [queued, running, succeeded, failed, cancelled]
         summary:
+          description: Structured JSON when RTCNAI response_format=json, otherwise a text summary
+          nullable: true
+        responseFormat:
           type: string
           nullable: true
+          enum: [json, text]
         statusSummary:
           type: string
           nullable: true
@@ -994,6 +1002,108 @@ components:
           nullable: true
         file:
           $ref: '#/components/schemas/StoredFile'
+
+    AiPromptTemplate:
+      type: object
+      properties:
+        key:
+          type: string
+          enum:
+            - opportunity_match_shallow
+            - opportunity_match_deep_profile
+            - opportunity_match_deep_counties
+        name:
+          type: string
+        body:
+          type: string
+        maxLength:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: object
+          nullable: true
+
+    OpportunityMatchRun:
+      type: object
+      properties:
+        _id:
+          type: string
+        opportunityIds:
+          type: array
+          items:
+            type: string
+        mode:
+          type: string
+          enum: [shallow, deep]
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, cancelled]
+        error:
+          type: string
+        candidateCount:
+          type: integer
+        scoreWeights:
+          type: object
+          additionalProperties:
+            type: number
+        steps:
+          type: array
+          items:
+            type: object
+        promptSnapshot:
+          type: object
+          additionalProperties:
+            type: string
+        opportunities:
+          type: array
+          items:
+            type: object
+            properties:
+              _id:
+                type: string
+              name:
+                type: string
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpportunityCountyMatch'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    OpportunityCountyMatch:
+      type: object
+      properties:
+        opportunityId:
+          type: string
+        countyId:
+          type: string
+        countyName:
+          type: string
+        IBGECode:
+          type: string
+        gradeBefore:
+          type: object
+        gradeAfter:
+          type: object
+        matchedCodes:
+          type: array
+          items:
+            type: object
+        dimensions:
+          type: object
+        overallScore:
+          type: number
+        rationale:
+          type: string
+        projectId:
+          type: string
+          nullable: true
 
     RecycleBinItem:
       type: object
@@ -3943,6 +4053,249 @@ paths:
           description: Opportunity, file, or job not found
         '503':
           description: RTCNAI unreachable or not configured
+
+  /api/admin/ai-prompts:
+    get:
+      tags: [Opportunity matches]
+      summary: List opportunity-match prompt templates (admin only)
+      operationId: listAiPrompts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Prompt templates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AiPromptTemplate'
+        '403':
+          description: Forbidden
+    put:
+      tags: [Opportunity matches]
+      summary: Update one or more opportunity-match prompt templates (admin only)
+      operationId: updateAiPrompts
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [key, body]
+                    properties:
+                      key:
+                        type: string
+                      body:
+                        type: string
+                        maxLength: 8000
+      responses:
+        '200':
+          description: Updated templates
+        '403':
+          description: Forbidden
+
+  /api/opportunity-matches:
+    get:
+      tags: [Opportunity matches]
+      summary: List previous opportunity–county match runs
+      operationId: listOpportunityMatchRuns
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 25 }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [createdAt, updatedAt, mode, status, candidateCount], default: createdAt }
+        - in: query
+          name: order
+          schema: { type: string, enum: [asc, desc], default: desc }
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Search opportunity name or creator username/email
+        - in: query
+          name: mode
+          schema: { type: string, enum: [shallow, deep] }
+        - in: query
+          name: status
+          schema: { type: string, enum: [queued, running, succeeded, failed, cancelled] }
+      responses:
+        '200':
+          description: Paginated match runs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OpportunityMatchRun'
+                  pagination:
+                    type: object
+                  sort:
+                    type: object
+                  scoreWeights:
+                    type: object
+        '403':
+          description: Forbidden
+    post:
+      tags: [Opportunity matches]
+      summary: Start a shallow or deep opportunity–county correlation run
+      description: >
+        Builds a JSON context file (opportunity fields, analyzed-document summaries,
+        county survey gaps and local-plan codes) and queues RTCNAI `/v1/analyses`.
+        Poll GET `/api/opportunity-matches/{runId}` until the run is terminal.
+      operationId: createOpportunityMatchRun
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [opportunityIds]
+              properties:
+                opportunityIds:
+                  type: array
+                  items:
+                    type: string
+                mode:
+                  type: string
+                  enum: [shallow, deep]
+                  default: shallow
+      responses:
+        '202':
+          description: Run queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpportunityMatchRun'
+        '400':
+          description: Validation error
+        '403':
+          description: Forbidden
+        '503':
+          description: RTCNAI unreachable or not configured
+
+  /api/opportunity-matches/{runId}:
+    get:
+      tags: [Opportunity matches]
+      summary: Get a match run with prompt, request, sent data, and result
+      description: >
+        Syncs in-flight RTCNAI jobs from the queue/status endpoints without creating a new
+        analysis. Step details include the prompt, request parameters, context payload, and
+        returned JSON.
+      operationId: getOpportunityMatchRun
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: runId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Match run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpportunityMatchRun'
+        '403':
+          description: Forbidden
+        '404':
+          description: Run not found
+
+  /api/opportunity-matches/{runId}/cancel:
+    post:
+      tags: [Opportunity matches]
+      summary: Cancel an in-flight match run
+      operationId: cancelOpportunityMatchRun
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: runId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Cancelled
+        '403':
+          description: Forbidden
+        '409':
+          description: Run already completed
+
+  /api/opportunities/{id}/matches:
+    get:
+      tags: [Opportunities, Opportunity matches]
+      summary: Latest county matches for an opportunity
+      operationId: listOpportunityMatches
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Latest run and recent history
+        '403':
+          description: Forbidden
+        '404':
+          description: Opportunity not found
+
+  /api/opportunities/{id}/matches/{runId}/counties/{countyId}/project:
+    post:
+      tags: [Opportunities, Opportunity matches, Projects]
+      summary: Create a draft project from a county match
+      operationId: createProjectFromOpportunityMatch
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: runId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: countyId
+          required: true
+          schema: { type: string }
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '200':
+          description: Existing project reused
+        '403':
+          description: Forbidden
+        '404':
+          description: Match not found
 
   /api/opportunities/{id}/files/{fileId}/analyses/{jobId}/cancel:
     post:

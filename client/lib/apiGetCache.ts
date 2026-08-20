@@ -10,6 +10,8 @@ function persistGet(endpoint: string): boolean {
   const [pathname] = normalizeApiEndpoint(endpoint).split('?');
   if (pathname === '/auth/me') return false;
   if (/\/analyses\//.test(pathname)) return false;
+  if (/\/opportunity-matches/.test(pathname)) return false;
+  if (/\/matches$/.test(pathname)) return false;
   return true;
 }
 

@@ -31,7 +31,13 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rtcn-analyses-'));
 process.env.FILE_STORAGE_TMP_DIR = tmpDir;
 
 const JOB_ID = '11111111-1111-4111-8111-111111111111';
-const SUMMARY = 'Eligibility: municipalities.\nDeadline: 2026-12-31.\nBudget: R$ 100000.';
+const SUMMARY = {
+  summary: 'Municipal climate adaptation grant.',
+  eligibility: 'municipalities.',
+  dates: 'Deadline: 2026-12-31',
+  budget: 'R$ 100000',
+};
+const SUMMARY_TEXT = JSON.stringify(SUMMARY);
 const SUCCESS_STATUS_MESSAGE = 'Document analysis completed successfully';
 
 function statusPayload(outcome, extra = {}) {
@@ -51,7 +57,7 @@ function statusPayload(outcome, extra = {}) {
     error: extra.error || null,
     analysis:
       outcome === 'succeeded'
-        ? { model: 'gpt-4o-mini', usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }, result_preview: SUMMARY.slice(0, 80) }
+        ? { model: 'gpt-4o-mini', usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }, result_preview: SUMMARY_TEXT.slice(0, 80) }
         : null,
   };
 }
@@ -210,7 +216,7 @@ describe('Opportunity file analyses (RTCNAI)', () => {
           data: {
             job_id: JOB_ID,
             status: 'succeeded',
-            analysis: { model: 'gpt-4o-mini', result: SUMMARY },
+            analysis: { model: 'gpt-4o-mini', result: SUMMARY, response_format: 'json' },
           },
         });
       }
@@ -247,20 +253,24 @@ describe('Opportunity file analyses (RTCNAI)', () => {
       .set(auth);
     expect(polled.status).toBe(200);
     expect(polled.body.status).toBe('succeeded');
-    expect(polled.body.summary).toBe(SUMMARY);
-    expect(polled.body.file.analysis.result).toBe(SUMMARY);
+    expect(polled.body.responseFormat).toBe('json');
+    expect(polled.body.summary).toEqual(SUMMARY);
+    expect(polled.body.file.analysis.result).toEqual(SUMMARY);
+    expect(polled.body.file.analysis.responseFormat).toBe('json');
 
     const listed = await request(app)
       .get(`/api/opportunities/${opportunity._id}/files`)
       .set(auth);
-    expect(listed.body.items[0].analysis.result).toBe(SUMMARY);
+    expect(listed.body.items[0].analysis.result).toEqual(SUMMARY);
     expect(listed.body.items[0].analysis.statusSummary).toBe(SUCCESS_STATUS_MESSAGE);
 
     const postCalls = fetchSpy.mock.calls.filter(
       (call) => String(call[1]?.method || 'GET').toUpperCase() === 'POST'
     );
     expect(postCalls).toHaveLength(1);
+    expect(String(postCalls[0][0])).toContain('response_format=json');
     expect(postCalls[0][1].headers['X-API-Key']).toBe('test-rtcnai-key');
+    expect(postCalls[0][1].headers['Content-Type']).toBe('application/json');
     expect(postCalls[0][1].headers.Authorization).toBeUndefined();
     const body = JSON.parse(postCalls[0][1].body);
     expect(body.provider).toBe('tmp');
@@ -285,7 +295,7 @@ describe('Opportunity file analyses (RTCNAI)', () => {
     expect(resultLog.success).toBe(true);
     expect(resultLog.message).toBe(SUCCESS_STATUS_MESSAGE);
     expect(resultLog.meta.rtcnaiMessage).toBe(SUCCESS_STATUS_MESSAGE);
-    expect(resultLog.meta.result).toBe(SUMMARY);
+    expect(resultLog.meta.result).toBe(SUMMARY_TEXT);
   });
 
   it('does not create a second RTCNAI job while one is in progress', async () => {
@@ -418,7 +428,8 @@ describe('Opportunity file analyses (RTCNAI)', () => {
     expect(current.status).toBe(200);
     expect(current.body.jobId).toBe(JOB_ID);
     expect(current.body.status).toBe('succeeded');
-    expect(current.body.summary).toBe(SUMMARY);
+    expect(current.body.summary).toEqual(SUMMARY);
+    expect(current.body.responseFormat).toBe('json');
   });
 
   it('denies unprivileged users', async () => {
@@ -468,7 +479,7 @@ describe('Opportunity file analyses (RTCNAI)', () => {
       .get(`/api/opportunities/${opportunity._id}/files/${file._id}/analyses/${JOB_ID}`)
       .set(auth);
     expect(polled.status).toBe(200);
-    expect(polled.body.summary).toBe(SUMMARY);
+    expect(polled.body.summary).toEqual(SUMMARY);
   });
 
   it('rejects Excel and image files', async () => {

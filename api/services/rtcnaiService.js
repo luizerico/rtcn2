@@ -1,10 +1,11 @@
 const { HttpError, ERROR_CODES } = require('../utils/httpErrors');
+const { recordAction } = require('./actionLogService');
 
 const DEFAULT_RTCNAI_URL = 'http://localhost:8008';
 const PROMPT_MAX = 8000;
 
 const DEFAULT_FUNDING_PROMPT =
-  'Summarize this funding opportunity document. Return a short summary, then a structured list of relevant points covering: purpose, eligibility, dates and deadlines, budget and funding amounts, submission method, required documents, and any restrictions or special conditions. Omit any point that is not present in the document.';
+  'Summarize this funding opportunity document as JSON. Use these keys and omit any key that is not present in the document: summary, purpose, eligibility, dates, budget, submissionMethod, requiredDocuments, restrictions.';
 
 const ANALYZABLE_MIME_TYPES = new Set([
   'application/pdf',
@@ -105,6 +106,63 @@ function mapUpstreamStatus(status) {
   return 502;
 }
 
+function describeRtcnaiCall(url, { method = 'GET', body } = {}) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { url, method, query: {}, body: summarizeRtcnaiBody(body) };
+  }
+  const query = {};
+  parsed.searchParams.forEach((value, key) => {
+    if (key === 'prompt') {
+      query.promptLength = String(value || '').length;
+      query.promptPreview = String(value || '').slice(0, 240);
+      return;
+    }
+    query[key] = value;
+  });
+  const jobMatch = parsed.pathname.match(/\/v1\/analyses\/([^/]+)/i);
+  return {
+    url: `${parsed.origin}${parsed.pathname}`,
+    path: parsed.pathname,
+    method,
+    query,
+    body: summarizeRtcnaiBody(body),
+    jobId: jobMatch ? decodeURIComponent(jobMatch[1]) : null,
+  };
+}
+
+function summarizeRtcnaiBody(body) {
+  if (body == null) return null;
+  if (typeof body !== 'object') return { value: String(body).slice(0, 240) };
+  return {
+    provider: body.provider || null,
+    uri: body.uri || null,
+  };
+}
+
+function logRtcnaiCall(info, extra = {}) {
+  const payload = { ...info, ...extra };
+  console.info('[RTCNAI]', payload);
+  void recordAction({
+    action: 'rtcnai.request',
+    resourceType: 'RTCNAI',
+    resourceId: extra.jobId || info.jobId || null,
+    method: info.method,
+    path: info.path || info.url,
+    statusCode: extra.statusCode || 0,
+    success: extra.success,
+    message: extra.message || `${info.method} ${info.path || info.url}`,
+    meta: {
+      url: info.url,
+      query: info.query,
+      body: info.body,
+      ...extra,
+    },
+  });
+}
+
 async function rtcnaiRequest(path, { method = 'GET', body } = {}) {
   const key = rtcnaiApiKey();
   if (!key) {
@@ -112,13 +170,12 @@ async function rtcnaiRequest(path, { method = 'GET', body } = {}) {
   }
 
   const url = `${rtcnaiBaseUrl()}${path}`;
+  const call = describeRtcnaiCall(url, { method, body });
   const headers = {
     Accept: 'application/json',
+    'Content-Type': 'application/json',
     'X-API-Key': key,
   };
-  if (body !== undefined) {
-    headers['Content-Type'] = 'application/json';
-  }
 
   let upstream;
   try {
@@ -128,6 +185,12 @@ async function rtcnaiRequest(path, { method = 'GET', body } = {}) {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch (error) {
+    logRtcnaiCall(call, {
+      success: false,
+      statusCode: 503,
+      message: 'Document analysis service is unreachable.',
+      error: error.message,
+    });
     throw new HttpError(503, 'Document analysis service is unreachable.', {
       code: ERROR_CODES.UNAVAILABLE,
       cause: error,
@@ -139,10 +202,25 @@ async function rtcnaiRequest(path, { method = 'GET', body } = {}) {
   try {
     payload = text ? JSON.parse(text) : {};
   } catch {
+    logRtcnaiCall(call, {
+      success: false,
+      statusCode: upstream.status,
+      message: 'Invalid analysis service response.',
+    });
     throw new HttpError(502, 'Invalid analysis service response.', { code: ERROR_CODES.INTERNAL });
   }
 
-  if (!upstream.ok || payload.success === false) {
+  const ok = upstream.ok && payload.success !== false;
+  logRtcnaiCall(call, {
+    success: ok,
+    statusCode: upstream.status,
+    message: ok
+      ? `${call.method} ${call.path}`
+      : envelopeMessage(payload, 'Document analysis request failed.'),
+    jobId: payload?.data?.job_id || payload?.data?.jobId || call.jobId,
+  });
+
+  if (!ok) {
     throw new HttpError(
       mapUpstreamStatus(upstream.status),
       envelopeMessage(payload, 'Document analysis request failed.'),
@@ -155,10 +233,13 @@ async function rtcnaiRequest(path, { method = 'GET', body } = {}) {
 
 async function createAnalysis({ provider, uri, prompt }) {
   const encoded = encodeURIComponent(prompt || fundingPrompt());
-  const result = await rtcnaiRequest(`/v1/analyses?prompt=${encoded}`, {
-    method: 'POST',
-    body: { provider, uri },
-  });
+  const result = await rtcnaiRequest(
+    `/v1/analyses?prompt=${encoded}&response_format=json`,
+    {
+      method: 'POST',
+      body: { provider, uri },
+    }
+  );
   return result.data;
 }
 
@@ -211,6 +292,66 @@ function findQueueJob(queue, { jobId, uri } = {}) {
   );
 }
 
+const RESULT_MAX = 50000;
+
+function persistAnalysisResult(result) {
+  if (result == null || result === '') return null;
+  if (typeof result === 'string') return result.slice(0, RESULT_MAX);
+  try {
+    return JSON.stringify(result).slice(0, RESULT_MAX);
+  } catch {
+    return String(result).slice(0, RESULT_MAX);
+  }
+}
+
+function unwrapAnalysisResult(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
+  if (
+    parsed.result != null &&
+    (parsed.response_format != null || parsed.responseFormat != null)
+  ) {
+    return unwrapAnalysisResult(
+      typeof parsed.result === 'string' ? coerceAnalysisResult(parsed.result) : parsed.result
+    );
+  }
+  if (!('response_format' in parsed) && !('responseFormat' in parsed)) return parsed;
+  const { response_format: _snake, responseFormat: _camel, ...rest } = parsed;
+  return Object.keys(rest).length ? rest : parsed;
+}
+
+function coerceAnalysisResult(result) {
+  if (result == null || result === '') return null;
+  if (typeof result === 'object') return result;
+  const text = String(result);
+  const trimmed = text.trim();
+  if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return text;
+    }
+  }
+  return text;
+}
+
+function parseAnalysisResult(result) {
+  return unwrapAnalysisResult(coerceAnalysisResult(result));
+}
+
+function analysisResultText(result) {
+  const parsed = parseAnalysisResult(result);
+  if (parsed == null) return '';
+  if (typeof parsed === 'string') return parsed;
+  try {
+    return JSON.stringify(parsed);
+  } catch {
+    return String(parsed);
+  }
+}
+
 module.exports = {
   DEFAULT_FUNDING_PROMPT,
   ANALYZABLE_MIME_TYPES,
@@ -219,6 +360,9 @@ module.exports = {
   isAnalyzableMime,
   fundingPrompt,
   analysisLocationForStoredFile,
+  persistAnalysisResult,
+  parseAnalysisResult,
+  analysisResultText,
   createAnalysis,
   getAnalysis,
   getAnalysisStatus,

@@ -7,7 +7,7 @@ export type StoredFileUser = {
 export type FileAnalysisRecord = {
   jobId: string | null;
   status: string | null;
-  result: string | null;
+  result: string | Record<string, unknown> | unknown[] | null;
   error: string | null;
   model: string | null;
   requestedAt?: string | null;

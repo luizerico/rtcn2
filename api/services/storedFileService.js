@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const StoredFile = require('../models/StoredFile');
 const { getStorageDriver } = require('./storage');
 const { inspectUpload } = require('./fileTypes');
+const { parseAnalysisResult } = require('./rtcnaiService');
 const { userHasPermission } = require('./rbacService');
 const { HttpError, ERROR_CODES } = require('../utils/httpErrors');
 const { ValidationError } = require('../validation');
@@ -30,10 +31,12 @@ function refId(value) {
 
 function serializeAnalysis(analysis) {
   if (!analysis || !analysis.jobId) return null;
+  const result = parseAnalysisResult(analysis.result);
   return {
     jobId: analysis.jobId,
     status: analysis.status || null,
-    result: analysis.result || null,
+    result,
+    responseFormat: result && typeof result === 'object' ? 'json' : result ? 'text' : null,
     error: analysis.error || null,
     model: analysis.model || null,
     requestedAt: analysis.requestedAt || null,
