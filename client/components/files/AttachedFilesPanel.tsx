@@ -25,6 +25,7 @@ import {
   type FileAnalysisRecord,
   type StoredFileRecord,
 } from '@/lib/storedFileTypes';
+import { AnalysisResultView } from '@/components/files/AnalysisResultView';
 
 type AttachedFilesPanelProps = {
   listEndpoint: string;
@@ -44,7 +45,8 @@ type UploadDraft = {
 type FileAnalysisResponse = {
   jobId: string | null;
   status: string | null;
-  summary: string | null;
+  summary: FileAnalysisRecord['result'];
+  responseFormat?: string | null;
   statusSummary?: string | null;
   error: string | null;
   model: string | null;
@@ -734,11 +736,7 @@ export default function AttachedFilesPanel({
                   {row.analysis?.error ? (
                     <p className="mt-2 text-sm text-red-700">{row.analysis.error}</p>
                   ) : null}
-                  {row.analysis?.result ? (
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--muted)]">
-                      {row.analysis.result}
-                    </p>
-                  ) : null}
+                  {row.analysis?.result ? <AnalysisResultView result={row.analysis.result} /> : null}
                 </details>
               ) : null}
               {canWrite && editingId === row._id ? (

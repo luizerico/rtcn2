@@ -10,6 +10,9 @@ const {
   isAnalyzableMime,
   fundingPrompt,
   analysisLocationForStoredFile,
+  persistAnalysisResult,
+  parseAnalysisResult,
+  analysisResultText,
   createAnalysis,
   getAnalysis,
   getAnalysisStatus,
@@ -132,10 +135,12 @@ const NOT_IN_QUEUE_MESSAGE = 'Document is not in the analysis queue.';
 
 function serializeAnalysisResponse(doc) {
   const analysis = serializeAnalysis(doc.analysis) || {};
+  const result = parseAnalysisResult(analysis.result);
   return {
     jobId: analysis.jobId || null,
     status: analysis.status || null,
-    summary: analysis.result || null,
+    summary: result,
+    responseFormat: result && typeof result === 'object' ? 'json' : 'text',
     statusSummary: analysis.statusSummary || null,
     error: analysis.error || null,
     model: analysis.model || null,
@@ -229,7 +234,7 @@ function applyStatusView(doc, statusView) {
 }
 
 function applyFullResult(doc, data) {
-  const result = data?.analysis?.result || null;
+  const result = persistAnalysisResult(data?.analysis?.result);
   if (result) doc.analysis.result = result;
   if (data?.analysis?.model) doc.analysis.model = data.analysis.model;
   doc.analysis.status = 'succeeded';
@@ -266,7 +271,7 @@ function logTerminalResult(req, doc, statusView) {
     jobId: doc.analysis.jobId,
     code: errorCode,
     rtcnaiMessage,
-    result: outcome === 'succeeded' ? doc.analysis.result || '' : '',
+    result: outcome === 'succeeded' ? analysisResultText(doc.analysis.result) : '',
     debugError: outcome === 'failed' ? rtcnaiMessage : undefined,
   };
   attachAnalysisLogContext(req, { message: rtcnaiMessage, meta });

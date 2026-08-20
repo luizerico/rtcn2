@@ -71,7 +71,19 @@ export default function OpportunityDetailPage() {
             { label: record?.name || 'Opportunity' },
           ]}
         />
-        <h1 className="mt-2 text-3xl font-semibold">{record?.name || 'Opportunity'}</h1>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="mt-2 text-3xl font-semibold">{record?.name || 'Opportunity'}</h1>
+          </div>
+          {record ? (
+            <Link
+              href={`/opportunities/${params.id}/matches`}
+              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
+            >
+              Match counties
+            </Link>
+          ) : null}
+        </div>
       </header>
       {loading ? <p className="text-[var(--muted)]">Loading…</p> : null}
       {error ? (

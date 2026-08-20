@@ -55,6 +55,7 @@ const NAV_ICON_BY_HREF: Record<string, NavIconName> = {
   '/admin/logs': 'logs',
   '/admin/bin': 'bin',
   '/admin/reports': 'reports',
+  '/admin/opportunity-matches': 'opportunities',
   '/admin/geography': 'geography',
   '/account': 'profile',
   '/login': 'switchAccount',
@@ -303,6 +304,12 @@ const links: NavItem[] = [
   {
     href: '/admin/reports',
     label: 'Reports',
+    indent: true,
+    visible: (_c, isAdmin) => isAdmin,
+  },
+  {
+    href: '/admin/opportunity-matches',
+    label: 'Opportunity matches',
     indent: true,
     visible: (_c, isAdmin) => isAdmin,
   },

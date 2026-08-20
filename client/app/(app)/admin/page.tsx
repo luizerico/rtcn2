@@ -55,6 +55,13 @@ const adminSections = [
     visible: (_can: ReturnType<typeof useAccess>['can'], isAdmin: boolean) => isAdmin,
   },
   {
+    href: '/admin/opportunity-matches',
+    title: 'Opportunity matches',
+    description:
+      'Customize RTCNAI prompts and correlate funding opportunities to counties with surveys or local plans.',
+    visible: (_can: ReturnType<typeof useAccess>['can'], isAdmin: boolean) => isAdmin,
+  },
+  {
     href: '/admin/geography',
     title: 'Geography',
     description: 'Browse the IBGE region, state, and microregion catalog (read-only).',

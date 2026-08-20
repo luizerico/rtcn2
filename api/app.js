@@ -27,6 +27,8 @@ require('./models/survey');
 require('./models/geo');
 require('./models/StoredFile');
 require('./models/Organization');
+require('./models/AiPromptTemplate');
+require('./models/OpportunityMatchRun');
 
 const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '2mb';
 
@@ -62,6 +64,8 @@ function createApp({ fallback } = {}) {
   app.use('/api/localplans', require('./routes/localPlanRoutes'));
   app.use('/api/sponsors', require('./routes/sponsorRoutes'));
   app.use('/api/opportunities', require('./routes/opportunityRoutes'));
+  app.use('/api/opportunity-matches', require('./routes/opportunityMatchRoutes'));
+  app.use('/api/admin/ai-prompts', require('./routes/aiPromptRoutes'));
   app.use('/api/files', require('./routes/storedFileRoutes'));
   app.use('/api/bin', require('./routes/recycleBinRoutes'));
   app.use('/api/projects', require('./routes/projectRoutes'));
