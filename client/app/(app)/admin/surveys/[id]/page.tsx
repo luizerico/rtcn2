@@ -167,10 +167,10 @@ export default function SurveyDesignerPage() {
     }
   };
 
-  if (loading) return <p className="text-[var(--muted)]">Loading instrument…</p>;
+  if (loading) return <p className="mx-auto max-w-7xl text-[var(--muted)]">Loading instrument…</p>;
   if (error || !survey) {
     return (
-      <div className="space-y-3">
+      <div className="mx-auto max-w-7xl space-y-3">
         <Breadcrumbs
           items={[
             { label: 'Home', href: '/' },
@@ -185,7 +185,7 @@ export default function SurveyDesignerPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs
           items={[

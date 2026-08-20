@@ -141,7 +141,7 @@ export default function CompareRevisionsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs
           items={[

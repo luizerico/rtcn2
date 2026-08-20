@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
+import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useAccess } from '@/components/AccessProvider';
 import { useToast } from '@/components/ToastProvider';
 import { apiDelete, apiDownload, apiGet, apiPost } from '@/lib/apiUtils';
@@ -18,6 +19,7 @@ export default function AdminRecycleBinPage() {
   const { pushToast } = useToast();
   const [items, setItems] = useState<RecycleBinItem[]>([]);
   const [typeFilter, setTypeFilter] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendingPurge, setPendingPurge] = useState<RecycleBinItem | null>(null);
@@ -127,119 +129,149 @@ export default function AdminRecycleBinPage() {
   };
 
   if (!ready) {
-    return <p className="text-[var(--muted)]">Loading…</p>;
+    return <p className="mx-auto max-w-7xl text-[var(--muted)]">Loading…</p>;
   }
 
   if (!isAdmin) {
     return (
-      <div className="mx-auto max-w-5xl space-y-4">
+      <div className="mx-auto max-w-7xl space-y-4">
         <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Admin', href: '/admin' }, { label: 'Recycle bin' }]} />
         <p className="text-[var(--muted)]">Admin access is required to view the recycle bin.</p>
       </div>
     );
   }
 
+  const hasActiveFilters = Boolean(typeFilter);
+
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-6">
-        <div>
-          <Breadcrumbs
-            items={[{ label: 'Home', href: '/' }, { label: 'Admin', href: '/admin' }, { label: 'Recycle bin' }]}
-          />
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Recycle bin</h1>
-          <p className="mt-2 max-w-2xl text-[var(--muted)]">
-            Files, records, users, groups, and survey answers stay here until restored or permanently deleted.
-          </p>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <header className="border-b border-[var(--border)] pb-6">
+        <Breadcrumbs
+          items={[{ label: 'Home', href: '/' }, { label: 'Admin', href: '/admin' }, { label: 'Recycle bin' }]}
+        />
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold sm:text-3xl">Recycle bin</h1>
+            <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">
+              Files, records, users, groups, and survey answers stay here until restored or permanently deleted.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={busy || items.length === 0}
+            onClick={() => setEmptyOpen(true)}
+            className="rounded-md bg-[var(--danger)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Empty bin
+          </button>
         </div>
-        <button
-          type="button"
-          disabled={busy || items.length === 0}
-          onClick={() => setEmptyOpen(true)}
-          className="rounded-md bg-[var(--danger)] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
-        >
-          Empty bin
-        </button>
       </header>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm text-[var(--muted)]" htmlFor="bin-type-filter">
-          Type
-        </label>
-        <select
-          id="bin-type-filter"
-          value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value)}
-          className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm"
+      {showFilters ? (
+        <form
+          onSubmit={(event) => event.preventDefault()}
+          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-3 lg:grid-cols-4"
         >
-          {BIN_TYPE_FILTERS.map((option) => (
-            <option key={option.value || 'all'} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-[var(--muted)]">Type</span>
+            <select
+              id="bin-type-filter"
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+              className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
+            >
+              {BIN_TYPE_FILTERS.map((option) => (
+                <option key={option.value || 'all'} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-end md:col-span-2 lg:col-span-3">
+            <button
+              type="button"
+              onClick={() => setTypeFilter('')}
+              className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]/40"
+            >
+              Reset
+            </button>
+          </div>
+        </form>
+      ) : null}
 
-      {loading ? <p className="text-[var(--muted)]">Loading…</p> : null}
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700" role="alert">
           {error}
         </div>
       ) : null}
-      {!loading && !error && items.length === 0 ? (
-        <p className="text-[var(--muted)]">The recycle bin is empty.</p>
-      ) : null}
 
-      {items.length > 0 ? (
-        <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          {items.map((row) => (
-            <li key={`${row.itemType}-${row._id}`} className="space-y-2 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-medium">
-                      {binTypeLabel(row.itemType)}
-                    </span>
-                    <p className="font-medium">{row.name}</p>
+      <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3 text-sm text-[var(--muted)]">
+          <span>
+            {loading ? '—' : items.length === 0 ? '0 items' : `${items.length} item${items.length === 1 ? '' : 's'}`}
+            {hasActiveFilters ? ' · filters active' : ''}
+          </span>
+          <TableOptionsMenu
+            showFilters={showFilters}
+            onToggleFilters={() => setShowFilters((prev) => !prev)}
+          />
+        </div>
+        {loading ? (
+          <p className="p-5 text-[var(--muted)]">Loading recycle bin…</p>
+        ) : items.length === 0 ? (
+          <p className="p-5 text-[var(--muted)]">The recycle bin is empty.</p>
+        ) : (
+          <ul className="divide-y divide-[var(--border)]">
+            {items.map((row) => (
+              <li key={`${row.itemType}-${row._id}`} className="space-y-2 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-medium">
+                        {binTypeLabel(row.itemType)}
+                      </span>
+                      <p className="font-medium">{row.name}</p>
+                    </div>
+                    {row.detail ? <p className="mt-1 text-xs text-[var(--muted)]">{row.detail}</p> : null}
+                    <p className="text-xs text-[var(--muted)]">
+                      Deleted {row.deletedAt ? new Date(row.deletedAt).toLocaleString() : '—'} by{' '}
+                      {binActorLabel(row.deletedBy)}
+                    </p>
                   </div>
-                  {row.detail ? <p className="mt-1 text-xs text-[var(--muted)]">{row.detail}</p> : null}
-                  <p className="text-xs text-[var(--muted)]">
-                    Deleted {row.deletedAt ? new Date(row.deletedAt).toLocaleString() : '—'} by{' '}
-                    {binActorLabel(row.deletedBy)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {row.itemType === 'FILE' ? (
+                  <div className="flex flex-wrap gap-2">
+                    {row.itemType === 'FILE' ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleDownload(row)}
+                        className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--accent-soft)]/40 disabled:opacity-60"
+                      >
+                        Download
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => void handleDownload(row)}
-                      className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--accent-soft)]/40 disabled:opacity-60"
+                      onClick={() => void handleRestore(row)}
+                      className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--accent-soft)]/40 disabled:opacity-60"
                     >
-                      Download
+                      Restore
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void handleRestore(row)}
-                    className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--accent-soft)]/40 disabled:opacity-60"
-                  >
-                    Restore
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setPendingPurge(row)}
-                    className="rounded border border-red-200 px-2 py-0.5 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
-                  >
-                    Delete permanently
-                  </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setPendingPurge(row)}
+                      className="rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 disabled:opacity-60"
+                    >
+                      Delete permanently
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <ConfirmDeleteDialog
         isOpen={Boolean(pendingPurge)}

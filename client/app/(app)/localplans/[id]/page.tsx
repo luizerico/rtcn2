@@ -118,11 +118,11 @@ export default function LocalPlanEditPage() {
   };
 
   if (loading) {
-    return <p className="mx-auto max-w-7xl px-4 py-12 text-sm text-[var(--muted)]">Loading local plan…</p>;
+    return <p className="mx-auto max-w-7xl py-12 text-[var(--muted)]">Loading local plan…</p>;
   }
   if (error || !plan) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4 py-12">
+      <div className="mx-auto max-w-7xl space-y-4 py-12">
         <p className="text-red-700">{error || 'Local plan not found.'}</p>
         <Link href="/localplans" className="text-[var(--accent)] hover:underline">
           Back to local plans
@@ -140,7 +140,7 @@ export default function LocalPlanEditPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs
           items={[
@@ -170,7 +170,7 @@ export default function LocalPlanEditPage() {
             <button
               type="button"
               onClick={() => router.push('/localplans')}
-              className="rounded-md border border-[var(--border)] px-4 py-2 text-sm"
+              className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
             >
               Back
             </button>
@@ -179,7 +179,7 @@ export default function LocalPlanEditPage() {
                 type="button"
                 disabled={promoting}
                 onClick={() => void setDefault()}
-                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm"
+                className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)] disabled:opacity-60"
               >
                 {promoting ? 'Updating…' : 'Set as default'}
               </button>
@@ -190,7 +190,7 @@ export default function LocalPlanEditPage() {
               className={`rounded-md px-4 py-2 text-sm font-medium ${
                 mode === 'technical'
                   ? 'bg-[var(--accent)] text-white'
-                  : 'border border-[var(--border)]'
+                  : 'border border-[var(--border)] hover:bg-[var(--accent-soft)]'
               }`}
             >
               Technical
@@ -201,7 +201,7 @@ export default function LocalPlanEditPage() {
               className={`rounded-md px-4 py-2 text-sm font-medium ${
                 mode === 'government'
                   ? 'bg-[var(--accent)] text-white'
-                  : 'border border-[var(--border)]'
+                  : 'border border-[var(--border)] hover:bg-[var(--accent-soft)]'
               }`}
             >
               Government

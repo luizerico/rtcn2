@@ -185,7 +185,7 @@ export default function NewLocalPlanForm() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs
           items={[
@@ -295,7 +295,7 @@ export default function NewLocalPlanForm() {
           <button
             type="button"
             onClick={() => router.push('/localplans')}
-            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm"
+            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
           >
             Cancel
           </button>

@@ -8,7 +8,6 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ConfirmDeleteDialog from '@/components/ui/ConfirmDeleteDialog';
 import TableOptionsMenu from '@/components/ui/ColumnVisibilityMenu';
 import { useAccess } from '@/components/AccessProvider';
-import { AccessPrimaryButton } from '@/components/ui/AccessControls';
 import {
   AccessIconButton,
   AccessIconLink,
@@ -77,10 +76,10 @@ export default function FundingCatalogList<T extends { _id: string; name: string
   const [data, setData] = useState<FundingListResponse<T> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { filters, setFilters, applied, page, setPage } = useAutoAppliedFilters({ q: '' });
+  const { filters, setFilters, applied, page, setPage, resetFilters } = useAutoAppliedFilters({ q: '' });
   const search = applied.q;
   const [showFilters, setShowFilters] = useState(false);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(25);
   const [sort, setSort] = useState('updatedAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -155,8 +154,20 @@ export default function FundingCatalogList<T extends { _id: string; name: string
     <div className="mx-auto max-w-7xl space-y-8">
       <header className="border-b border-[var(--border)] pb-6">
         <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: title }]} />
-        <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">{title}</h1>
-        <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">{description}</p>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold sm:text-3xl">{title}</h1>
+            <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">{description}</p>
+          </div>
+          {canCreate ? (
+            <Link
+              href={createHref}
+              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
+            >
+              Create {noun.toLowerCase()}
+            </Link>
+          ) : null}
+        </div>
       </header>
 
       {error && (
@@ -179,6 +190,19 @@ export default function FundingCatalogList<T extends { _id: string; name: string
               className="rounded-md border border-[var(--border)] bg-white px-3 py-2"
             />
           </label>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => {
+                resetFilters({ q: '' });
+                setSort('updatedAt');
+                setOrder('desc');
+              }}
+              className="rounded-md border border-[var(--border)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]/40"
+            >
+              Reset
+            </button>
+          </div>
         </form>
       ) : null}
 
@@ -201,23 +225,16 @@ export default function FundingCatalogList<T extends { _id: string; name: string
                 }}
                 className="rounded-md border border-[var(--border)] bg-white px-2 py-1 text-[var(--foreground)]"
               >
-                {[5, 10, 20, 50].map((size) => (
+                {[10, 25, 50, 100].map((size) => (
                   <option key={size} value={size}>
                     {size}
                   </option>
                 ))}
               </select>
             </label>
-            {canCreate ? (
-              <Link
-                href={createHref}
-                className="inline-flex items-center justify-center rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-strong)]"
-              >
-                Create {noun.toLowerCase()}
-              </Link>
-            ) : (
-              <AccessPrimaryButton allowed={false}>Create {noun.toLowerCase()}</AccessPrimaryButton>
-            )}
+            <span>
+              Sorted by {sort} ({order})
+            </span>
             <TableOptionsMenu
               columns={isAdmin ? columnDefs : []}
               isVisible={isAdmin ? isVisible : undefined}
